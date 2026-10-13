@@ -1,0 +1,1 @@
+//! culab-mobile entry point

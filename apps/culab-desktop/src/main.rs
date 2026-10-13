@@ -1,0 +1,1 @@
+//! culab-desktop entry point
