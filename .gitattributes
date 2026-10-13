@@ -1,0 +1,4 @@
+* text=auto
+*.rs linguist-language=Rust
+docs/** linguist-documentation
+assets/** linguist-vendored
