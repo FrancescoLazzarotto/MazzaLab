@@ -21,4 +21,4 @@ pub use cue::{
 };
 pub use id::{CueId, WorkspaceId};
 pub use validate::{Issue, validate};
-pub use workspace::{CueList, Workspace, WorkspaceSettings};
+pub use workspace::{Container, CueList, Workspace, WorkspaceSettings};

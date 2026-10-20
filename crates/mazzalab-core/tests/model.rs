@@ -193,3 +193,33 @@ fn validate_reports_structural_problems() {
     }));
     assert!(issues.contains(&Issue::InvalidRate(bad_rate_id)));
 }
+
+#[test]
+fn tree_edits_insert_remove_and_locate() {
+    use mazzalab_core::Container;
+
+    let mut workspace = sample_workspace();
+    let list = workspace.cue_lists[0].id;
+    let group = workspace.cue_lists[0].cues[2].id;
+    let first = workspace.cue_lists[0].cues[0].id;
+
+    assert_eq!(workspace.locate(first), Some((Container::List(list), 0)));
+    assert_eq!(workspace.list_of(first).map(|l| l.id), Some(list));
+
+    // Move the first cue into the group, at the front.
+    let (_, _, cue) = workspace.remove_cue(first).unwrap();
+    workspace
+        .insert_cue(Container::Group(group), Some(0), cue)
+        .unwrap();
+    assert_eq!(workspace.locate(first), Some((Container::Group(group), 0)));
+    assert_eq!(workspace.cue_lists[0].cues.len(), 2);
+
+    // A group cannot be moved into itself: once removed it no longer exists.
+    let (container, index, removed) = workspace.remove_cue(group).unwrap();
+    let back = workspace
+        .insert_cue(Container::Group(group), None, removed)
+        .unwrap_err();
+    workspace.insert_cue(container, Some(index), *back).unwrap();
+    assert!(workspace.find_cue(group).is_some());
+    assert_eq!(workspace.cues().count(), 5);
+}

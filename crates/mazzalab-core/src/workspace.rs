@@ -108,6 +108,75 @@ impl Workspace {
         self.cues()
             .find(|cue| cue.number.as_deref() == Some(number))
     }
+
+    pub fn cue_list_mut(&mut self, id: CueId) -> Option<&mut CueList> {
+        self.cue_lists.iter_mut().find(|list| list.id == id)
+    }
+
+    /// The cue list that contains `cue` (at any depth).
+    pub fn list_of(&self, cue: CueId) -> Option<&CueList> {
+        self.cue_lists.iter().find(|list| contains(&list.cues, cue))
+    }
+
+    /// Where a cue sits: its container and its index in it.
+    pub fn locate(&self, cue: CueId) -> Option<(Container, usize)> {
+        self.cue_lists
+            .iter()
+            .find_map(|list| locate_in(&list.cues, cue, Container::List(list.id)))
+    }
+
+    pub fn children_mut(&mut self, container: Container) -> Option<&mut Vec<Cue>> {
+        match container {
+            Container::List(id) => self.cue_list_mut(id).map(|list| &mut list.cues),
+            Container::Group(id) => self.find_cue_mut(id)?.children_mut(),
+        }
+    }
+
+    /// Removes a cue (with its children) and returns it with its old place.
+    pub fn remove_cue(&mut self, cue: CueId) -> Option<(Container, usize, Cue)> {
+        let (container, index) = self.locate(cue)?;
+        let removed = self.children_mut(container)?.remove(index);
+        Some((container, index, removed))
+    }
+
+    /// Inserts a cue into a container at `index` (appending when `None` or
+    /// past the end). Gives the cue back if the container does not exist.
+    pub fn insert_cue(
+        &mut self,
+        container: Container,
+        index: Option<usize>,
+        cue: Cue,
+    ) -> Result<(), Box<Cue>> {
+        let Some(children) = self.children_mut(container) else {
+            return Err(Box::new(cue));
+        };
+        let index = index.unwrap_or(children.len()).min(children.len());
+        children.insert(index, cue);
+        Ok(())
+    }
+}
+
+/// Something that holds an ordered list of cues.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(tag = "kind", content = "id", rename_all = "snake_case")]
+pub enum Container {
+    List(CueId),
+    Group(CueId),
+}
+
+fn contains(cues: &[Cue], id: CueId) -> bool {
+    cues.iter()
+        .any(|cue| cue.id == id || contains(cue.children(), id))
+}
+
+fn locate_in(cues: &[Cue], id: CueId, container: Container) -> Option<(Container, usize)> {
+    cues.iter().enumerate().find_map(|(index, cue)| {
+        if cue.id == id {
+            Some((container, index))
+        } else {
+            locate_in(cue.children(), id, Container::Group(cue.id))
+        }
+    })
 }
 
 fn collect<'a>(cues: &'a [Cue], out: &mut Vec<&'a Cue>) {
