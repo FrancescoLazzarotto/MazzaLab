@@ -1,6 +1,6 @@
 [package]
 name = "mazzalab-audio"
-description = "Audio playback, routing and mixing for MazzaLab (planned)."
+description = "Audio playback for MazzaLab: streaming decoders, a real-time mixer and device output."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,6 +9,13 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+cpal = "0.18"
+mazzalab-core.workspace = true
+mazzalab-engine.workspace = true
+rtrb = "0.4"
+symphonia = { version = "0.6", features = ["all"] }
+thiserror.workspace = true
+tracing = "0.1"
 
 [lints]
 workspace = true
