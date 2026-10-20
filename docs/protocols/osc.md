@@ -2,8 +2,8 @@
 
 MazzaLab accepts OSC using the address space of the public QLab 5 OSC
 dictionary, so existing show-control setups can switch without
-reprogramming. Parsing lives in `crates/mazzalab-osc`. The network listener
-will live in `mazzalab-server`.
+reprogramming. Parsing lives in `crates/mazzalab-osc`, execution in
+`crates/mazzalab-show` and the network listeners in `apps/mazzalab-server`.
 
 ## Transport
 
@@ -46,10 +46,27 @@ Replies go to `/reply{original address}` with one JSON string argument:
 
 `status` is `ok`, `error` or `denied`.
 
-## Next steps
+## Updates
 
-- Execute parsed requests against the engine in `mazzalab-server`.
-- Property names: map QLab names (`preWait`, `continueMode`...) onto MazzaLab's
-  model.
-- Push updates (`/update/workspace/{id}/cue_id/{id}`) driven by engine
-  events.
+After `/updates 1` a client receives:
+
+- `/update/workspace/{id}` when the show structure changes;
+- `/update/workspace/{id}/cue_id/{cue}` when a cue starts, stops, pauses or
+  completes;
+- `/update/workspace/{id}/cueList/{list}/playbackPosition {cue}` when a
+  playhead moves.
+
+## Readable and writable cue properties
+
+`uniqueID`, `type`, `listName`/`displayName`, `isRunning`, `isPaused`,
+`isBroken`, `preWaitElapsed` and `actionElapsed` are read-only. `number`,
+`name`, `notes`, `colorName`, `preWait`, `postWait`, `duration` (Wait,
+Fade, Light and Network cues), `continueMode` (0/1/2, wraps around with
+`+`/`-`), `armed` and `flagged` can be read and written. Writes are
+undoable like any other edit.
+
+## Not yet supported
+
+`load` and `preview` on cues, passcodes, the plain-text port 53535,
+`/udpReplyPort`, and `/live` values that differ from the saved show (a
+`/live` write currently edits the show).
