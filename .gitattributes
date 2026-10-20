@@ -2,3 +2,4 @@
 *.rs linguist-language=Rust
 docs/** linguist-documentation
 assets/** linguist-vendored
+*.sh text eol=lf
