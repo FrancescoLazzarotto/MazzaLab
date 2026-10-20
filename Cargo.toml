@@ -1,6 +1,8 @@
 [workspace]
 resolver = "3"
 members = ["crates/*", "apps/*"]
+# The web UI is a TypeScript project, not a crate.
+exclude = ["apps/mazzalab-web"]
 
 [workspace.package]
 version = "0.1.0"
