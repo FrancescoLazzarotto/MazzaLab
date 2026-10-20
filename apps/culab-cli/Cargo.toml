@@ -1,0 +1,22 @@
+[package]
+name = "culab-cli"
+description = "Command line tools for CuLab show files."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "culab"
+path = "src/main.rs"
+
+[dependencies]
+clap.workspace = true
+culab-core.workspace = true
+culab-engine.workspace = true
+culab-project.workspace = true
+
+[lints]
+workspace = true
