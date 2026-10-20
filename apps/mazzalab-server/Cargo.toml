@@ -16,6 +16,7 @@ path = "src/main.rs"
 axum = { version = "0.8", features = ["ws"] }
 clap.workspace = true
 futures-util = "0.3"
+mazzalab-audio.workspace = true
 mazzalab-core.workspace = true
 mazzalab-engine.workspace = true
 mazzalab-osc.workspace = true

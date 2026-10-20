@@ -12,6 +12,7 @@ publish = false
 
 [workspace.dependencies]
 # Internal crates
+mazzalab-audio = { path = "crates/mazzalab-audio" }
 mazzalab-core = { path = "crates/mazzalab-core" }
 mazzalab-engine = { path = "crates/mazzalab-engine" }
 mazzalab-osc = { path = "crates/mazzalab-osc" }

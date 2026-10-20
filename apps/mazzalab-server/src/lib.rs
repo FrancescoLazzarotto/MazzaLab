@@ -159,3 +159,24 @@ impl Output for LogOutput {
         }
     }
 }
+
+/// Plays audio cues on the default output device.
+#[derive(Debug)]
+pub struct AudioBackend(pub mazzalab_audio::AudioOutput);
+
+impl AudioBackend {
+    /// Starts audio output; finished sounds are reported through `completion`.
+    pub fn start(
+        base_dir: &Path,
+        completion: Completion,
+    ) -> Result<Self, mazzalab_audio::AudioError> {
+        mazzalab_audio::AudioOutput::start(base_dir, move |cue| completion.action_finished(cue))
+            .map(Self)
+    }
+}
+
+impl Output for AudioBackend {
+    fn handle(&mut self, show: &Show, events: &[Event]) {
+        self.0.handle_events(show.workspace(), events);
+    }
+}

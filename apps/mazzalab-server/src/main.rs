@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::Parser;
-use mazzalab_server::{DEFAULT_HTTP_PORT, LogOutput, Output, ServerConfig};
+use mazzalab_server::{AudioBackend, DEFAULT_HTTP_PORT, LogOutput, Output, ServerConfig};
 use tracing_subscriber::EnvFilter;
 
 #[derive(Parser)]
@@ -34,6 +34,9 @@ struct Args {
     /// Directory containing the built web UI.
     #[arg(long)]
     ui_dir: Option<PathBuf>,
+    /// Run without audio output.
+    #[arg(long)]
+    no_audio: bool,
 }
 
 #[tokio::main]
@@ -45,13 +48,22 @@ async fn main() -> ExitCode {
         .init();
     let args = Args::parse();
 
-    let workspace = match mazzalab_server::load_or_create(&args.show) {
+    let mut workspace = match mazzalab_server::load_or_create(&args.show) {
         Ok(workspace) => workspace,
         Err(error) => {
             tracing::error!(%error, "cannot open {}", args.show.display());
             return ExitCode::FAILURE;
         }
     };
+    // Media paths are relative to the show file's folder.
+    let base_dir = args
+        .show
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .map_or_else(|| PathBuf::from("."), PathBuf::from);
+    for (cue, problem) in mazzalab_audio::probe_workspace(&mut workspace, &base_dir) {
+        tracing::warn!(%cue, %problem, "audio file unavailable");
+    }
     let config = ServerConfig {
         show_path: Some(args.show.clone()),
         bind: args.bind,
@@ -60,8 +72,16 @@ async fn main() -> ExitCode {
         http_port: args.http_port,
         ui_dir: args.ui_dir,
     };
-    let server = match mazzalab_server::start(config, workspace, |_| {
-        vec![Box::new(LogOutput) as Box<dyn Output>]
+    let no_audio = args.no_audio;
+    let server = match mazzalab_server::start(config, workspace, move |completion| {
+        let mut outputs: Vec<Box<dyn Output>> = vec![Box::new(LogOutput)];
+        if !no_audio {
+            match AudioBackend::start(&base_dir, completion) {
+                Ok(audio) => outputs.push(Box::new(audio)),
+                Err(error) => tracing::warn!(%error, "continuing without audio"),
+            }
+        }
+        outputs
     })
     .await
     {
