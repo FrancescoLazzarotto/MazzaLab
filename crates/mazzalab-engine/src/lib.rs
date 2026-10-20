@@ -61,6 +61,12 @@ pub enum EventKind {
     Stopped(CueId),
     Paused(CueId),
     Resumed(CueId),
+    /// A panic started: backends fade the cue out over `fade`; the engine
+    /// stops it when the fade is over.
+    Panicking {
+        cue: CueId,
+        fade: Duration,
+    },
     PlayheadMoved {
         list: CueId,
         cue: Option<CueId>,
@@ -88,16 +94,29 @@ struct Location {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Phase {
+pub enum RunPhase {
     PreWait,
     Action,
 }
 
+/// Progress of a running cue, for displays.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RunInfo {
+    pub phase: RunPhase,
+    /// Time spent in the current phase, excluding pauses.
+    pub elapsed: Duration,
+    pub paused: bool,
+    /// The group whose action this run belongs to, if any.
+    pub owner: Option<CueId>,
+}
+
 #[derive(Debug, Clone, Copy)]
 struct Run {
-    phase: Phase,
+    phase: RunPhase,
     /// The group whose action this run belongs to, if any.
     owner: Option<CueId>,
+    /// Start of the current phase; shifted forward by pauses.
+    phase_started: Duration,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -105,6 +124,7 @@ enum TimerKind {
     PreWaitEnd,
     ActionEnd,
     Continue,
+    PanicStop,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -155,6 +175,8 @@ pub struct Engine {
     /// Groups whose children are being started or stopped; their completion
     /// is evaluated once the operation is over.
     settling: HashSet<CueId>,
+    /// While a panic fade is running, cues do not continue automatically.
+    panic_until: Option<Duration>,
     chain_depth: u32,
     rng: u64,
     events: Vec<Event>,
@@ -164,17 +186,7 @@ impl Engine {
     /// Creates an engine at time zero with every playhead on the first cue
     /// of its list.
     pub fn new(workspace: Workspace) -> Self {
-        let mut locations = HashMap::new();
-        for (list_index, list) in workspace.cue_lists.iter().enumerate() {
-            index_cues(
-                &list.cues,
-                list.id,
-                list_index,
-                None,
-                &mut Vec::new(),
-                &mut locations,
-            );
-        }
+        let locations = index_workspace(&workspace);
         let playheads = workspace
             .cue_lists
             .iter()
@@ -192,6 +204,7 @@ impl Engine {
             playheads,
             last_go: None,
             settling: HashSet::new(),
+            panic_until: None,
             chain_depth: 0,
             rng: DEFAULT_SEED,
             events: Vec::new(),
@@ -246,6 +259,24 @@ impl Engine {
     /// Cues currently in their pre-wait or action, in id order.
     pub fn running_cues(&self) -> impl Iterator<Item = CueId> + '_ {
         self.runs.keys().copied()
+    }
+
+    /// Phase and progress of a running cue.
+    pub fn run_info(&self, cue: CueId) -> Option<RunInfo> {
+        let run = self.runs.get(&cue)?;
+        let paused_at = self.paused.get(&cue).copied();
+        let now = paused_at.unwrap_or(self.now);
+        Some(RunInfo {
+            phase: run.phase,
+            elapsed: now.saturating_sub(run.phase_started),
+            paused: paused_at.is_some(),
+            owner: run.owner,
+        })
+    }
+
+    /// Whether a panic fade is in progress.
+    pub fn is_panicking(&self) -> bool {
+        self.panic_until.is_some_and(|until| self.now < until)
     }
 
     /// The next time at which something is scheduled to happen, if any.
@@ -339,6 +370,153 @@ impl Engine {
         self.settle();
     }
 
+    /// Fades everything out over the workspace panic duration, then stops
+    /// it. Cues waiting in a pre-wait or paused stop immediately, and
+    /// nothing continues automatically while the fade runs.
+    pub fn panic(&mut self) {
+        let fade = self.workspace.settings.panic_duration;
+        if fade.is_zero() {
+            self.stop_all();
+            return;
+        }
+        let waiting: Vec<CueId> = self
+            .runs
+            .iter()
+            .filter(|(cue, run)| run.phase == RunPhase::PreWait || self.paused.contains_key(cue))
+            .map(|(cue, _)| *cue)
+            .collect();
+        for cue in waiting {
+            self.stop_cue(cue);
+        }
+        self.timers
+            .retain(|timer| timer.kind != TimerKind::Continue);
+        self.panic_until = Some(self.now + fade);
+        for cue in self.roots() {
+            let already = self
+                .timers
+                .iter()
+                .any(|timer| timer.cue == cue && timer.kind == TimerKind::PanicStop);
+            if !already {
+                self.emit(EventKind::Panicking { cue, fade });
+                self.schedule(fade, cue, None, TimerKind::PanicStop);
+            }
+        }
+    }
+
+    /// Stops everything and returns every playhead to the top of its list.
+    pub fn reset(&mut self) {
+        self.stop_all();
+        self.panic_until = None;
+        self.last_go = None;
+        let firsts: Vec<_> = self
+            .workspace
+            .cue_lists
+            .iter()
+            .map(|list| (list.id, list.cues.first().map(|cue| cue.id)))
+            .collect();
+        for (list, first) in firsts {
+            self.move_playhead(list, first);
+        }
+    }
+
+    /// Moves the playhead to the next cue in list order (entering groups'
+    /// following siblings, climbing out at the end of a group).
+    pub fn playhead_next(&mut self, list: CueId) -> Result<(), EngineError> {
+        let next = match self.list_playhead(list)? {
+            Some(cue) => self.next_after(cue),
+            None => None,
+        };
+        if next.is_some() {
+            self.move_playhead(list, next);
+        }
+        Ok(())
+    }
+
+    /// Moves the playhead to the previous cue; from the end of the list it
+    /// goes to the last cue.
+    pub fn playhead_previous(&mut self, list: CueId) -> Result<(), EngineError> {
+        let previous = match self.list_playhead(list)? {
+            Some(cue) => self
+                .previous_sibling(cue)
+                .or_else(|| self.locations.get(&cue).and_then(|loc| loc.parent)),
+            None => self.last_cue_of(list),
+        };
+        if previous.is_some() {
+            self.move_playhead(list, previous);
+        }
+        Ok(())
+    }
+
+    /// Moves the playhead past the current cue sequence.
+    pub fn playhead_next_sequence(&mut self, list: CueId) -> Result<(), EngineError> {
+        if let Some(cue) = self.list_playhead(list)? {
+            let next = self.after_sequence(cue);
+            self.move_playhead(list, next);
+        }
+        Ok(())
+    }
+
+    /// Moves the playhead to the top of the current sequence, or of the
+    /// previous one if it is already at the top.
+    pub fn playhead_previous_sequence(&mut self, list: CueId) -> Result<(), EngineError> {
+        let Some(current) = self.list_playhead(list)?.or_else(|| self.last_cue_of(list)) else {
+            return Ok(());
+        };
+        let start = self.sequence_start(current);
+        let target = if start != current || self.playhead(list).is_none() {
+            start
+        } else {
+            self.previous_sibling(start)
+                .map_or(start, |previous| self.sequence_start(previous))
+        };
+        self.move_playhead(list, Some(target));
+        Ok(())
+    }
+
+    /// Applies an edit to the workspace while the show may be running.
+    /// Cues removed by the edit are stopped; playheads pointing at cues that
+    /// left their list return to the top of the list.
+    pub fn edit_workspace<R>(&mut self, edit: impl FnOnce(&mut Workspace) -> R) -> R {
+        let result = edit(&mut self.workspace);
+        self.locations = index_workspace(&self.workspace);
+
+        let gone: BTreeSet<CueId> = self
+            .runs
+            .keys()
+            .copied()
+            .chain(self.timers.iter().map(|timer| timer.cue))
+            .filter(|cue| !self.locations.contains_key(cue))
+            .collect();
+        for cue in gone {
+            self.stop_cue(cue);
+        }
+
+        let lists: Vec<_> = self
+            .workspace
+            .cue_lists
+            .iter()
+            .map(|list| (list.id, list.cues.first().map(|cue| cue.id)))
+            .collect();
+        self.playheads
+            .retain(|list, _| lists.iter().any(|(id, _)| id == list));
+        for (list, first) in lists {
+            let current = self.playheads.get(&list).copied();
+            let valid = match current {
+                Some(Some(cue)) => self
+                    .locations
+                    .get(&cue)
+                    .is_some_and(|location| location.list == list),
+                Some(None) => true,
+                None => false,
+            };
+            if !valid {
+                self.move_playhead(list, first);
+            }
+        }
+        self.settle();
+        result
+    }
+
     /// Called by a backend when an open-ended action (unknown media length)
     /// has finished. Returns `false` if the cue's action was not running.
     pub fn action_finished(&mut self, cue: CueId) -> Result<bool, EngineError> {
@@ -346,7 +524,7 @@ impl Engine {
         if self
             .runs
             .get(&cue)
-            .is_none_or(|run| run.phase != Phase::Action)
+            .is_none_or(|run| run.phase != RunPhase::Action)
         {
             return Ok(false);
         }
@@ -403,6 +581,38 @@ impl Engine {
     fn next_sibling(&self, id: CueId) -> Option<CueId> {
         let index = *self.locations.get(&id)?.path.last()?;
         self.siblings(id).get(index + 1).map(|cue| cue.id)
+    }
+
+    fn previous_sibling(&self, id: CueId) -> Option<CueId> {
+        let index = *self.locations.get(&id)?.path.last()?;
+        let previous = index.checked_sub(1)?;
+        self.siblings(id).get(previous).map(|cue| cue.id)
+    }
+
+    fn list_playhead(&self, list: CueId) -> Result<Option<CueId>, EngineError> {
+        self.playheads
+            .get(&list)
+            .copied()
+            .ok_or(EngineError::UnknownCueList(list))
+    }
+
+    fn last_cue_of(&self, list: CueId) -> Option<CueId> {
+        self.workspace.cue_list(list)?.cues.last().map(|cue| cue.id)
+    }
+
+    /// The first cue of the sequence containing `cue`: walks back while the
+    /// previous sibling continues into it.
+    fn sequence_start(&self, mut cue: CueId) -> CueId {
+        while let Some(previous) = self.previous_sibling(cue) {
+            if self
+                .cue(previous)
+                .is_none_or(|c| c.continue_mode == ContinueMode::DoNotContinue)
+            {
+                break;
+            }
+            cue = previous;
+        }
+        cue
     }
 
     /// The next cue in list order after `cue`, climbing out of groups.
@@ -514,6 +724,7 @@ impl Engine {
                     self.check_group(group);
                 }
             }
+            TimerKind::PanicStop => self.stop_cue(timer.cue),
         }
     }
 
@@ -542,8 +753,9 @@ impl Engine {
             self.runs.insert(
                 id,
                 Run {
-                    phase: Phase::PreWait,
+                    phase: RunPhase::PreWait,
                     owner,
+                    phase_started: self.now,
                 },
             );
             if pre_wait.is_zero() {
@@ -559,7 +771,8 @@ impl Engine {
         let Some(run) = self.runs.get_mut(&id) else {
             return;
         };
-        run.phase = Phase::Action;
+        run.phase = RunPhase::Action;
+        run.phase_started = self.now;
         let owner = run.owner;
         let Some(cue) = self.cue(id) else {
             return;
@@ -685,6 +898,9 @@ impl Engine {
     }
 
     fn continue_after(&mut self, id: CueId, owner: Option<CueId>) {
+        if self.is_panicking() {
+            return;
+        }
         if let Some(next) = self.next_sibling(id) {
             self.trigger(next, owner);
         }
@@ -696,7 +912,7 @@ impl Engine {
             || self
                 .runs
                 .get(&group)
-                .is_none_or(|run| run.phase != Phase::Action)
+                .is_none_or(|run| run.phase != RunPhase::Action)
         {
             return;
         }
@@ -752,6 +968,9 @@ impl Engine {
             for timer in self.timers.iter_mut().filter(|timer| timer.cue == id) {
                 timer.at += delta;
             }
+            if let Some(run) = self.runs.get_mut(&id) {
+                run.phase_started += delta;
+            }
             self.emit(EventKind::Resumed(id));
         }
     }
@@ -765,6 +984,21 @@ impl Engine {
         self.rng = x;
         x
     }
+}
+
+fn index_workspace(workspace: &Workspace) -> HashMap<CueId, Location> {
+    let mut locations = HashMap::new();
+    for (list_index, list) in workspace.cue_lists.iter().enumerate() {
+        index_cues(
+            &list.cues,
+            list.id,
+            list_index,
+            None,
+            &mut Vec::new(),
+            &mut locations,
+        );
+    }
+    locations
 }
 
 fn index_cues(

@@ -200,6 +200,11 @@ fn simulate(workspace: Workspace, list: CueId, gos: u32, interval: Duration, unt
                 EventKind::Stopped(cue) => format!("stop     {}", label(engine.workspace(), cue)),
                 EventKind::Paused(cue) => format!("pause    {}", label(engine.workspace(), cue)),
                 EventKind::Resumed(cue) => format!("resume   {}", label(engine.workspace(), cue)),
+                EventKind::Panicking { cue, fade } => format!(
+                    "panic    {} (fade {:.2}s)",
+                    label(engine.workspace(), cue),
+                    fade.as_secs_f64()
+                ),
                 EventKind::PlayheadMoved { cue, .. } => format!(
                     "playhead {}",
                     cue.map_or_else(|| "(end)".to_owned(), |c| label(engine.workspace(), c))
