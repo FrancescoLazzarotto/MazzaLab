@@ -273,6 +273,18 @@ name = "mazzalab-server"
 version = "0.1.0"
 
 [[package]]
+name = "mazzalab-show"
+version = "0.1.0"
+dependencies = [
+ "mazzalab-core",
+ "mazzalab-engine",
+ "mazzalab-osc",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "mazzalab-timeline"
 version = "0.1.0"
 

@@ -1,0 +1,20 @@
+[package]
+name = "mazzalab-show"
+description = "Show controller for MazzaLab: commands, editing with undo, state snapshots and OSC handling."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+mazzalab-core.workspace = true
+mazzalab-engine.workspace = true
+mazzalab-osc.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true
