@@ -1,6 +1,6 @@
 [package]
 name = "mazzalab-desktop"
-description = "MazzaLab desktop application (planned)."
+description = "MazzaLab desktop application: embedded show server plus the operator UI in a native window."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,7 +8,15 @@ authors.workspace = true
 repository.workspace = true
 publish.workspace = true
 
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
 [dependencies]
+mazzalab-audio.workspace = true
+mazzalab-server = { path = "../mazzalab-server" }
+tauri = { version = "2", features = [] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [lints]
 workspace = true
