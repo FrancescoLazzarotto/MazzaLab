@@ -117,102 +117,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d07550c9036bf2ae0c684c4297d503f838287c83c53686d05370d0e139ae570"
 
 [[package]]
-name = "culab-audio"
-version = "0.1.0"
-
-[[package]]
-name = "culab-cli"
-version = "0.1.0"
-dependencies = [
- "clap",
- "culab-core",
- "culab-engine",
- "culab-project",
-]
-
-[[package]]
-name = "culab-core"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "thiserror",
- "uuid",
-]
-
-[[package]]
-name = "culab-desktop"
-version = "0.1.0"
-
-[[package]]
-name = "culab-engine"
-version = "0.1.0"
-dependencies = [
- "culab-core",
- "thiserror",
-]
-
-[[package]]
-name = "culab-lighting"
-version = "0.1.0"
-
-[[package]]
-name = "culab-midi"
-version = "0.1.0"
-
-[[package]]
-name = "culab-mobile"
-version = "0.1.0"
-
-[[package]]
-name = "culab-network"
-version = "0.1.0"
-
-[[package]]
-name = "culab-osc"
-version = "0.1.0"
-dependencies = [
- "rosc",
- "serde",
- "serde_json",
- "thiserror",
-]
-
-[[package]]
-name = "culab-plugin"
-version = "0.1.0"
-
-[[package]]
-name = "culab-project"
-version = "0.1.0"
-dependencies = [
- "culab-core",
- "serde",
- "serde_json",
- "thiserror",
-]
-
-[[package]]
-name = "culab-server"
-version = "0.1.0"
-
-[[package]]
-name = "culab-timeline"
-version = "0.1.0"
-
-[[package]]
-name = "culab-ui"
-version = "0.1.0"
-
-[[package]]
-name = "culab-video"
-version = "0.1.0"
-
-[[package]]
-name = "culab-web"
-version = "0.1.0"
-
-[[package]]
 name = "deranged"
 version = "0.5.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -287,6 +191,102 @@ name = "libc"
 version = "0.2.191"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "65cd87c9a6d60536580b316ad985726104730a5151c99845f2490428ef91240a"
+
+[[package]]
+name = "mazzalab-audio"
+version = "0.1.0"
+
+[[package]]
+name = "mazzalab-cli"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "mazzalab-core",
+ "mazzalab-engine",
+ "mazzalab-project",
+]
+
+[[package]]
+name = "mazzalab-core"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror",
+ "uuid",
+]
+
+[[package]]
+name = "mazzalab-desktop"
+version = "0.1.0"
+
+[[package]]
+name = "mazzalab-engine"
+version = "0.1.0"
+dependencies = [
+ "mazzalab-core",
+ "thiserror",
+]
+
+[[package]]
+name = "mazzalab-lighting"
+version = "0.1.0"
+
+[[package]]
+name = "mazzalab-midi"
+version = "0.1.0"
+
+[[package]]
+name = "mazzalab-mobile"
+version = "0.1.0"
+
+[[package]]
+name = "mazzalab-network"
+version = "0.1.0"
+
+[[package]]
+name = "mazzalab-osc"
+version = "0.1.0"
+dependencies = [
+ "rosc",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "mazzalab-plugin"
+version = "0.1.0"
+
+[[package]]
+name = "mazzalab-project"
+version = "0.1.0"
+dependencies = [
+ "mazzalab-core",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "mazzalab-server"
+version = "0.1.0"
+
+[[package]]
+name = "mazzalab-timeline"
+version = "0.1.0"
+
+[[package]]
+name = "mazzalab-ui"
+version = "0.1.0"
+
+[[package]]
+name = "mazzalab-video"
+version = "0.1.0"
+
+[[package]]
+name = "mazzalab-web"
+version = "0.1.0"
 
 [[package]]
 name = "memchr"

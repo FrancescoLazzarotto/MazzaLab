@@ -1,0 +1,16 @@
+[package]
+name = "mazzalab-engine"
+description = "Deterministic, I/O-free cue playback engine for MazzaLab."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+mazzalab-core.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true

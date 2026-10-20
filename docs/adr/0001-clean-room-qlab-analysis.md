@@ -5,7 +5,7 @@
 
 ## Context
 
-CuLab aims to be a cross-platform alternative to QLab. Studying QLab is
+MazzaLab aims to be a cross-platform alternative to QLab. Studying QLab is
 useful, but QLab is proprietary and its EULA (§4.2) prohibits reverse
 engineering, decompiling and disassembling the software.
 
@@ -23,7 +23,7 @@ engineering, decompiling and disassembling the software.
 4. Interoperability targets *documented* interfaces: the OSC API is
    implemented from the public OSC dictionary. Importing QLab workspace
    files is out of scope until it has been reviewed legally.
-5. CuLab's data model, file format, device description schema and UI are
+5. MazzaLab's data model, file format, device description schema and UI are
    our own designs. Generic show-control concepts (cue, GO, pre-wait,
    auto-follow...) are industry vocabulary and are used freely.
 

@@ -12,10 +12,10 @@ publish = false
 
 [workspace.dependencies]
 # Internal crates
-culab-core = { path = "crates/culab-core" }
-culab-engine = { path = "crates/culab-engine" }
-culab-osc = { path = "crates/culab-osc" }
-culab-project = { path = "crates/culab-project" }
+mazzalab-core = { path = "crates/mazzalab-core" }
+mazzalab-engine = { path = "crates/mazzalab-engine" }
+mazzalab-osc = { path = "crates/mazzalab-osc" }
+mazzalab-project = { path = "crates/mazzalab-project" }
 
 # External crates
 clap = { version = "4.6", features = ["derive"] }

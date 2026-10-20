@@ -1,7 +1,7 @@
 # QLab 5 — external analysis
 
-What we learned about QLab 5 (Figure 53) to inform CuLab's design, how we
-learned it, and where CuLab can do better.
+What we learned about QLab 5 (Figure 53) to inform MazzaLab's design, how we
+learned it, and where MazzaLab can do better.
 
 - **Target:** QLab 5.6.3 (build 5603, bundle id `com.figure53.QLab.5`,
   requires macOS 11+), downloaded from the official site on 2026-10-20.
@@ -23,7 +23,7 @@ disassembling the software. We therefore:
   credits and changelog pages, JSON device descriptions, Interface Builder
   layouts (which only describe the UI), and the public OSC documentation;
 - **do not** copy any QLab file, text, artwork or code into this repository.
-  This document records facts and observations in our own words. CuLab's
+  This document records facts and observations in our own words. MazzaLab's
   formats and code are designed independently.
 
 Compatibility with QLab's *publicly documented* OSC protocol is a deliberate
@@ -43,7 +43,7 @@ interoperability goal (see [OSC protocol](../protocols/osc.md)).
 Everything in the bundle points at a native macOS application with no
 portable layer:
 
-| Area | What ships in the bundle | Portable equivalent for CuLab |
+| Area | What ships in the bundle | Portable equivalent for MazzaLab |
 | --- | --- | --- |
 | UI | AppKit, 95 compiled nibs | Rust UI toolkit (egui/iced/Slint) or web UI |
 | Video effects | Metal shader libraries plus 57 effect presets (blur, keystone, kaleidoscope, colour...) | `wgpu` with WGSL shaders |
@@ -138,7 +138,7 @@ files contain trailing commas, so QLab's parser is more permissive than
 strict JSON.
 
 This is one of QLab's strongest ideas: devices are supported by data, not
-code. CuLab should have the same capability with its own open, versioned
+code. MazzaLab should have the same capability with its own open, versioned
 schema and a community-maintained library.
 
 ## UI structure (from Interface Builder layouts)
@@ -167,17 +167,17 @@ The bundled changelog lists **60 releases** from 5.0 (30 August 2022) to
 "Crash" appears 56 times. Video, audio, network and collaboration are the
 most frequently mentioned areas.
 
-## Where CuLab can be better
+## Where MazzaLab can be better
 
-| QLab today | CuLab direction |
+| QLab today | MazzaLab direction |
 | --- | --- |
 | macOS only | Windows, macOS and Linux, plus headless server and browser/mobile remotes |
-| Opaque workspace file | Plain-text JSON show (`.culab`), reviewable and mergeable in git |
-| Playback logic only testable by running the show | Deterministic, I/O-free engine (`culab-engine`): simulate a show in milliseconds, test it in CI, replay a log |
+| Opaque workspace file | Plain-text JSON show (`.mazzalab`), reviewable and mergeable in git |
+| Playback logic only testable by running the show | Deterministic, I/O-free engine (`mazzalab-engine`): simulate a show in milliseconds, test it in CI, replay a log |
 | Main/backup redundancy built from OSC mirroring | Deterministic engine state that can be replicated exactly to a hot backup |
 | AppleScript scripting | Cross-platform sandboxed scripting (Lua or WASM) |
 | Device descriptions bundled with the app | Open schema plus a community device library and plugin SDK |
-| Existing control surfaces speak QLab OSC | QLab-compatible OSC layer (`culab-osc`) so they work unchanged |
+| Existing control surfaces speak QLab OSC | QLab-compatible OSC layer (`mazzalab-osc`) so they work unchanged |
 | Paid tiers for audio, video and lighting | To be decided (licensing not chosen yet) |
 
 ## Not examined / open questions

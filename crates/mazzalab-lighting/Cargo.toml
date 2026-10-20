@@ -1,0 +1,14 @@
+[package]
+name = "mazzalab-lighting"
+description = "Lighting control (DMX, Art-Net, sACN) for MazzaLab (planned)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

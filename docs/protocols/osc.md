@@ -1,9 +1,9 @@
 # OSC remote control
 
-CuLab accepts OSC using the address space of the public QLab 5 OSC
+MazzaLab accepts OSC using the address space of the public QLab 5 OSC
 dictionary, so existing show-control setups can switch without
-reprogramming. Parsing lives in `crates/culab-osc`. The network listener
-will live in `culab-server`.
+reprogramming. Parsing lives in `crates/mazzalab-osc`. The network listener
+will live in `mazzalab-server`.
 
 ## Transport
 
@@ -48,8 +48,8 @@ Replies go to `/reply{original address}` with one JSON string argument:
 
 ## Next steps
 
-- Execute parsed requests against the engine in `culab-server`.
-- Property names: map QLab names (`preWait`, `continueMode`...) onto CuLab's
+- Execute parsed requests against the engine in `mazzalab-server`.
+- Property names: map QLab names (`preWait`, `continueMode`...) onto MazzaLab's
   model.
 - Push updates (`/update/workspace/{id}/cue_id/{id}`) driven by engine
   events.

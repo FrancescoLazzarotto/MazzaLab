@@ -1,0 +1,1 @@
+//! mazzalab-plugin

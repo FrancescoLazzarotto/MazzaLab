@@ -1,8 +1,8 @@
-# CuLab
+# MazzaLab
 
 Cross-platform show control for theatre, live events and installations:
 cue-based playback of audio, video and lighting, and control of the devices
-around them, from one GO button. CuLab runs on Windows, macOS and Linux.
+around them, from one GO button. MazzaLab runs on Windows, macOS and Linux.
 
 > **Status:** early development. The show model, playback engine, show file
 > format, OSC parsing and a command line tool work and are tested. Audio,
@@ -14,7 +14,7 @@ around them, from one GO button. CuLab runs on Windows, macOS and Linux.
 - **Deterministic engine.** Playback logic is pure and time-injected. Shows
   can be simulated, tested in CI, replayed, and mirrored exactly to a backup
   machine.
-- **Text show files.** `.culab` files are pretty-printed JSON, readable and
+- **Text show files.** `.mazzalab` files are pretty-printed JSON, readable and
   diffable in git.
 - **Drop-in remote control.** OSC addressing follows the public QLab 5 OSC
   dictionary (port 53000), so existing control surfaces keep working.
@@ -30,27 +30,27 @@ Requires Rust (the toolchain is pinned in `rust-toolchain.toml`).
 
 ```sh
 cargo test --workspace
-cargo run -p culab-cli -- new my-show.culab
-cargo run -p culab-cli -- info my-show.culab
-cargo run -p culab-cli -- simulate examples/shows/demo.culab --gos 4 --interval 15
+cargo run -p mazzalab-cli -- new my-show.mazzalab
+cargo run -p mazzalab-cli -- info my-show.mazzalab
+cargo run -p mazzalab-cli -- simulate examples/shows/demo.mazzalab --gos 4 --interval 15
 ```
 
 ## Repository layout
 
 | Path | Contents |
 | --- | --- |
-| `crates/culab-core` | Show data model and validation |
-| `crates/culab-engine` | Deterministic cue playback engine |
-| `crates/culab-project` | `.culab` show file format |
-| `crates/culab-osc` | OSC parsing, replies, SLIP framing |
-| `crates/culab-{audio,video,lighting,midi,network,timeline,ui,plugin}` | Planned subsystems |
-| `apps/culab-cli` | `culab` command line tool |
-| `apps/culab-{desktop,server,web,mobile}` | Planned front ends |
+| `crates/mazzalab-core` | Show data model and validation |
+| `crates/mazzalab-engine` | Deterministic cue playback engine |
+| `crates/mazzalab-project` | `.mazzalab` show file format |
+| `crates/mazzalab-osc` | OSC parsing, replies, SLIP framing |
+| `crates/mazzalab-{audio,video,lighting,midi,network,timeline,ui,plugin}` | Planned subsystems |
+| `apps/mazzalab-cli` | `mazzalab` command line tool |
+| `apps/mazzalab-{desktop,server,web,mobile}` | Planned front ends |
 | `docs/` | Architecture, ADRs, protocols |
 
 ## Background
 
-CuLab's design was informed by a clean-room study of QLab 5's public
+MazzaLab's design was informed by a clean-room study of QLab 5's public
 surface. See [QLab analysis](docs/architecture/qlab-analysis.md) and
-[ADR 0001](docs/adr/0001-clean-room-qlab-analysis.md). CuLab is not
+[ADR 0001](docs/adr/0001-clean-room-qlab-analysis.md). MazzaLab is not
 affiliated with Figure 53. QLab is a trademark of Figure 53, LLC.
