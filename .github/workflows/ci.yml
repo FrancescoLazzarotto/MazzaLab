@@ -18,6 +18,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - name: Audio headers (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
       - name: Install toolchain from rust-toolchain.toml
         run: rustup show active-toolchain || rustup toolchain install
       - uses: Swatinem/rust-cache@v2
@@ -27,6 +30,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Audio headers
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
       - name: Install toolchain from rust-toolchain.toml
         run: rustup show active-toolchain || rustup toolchain install
       - uses: Swatinem/rust-cache@v2
@@ -34,3 +39,20 @@ jobs:
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Demo show is valid
         run: cargo run -p mazzalab-cli --locked -- validate examples/shows/demo.mazzalab
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mazzalab-web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/mazzalab-web/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
