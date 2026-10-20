@@ -1,0 +1,16 @@
+[package]
+name = "culab-engine"
+description = "Deterministic, I/O-free cue playback engine for CuLab."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+culab-core.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true
