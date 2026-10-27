@@ -46,7 +46,9 @@ operator pressing GO.
 - **`mazzalab-web`**: the operator UI (React + TypeScript), served by the
   server. It is the same UI on the desktop, in a browser and on a tablet.
 - **`mazzalab-desktop`**: a Tauri app that runs the server in-process and
-  opens the UI in a native window.
+  opens the UI in a native window. Its File menu creates, opens and saves
+  shows; opening another show restarts the server on it and points the
+  window at the new server.
 
 ## Why a deterministic engine
 
@@ -76,8 +78,9 @@ until `next_deadline()` or the next external input. This gives us:
    copy/paste, cue templates, file picker with media browser, multiple
    cue lists, cue carts, waveform trims.
 5. **Desktop app** (first version done): Tauri shell with the embedded
-   server. Next: open/save dialogs, unsaved-changes prompt, recent shows,
-   installers for every platform, auto-update.
+   server, File menu with open/save dialogs and an unsaved-changes prompt.
+   Next: recent shows, autosave, installers for every platform,
+   auto-update.
 6. **Lighting**: Art-Net and sACN output, fixture patch, light cues with
    fades, USB DMX.
 7. **Devices**: MIDI/MSC/timecode input and output, network cues with an

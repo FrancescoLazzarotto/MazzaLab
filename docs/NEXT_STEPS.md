@@ -16,10 +16,11 @@ Spunta le voci man mano (`- [x]`).
 
 ## 1. App desktop
 
-- [ ] Finestre di apertura e salvataggio (`tauri-plugin-dialog`): Nuovo,
-      Apri, Salva con nome.
-- [ ] Avviso alla chiusura se ci sono modifiche non salvate.
-- [ ] Menu dell'applicazione e show recenti.
+- [x] Finestre di apertura e salvataggio (`tauri-plugin-dialog`): Nuovo,
+      Apri, Salva, Salva con nome, nel menu File.
+- [x] Avviso alla chiusura (e prima di Nuovo/Apri) se ci sono modifiche
+      non salvate.
+- [ ] Show recenti nel menu File.
 - [ ] Autosave e copie di backup a rotazione.
 - [ ] Installer firmati per Windows (MSI/NSIS), macOS (DMG, notarizzazione)
       e Linux (AppImage/deb).
