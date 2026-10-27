@@ -1,7 +1,11 @@
 use std::time::Duration;
 
-use mazzalab_core::{ContinueMode, Cue, CueKind, WaitCue, Workspace};
-use mazzalab_project::{FORMAT, FORMAT_VERSION, ProjectError, from_str, load, save, to_string};
+use std::path::{Path, PathBuf};
+
+use mazzalab_core::{AudioCue, ContinueMode, Cue, CueKind, VideoCue, WaitCue, Workspace};
+use mazzalab_project::{
+    FORMAT, FORMAT_VERSION, ProjectError, from_str, load, rebase_media, save, to_string,
+};
 
 fn workspace() -> Workspace {
     let mut workspace = Workspace::new("Hamlet");
@@ -65,4 +69,55 @@ fn save_and_load_file() {
 fn missing_file_reports_its_path() {
     let error = load("does/not/exist.mazzalab").unwrap_err();
     assert!(error.to_string().contains("exist.mazzalab"));
+}
+
+fn media_files(workspace: &Workspace) -> Vec<Option<PathBuf>> {
+    workspace
+        .cues()
+        .filter_map(|cue| match &cue.kind {
+            CueKind::Audio(audio) => Some(audio.file.clone()),
+            CueKind::Video(video) => Some(video.file.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn rebasing_media_keeps_files_found_from_the_new_folder() {
+    let root = std::env::temp_dir().join("mazzalab-rebase");
+    let (from, to) = (root.join("old"), root.join("old").join("copy"));
+    let audio = |file: &Path| {
+        Cue::new(CueKind::Audio(AudioCue {
+            file: Some(file.to_owned()),
+            ..AudioCue::default()
+        }))
+    };
+    let elsewhere = root.join("library").join("music.wav");
+    let mut workspace = Workspace::new("Rebase");
+    workspace.cue_lists[0].cues = vec![
+        audio(Path::new("thunder.wav")),
+        audio(Path::new("copy/media/rain.wav")),
+        audio(&elsewhere),
+        Cue::new(CueKind::Video(VideoCue {
+            file: Some("clip.mp4".into()),
+            ..VideoCue::default()
+        })),
+        Cue::new(CueKind::Audio(AudioCue::default())),
+    ];
+
+    let unchanged = workspace.clone();
+    rebase_media(&mut workspace, &from, &from);
+    assert_eq!(workspace, unchanged);
+
+    rebase_media(&mut workspace, &from, &to);
+    assert_eq!(
+        media_files(&workspace),
+        vec![
+            Some(from.join("thunder.wav")),
+            Some(Path::new("media").join("rain.wav")),
+            Some(elsewhere),
+            Some(from.join("clip.mp4")),
+            None,
+        ]
+    );
 }

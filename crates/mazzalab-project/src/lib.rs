@@ -16,7 +16,7 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use mazzalab_core::Workspace;
+use mazzalab_core::{CueId, CueKind, Workspace};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -110,4 +110,28 @@ pub fn save(path: impl AsRef<Path>, workspace: &Workspace) -> Result<(), Project
     };
     fs::write(&temp, text).map_err(io_error)?;
     fs::rename(&temp, path).map_err(io_error)
+}
+
+/// Rewrites relative media paths for a show moving from folder `from` to
+/// folder `to` (e.g. "save as" elsewhere), so they keep naming the same
+/// files. A file inside `to` stays relative; anything else becomes absolute.
+/// Both folders should be absolute.
+pub fn rebase_media(workspace: &mut Workspace, from: &Path, to: &Path) {
+    if from == to {
+        return;
+    }
+    let ids: Vec<CueId> = workspace.cues().map(|cue| cue.id).collect();
+    for id in ids {
+        let file = match workspace.find_cue_mut(id).map(|cue| &mut cue.kind) {
+            Some(CueKind::Audio(audio)) => &mut audio.file,
+            Some(CueKind::Video(video)) => &mut video.file,
+            _ => continue,
+        };
+        if let Some(path) = file.as_mut().filter(|path| path.is_relative()) {
+            let absolute = from.join(&*path);
+            *path = absolute
+                .strip_prefix(to)
+                .map_or_else(|_| absolute.clone(), Path::to_path_buf);
+        }
+    }
 }
