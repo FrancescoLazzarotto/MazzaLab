@@ -243,3 +243,27 @@ async fn websocket_snapshot_commands_and_events() {
     }
     server.shutdown();
 }
+
+#[tokio::test]
+async fn save_copy_then_stop_frees_the_ports() {
+    let server = server().await;
+    let dir = std::env::temp_dir().join(format!("mazzalab-server-copy-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let copy = dir.join("copy.mazzalab");
+
+    server.handle.save_copy(copy.clone()).await.unwrap();
+    assert_eq!(
+        mazzalab_project::load(&copy).unwrap().cue_lists,
+        workspace().cue_lists
+    );
+    // The copy is not the show's own file: there is still nothing to save to.
+    assert!(server.handle.save().await.is_err());
+
+    let (osc, http) = (server.osc_udp, server.http);
+    server.stop().await;
+    UdpSocket::bind(osc).await.expect("OSC port still taken");
+    tokio::net::TcpListener::bind(http)
+        .await
+        .expect("HTTP port still taken");
+    std::fs::remove_dir_all(dir).unwrap();
+}

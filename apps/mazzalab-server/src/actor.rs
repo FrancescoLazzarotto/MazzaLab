@@ -2,7 +2,7 @@
 //! clock and serializes every request. Everything else talks to it through a
 //! cloneable [`ShowHandle`] and listens to [`Update`] broadcasts.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -67,6 +67,10 @@ enum Request {
     Save {
         reply: oneshot::Sender<Result<(), String>>,
     },
+    SaveCopy {
+        path: PathBuf,
+        reply: oneshot::Sender<Result<(), String>>,
+    },
 }
 
 const GONE: &str = "the show is no longer running";
@@ -113,6 +117,15 @@ impl ShowHandle {
     /// Saves the show to its file.
     pub async fn save(&self) -> Result<(), String> {
         self.ask(|reply| Request::Save { reply })
+            .await
+            .unwrap_or_else(|| Err(GONE.to_owned()))
+    }
+
+    /// Writes the show to another file, leaving the show's own file and
+    /// unsaved state alone. Relative media paths are rewritten so they still
+    /// find the same files from the copy's folder.
+    pub async fn save_copy(&self, path: PathBuf) -> Result<(), String> {
+        self.ask(|reply| Request::SaveCopy { path, reply })
             .await
             .unwrap_or_else(|| Err(GONE.to_owned()))
     }
@@ -223,6 +236,20 @@ impl Actor {
                 };
                 let _ = reply.send(result);
             }
+            Request::SaveCopy { path, reply } => {
+                let mut workspace = self.show.workspace().clone();
+                let from = self
+                    .path
+                    .as_deref()
+                    .map_or(Some(PathBuf::from(".")), folder);
+                if let (Some(from), Some(to)) = (from.as_deref().and_then(absolute), folder(&path))
+                {
+                    mazzalab_project::rebase_media(&mut workspace, &from, &to);
+                }
+                let result =
+                    mazzalab_project::save(&path, &workspace).map_err(|error| error.to_string());
+                let _ = reply.send(result);
+            }
         }
     }
 
@@ -320,6 +347,15 @@ impl Actor {
         }
         messages
     }
+}
+
+/// The absolute folder holding `file`.
+fn folder(file: &Path) -> Option<PathBuf> {
+    absolute(file)?.parent().map(Path::to_path_buf)
+}
+
+fn absolute(path: &Path) -> Option<PathBuf> {
+    std::path::absolute(path).ok()
 }
 
 fn is_busy(status: &Status) -> bool {

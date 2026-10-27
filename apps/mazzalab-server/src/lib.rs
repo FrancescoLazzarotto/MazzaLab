@@ -74,6 +74,17 @@ impl RunningServer {
             task.abort();
         }
     }
+
+    /// Like [`shutdown`](Self::shutdown), but waits until every task has
+    /// ended, so the ports are free again when it returns.
+    pub async fn stop(self) {
+        for task in &self.tasks {
+            task.abort();
+        }
+        for task in self.tasks {
+            let _ = task.await;
+        }
+    }
 }
 
 /// Loads a show file, or creates an empty show when the file does not exist.
