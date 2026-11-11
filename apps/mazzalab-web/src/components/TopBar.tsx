@@ -27,7 +27,11 @@ export function TopBar({
       <div className="brand">
         <span className="wordmark">MazzaLab</span>
         {snapshot && <span className="show-name">{snapshot.workspace.name}</span>}
-        {snapshot?.dirty && <span className="edited">{t("app.unsaved")}</span>}
+        {snapshot?.dirty && (
+          <span className={snapshot.recovered ? "edited recovered" : "edited"} title={snapshot.recovered ? t("app.recoveredHint") : undefined}>
+            {snapshot.recovered ? t("app.recovered") : t("app.unsaved")}
+          </span>
+        )}
       </div>
       <div className="segmented mode-switch" role="group" aria-label={t("mode.title")}>
         <button className={editing ? "active" : undefined} aria-pressed={editing} onClick={() => onMode("edit")} title={t("mode.editHint")}>

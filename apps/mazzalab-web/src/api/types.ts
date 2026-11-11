@@ -132,6 +132,8 @@ export interface Workspace {
 export interface Snapshot {
   revision: number;
   dirty: boolean;
+  /** The unsaved changes come from an autosave of an earlier session. */
+  recovered?: boolean;
   can_undo: boolean;
   can_redo: boolean;
   current_list: Id;

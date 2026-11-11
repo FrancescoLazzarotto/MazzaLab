@@ -363,6 +363,10 @@ fieldset {
   border-radius: 50%;
 }
 
+.edited.recovered {
+  color: var(--warn);
+}
+
 .show-mode .mode-switch button.active {
   background: rgba(224, 82, 74, 0.2);
   color: #f3b1ac;
