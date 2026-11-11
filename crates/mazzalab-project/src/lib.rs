@@ -23,6 +23,8 @@ use thiserror::Error;
 pub const FILE_EXTENSION: &str = "mazzalab";
 pub const FORMAT: &str = "mazzalab.show";
 pub const FORMAT_VERSION: u32 = 1;
+/// Folder next to a show file that holds its safety copies.
+pub const BACKUP_FOLDER: &str = "backups";
 
 #[derive(Debug, Error)]
 pub enum ProjectError {
@@ -110,6 +112,90 @@ pub fn save(path: impl AsRef<Path>, workspace: &Workspace) -> Result<(), Project
     };
     fs::write(&temp, text).map_err(io_error)?;
     fs::rename(&temp, path).map_err(io_error)
+}
+
+fn safety_copy(show: &Path, suffix: &str) -> PathBuf {
+    let stem = show
+        .file_stem()
+        .map_or_else(|| "show".into(), |stem| stem.to_string_lossy().into_owned());
+    show.parent()
+        .unwrap_or(Path::new(""))
+        .join(BACKUP_FOLDER)
+        .join(format!("{stem}.{suffix}.{FILE_EXTENSION}"))
+}
+
+/// Where the `n`th most recent saved version of a show is kept; 1 is the
+/// version the last save replaced.
+pub fn backup_path(show: &Path, n: usize) -> PathBuf {
+    safety_copy(show, &n.to_string())
+}
+
+/// Where unsaved changes to a show are written while it is being edited.
+pub fn autosave_path(show: &Path) -> PathBuf {
+    safety_copy(show, "autosave")
+}
+
+/// Saves a show like [`save`], first setting aside the version it replaces:
+/// that becomes backup 1, older backups move up, and only `keep` are kept.
+/// Saving the same contents again does not use up a backup.
+pub fn save_with_backups(
+    path: impl AsRef<Path>,
+    workspace: &Workspace,
+    keep: usize,
+) -> Result<(), ProjectError> {
+    let path = path.as_ref();
+    if keep > 0
+        && let Ok(current) = fs::read(path)
+        && current != to_string(workspace)?.as_bytes()
+    {
+        let io_error = |source| ProjectError::Io {
+            path: backup_path(path, 1),
+            source,
+        };
+        if let Some(folder) = backup_path(path, 1).parent() {
+            fs::create_dir_all(folder).map_err(io_error)?;
+        }
+        // The oldest falls off the end; a missing one just leaves a gap.
+        let _ = fs::remove_file(backup_path(path, keep));
+        for n in (1..keep).rev() {
+            let _ = fs::rename(backup_path(path, n), backup_path(path, n + 1));
+        }
+        fs::write(backup_path(path, 1), current).map_err(io_error)?;
+    }
+    save(path, workspace)
+}
+
+/// Writes the current, unsaved state of a show next to it, to be offered
+/// back if the program does not get to save it.
+pub fn autosave(show: impl AsRef<Path>, workspace: &Workspace) -> Result<(), ProjectError> {
+    let target = autosave_path(show.as_ref());
+    if let Some(folder) = target.parent() {
+        fs::create_dir_all(folder).map_err(|source| ProjectError::Io {
+            path: target.clone(),
+            source,
+        })?;
+    }
+    save(&target, workspace)
+}
+
+/// Removes the autosaved state: it has been saved, or thrown away on purpose.
+pub fn discard_autosave(show: impl AsRef<Path>) {
+    let _ = fs::remove_file(autosave_path(show.as_ref()));
+}
+
+/// The autosaved state of a show, when there is one more recent than the
+/// show file itself: changes that were never saved.
+pub fn recoverable(show: impl AsRef<Path>) -> Option<Workspace> {
+    let show = show.as_ref();
+    let autosaved = autosave_path(show);
+    let written = fs::metadata(&autosaved)
+        .and_then(|meta| meta.modified())
+        .ok()?;
+    let saved = fs::metadata(show).and_then(|meta| meta.modified()).ok();
+    if saved.is_some_and(|saved| saved >= written) {
+        return None;
+    }
+    load(&autosaved).ok()
 }
 
 /// Rewrites relative media paths for a show moving from folder `from` to
