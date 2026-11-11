@@ -66,28 +66,31 @@ until `next_deadline()` or the next external input. This gives us:
 
 ## Roadmap
 
-1. **Foundation** (done): model, engine, show file, OSC parsing, CLI, CI.
-2. **Server and remote** (done): show actor, OSC UDP/TCP with replies and
-   `/updates`, HTTP/WebSocket API, web UI served to any device.
-3. **Audio** (first version done): streaming decode, real-time mixer,
-   levels, fades, panic, natural-end reporting. Next: output patches and
-   channel routing, device selection, pre-loading for zero-latency starts,
-   the audio clock driving the engine, and waveform display.
-4. **Operator UI** (first version done): GO/standby, cue list, active cues,
-   inspector, add/delete, undo/redo, save, IT/EN. Next: drag and drop,
-   copy/paste, cue templates, file picker with media browser, multiple
-   cue lists, cue carts, waveform trims.
-5. **Desktop app** (first version done): Tauri shell with the embedded
-   server, File menu with open/save dialogs and an unsaved-changes prompt.
-   Next: recent shows, autosave, installers for every platform,
-   auto-update.
-6. **Lighting**: Art-Net and sACN output, fixture patch, light cues with
-   fades, USB DMX.
-7. **Devices**: MIDI/MSC/timecode input and output, network cues with an
-   open device description schema and library.
-8. **Video**: `wgpu` renderer, stages and outputs, layers and opacity, edge
-   blending and warping, NDI/Syphon/Spout.
-9. **Collaboration and redundancy**: multi-user editing with permissions,
-   a hot backup that follows the main engine.
-10. **Scripting and plugins**: sandboxed scripts and a plugin API for new
-    cue types and devices.
+The goal is a show-control system better than QLab that runs everywhere.
+The detailed plan, with every missing piece and what "better" means in
+measurable terms, is in [PIANO.md](../PIANO.md) (Italian). In short:
+
+0. **Shared foundations**: audio clock driving the engine, show switching
+   without restarting the server, extended show settings (format v2),
+   `/live` values, operator input log and replay, media management,
+   autosave and crash recovery.
+1. **Audio**: device selection and low-latency drivers, output patches and
+   per-cue matrices, pre-loading, sample-aligned starts, slices, pitch-
+   preserving rate, full fades, ducking, LUFS, meters, CLAP/VST3 effects,
+   object-based spatialisation, Mic cues.
+2. **Operator UI**: drag and drop, copy/paste, renumbering, templates,
+   waveform editor, timeline view, carts, show/edit modes, accessibility.
+3. **Triggers, OSC and API**: hotkey/MIDI/timecode/wall-clock triggers,
+   full QLab OSC coverage, permissions, a documented public API, mDNS.
+4. **MIDI, timecode and network devices**: MIDI/MSC/MTC/LTC in and out,
+   network cues that send, an open device schema and library.
+5. **Lighting**: Art-Net, sACN, USB DMX, RDM, GDTF and Open Fixture Library
+   patching, console-style light cues, live dashboard.
+6. **Video**: `wgpu` renderer, hardware decoding, stages and layers, edge
+   blending and warping, NDI/Syphon/Spout, remote render nodes.
+7. **Collaboration and redundancy**: multi-user editing with permissions and
+   a hot backup replaying the same input log.
+8. **Scripting and plugins**: sandboxed script cues and a plugin API.
+9. **Interoperability**: pre-show check, printable cue sheets, CSV import.
+10. **Product and quality** (ongoing): signed installers, auto-update,
+    headless ARM server, hardware test suite, user guide.
