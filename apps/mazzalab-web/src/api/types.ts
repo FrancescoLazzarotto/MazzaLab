@@ -28,6 +28,9 @@ interface CueBase {
   target?: Id;
 }
 
+/** Crosspoint levels in dB, `matrix[file channel][output]`; null is silent. */
+export type Matrix = (number | null)[][];
+
 export interface AudioFields {
   file?: string;
   start_time?: number;
@@ -37,7 +40,11 @@ export interface AudioFields {
   rate?: number;
   level_db?: number;
   output_patch?: string;
+  fade_in?: number;
+  fade_out?: number;
+  matrix?: Matrix;
   media_duration?: number;
+  media_channels?: number;
 }
 
 export type MidiMessage =
@@ -69,6 +76,8 @@ export type Cue = CueBase &
   );
 
 export type CueType = Cue["type"];
+export type AudioCue = Extract<Cue, { type: "audio" }>;
+export type GroupCue = Extract<Cue, { type: "group" }>;
 
 export interface CueList {
   id: Id;
@@ -76,9 +85,27 @@ export interface CueList {
   cues: Cue[];
 }
 
+export interface AudioSettings {
+  device?: string;
+  sample_rate?: number;
+  buffer_size?: number;
+  master_db?: number;
+}
+
+export type NetworkProtocol = "osc_udp" | "osc_tcp" | "plain_udp" | "plain_tcp";
+
+export interface NetworkPatch {
+  name: string;
+  host: string;
+  port: number;
+  protocol?: NetworkProtocol;
+}
+
 export interface WorkspaceSettings {
   double_go_protection: number;
   panic_duration: number;
+  audio?: AudioSettings;
+  network_patches?: NetworkPatch[];
 }
 
 export interface Workspace {
@@ -113,6 +140,47 @@ export interface Status {
   running: RunningCue[];
 }
 
+/** The audio output the server is playing on. */
+export interface AudioStatus {
+  running: boolean;
+  device_id?: string;
+  device_name?: string;
+  sample_rate: number;
+  channels: number;
+  buffer_size?: number;
+  /** The show's device is missing and the default one is in use. */
+  fallback: boolean;
+  error?: string;
+}
+
+export interface OutputDevice {
+  id: string;
+  name: string;
+  host: string;
+  is_default: boolean;
+  max_channels: number;
+  sample_rates: number[];
+  default_sample_rate: number | null;
+}
+
+export interface AudioInfo {
+  status: AudioStatus | null;
+  devices: OutputDevice[];
+}
+
+export interface Waveform {
+  duration: number;
+  channels: number;
+  sample_rate: number;
+  /** `[min, max, min, max, ...]`, each from -127 to 127. */
+  peaks: number[];
+}
+
+export interface Notice {
+  level: "info" | "warning" | "error";
+  message: string;
+}
+
 export type Container = { kind: "list"; id: Id } | { kind: "group"; id: Id };
 
 export type Command =
@@ -129,7 +197,9 @@ export type Command =
   | { command: "rename_cue_list"; list: Id; name: string }
   | { command: "delete_cue_list"; list: Id }
   | { command: "rename_workspace"; name: string }
-  | { command: "update_settings"; settings: WorkspaceSettings };
+  | { command: "update_settings"; settings: WorkspaceSettings }
+  | { command: "set_numbers"; numbers: [Id, string | null][] }
+  | { command: "batch"; commands: Command[] };
 
 export type EngineEvent = { at: number } & (
   | { kind: "triggered" | "skipped" | "action_completed" | "stopped" | "paused" | "resumed"; cue: Id }
@@ -142,4 +212,7 @@ export type ServerMessage =
   | { type: "snapshot"; snapshot: Snapshot }
   | { type: "status"; status: Status }
   | { type: "events"; events: EngineEvent[] }
+  | { type: "meters"; peaks: number[] }
+  | { type: "audio"; audio: AudioStatus }
+  | { type: "notice"; notice: Notice }
   | { type: "result"; id: number; error?: string };
