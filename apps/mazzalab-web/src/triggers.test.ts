@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { Cue } from "./api/types";
+import { percent, slotName } from "./components/DmxPanel";
 import { defaultMessage, formatHex, parseHex } from "./components/MidiFields";
-import { midiSummary } from "./cues";
+import { midiSummary, problemOf } from "./cues";
 import { cuesForHotkey, hotkeyOf, isReserved, type KeyPress } from "./hotkeys";
 
 const press = (key: string, code: string, modifiers: Partial<KeyPress> = {}): KeyPress => ({
@@ -78,5 +79,22 @@ describe("midi messages", () => {
     expect(note).toEqual({ kind: "note_on", channel: 9, note: 60, velocity: 100 });
     expect(defaultMessage("control_change")).toMatchObject({ channel: 1 });
     expect(defaultMessage("msc", note)).toEqual({ kind: "msc", device_id: 1, command_format: 1, command: 1 });
+  });
+});
+
+describe("lights", () => {
+  it("names slots the way light cues do", () => {
+    expect(slotName(1, 7)).toBe("7");
+    expect(slotName(2, 7)).toBe("2/7");
+    expect(percent(255)).toBe(100);
+    expect(percent(128)).toBe(50);
+    expect(percent(1)).toBe(0);
+  });
+
+  it("flags a light cue with nothing to do", () => {
+    const exists = () => true;
+    expect(problemOf({ id: "a", type: "light" }, exists)).toBe("no_commands");
+    expect(problemOf({ id: "a", type: "light", commands: [] }, exists)).toBe("no_commands");
+    expect(problemOf({ id: "a", type: "light", commands: ["1 @ 50"] }, exists)).toBeNull();
   });
 });

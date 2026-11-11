@@ -310,6 +310,7 @@ function TypeSettings({ cue, settings, set }: { cue: Cue; settings: WorkspaceSet
             <TextField
               label={t("inspector.commands")}
               value={(cue.commands ?? []).join("\n")}
+              placeholder={"1 thru 10 @ 50\n12 + 14 @ full\n2/1 thru 2/8 @ out"}
               multiline
               onCommit={(text) => set({ commands: text.split("\n").map((line) => line.trim()).filter(Boolean) })}
             />

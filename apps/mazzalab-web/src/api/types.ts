@@ -114,12 +114,29 @@ export interface MidiPatch {
   port: string;
 }
 
+export type DmxProtocol = "art_net" | "sacn";
+
+/** Sends one of the show's DMX universes to the network. */
+export interface DmxOutput {
+  /** The show's universe, counted from 1. */
+  universe: number;
+  protocol?: DmxProtocol;
+  /** Empty broadcasts (Art-Net) or uses the multicast group (sACN). */
+  host?: string;
+  /** The universe on the wire: Art-Net counts from 0, sACN from 1. */
+  net_universe: number;
+}
+
+/** A lit DMX slot: universe, address and value (1–255). */
+export type DmxLevel = [number, number, number];
+
 export interface WorkspaceSettings {
   double_go_protection: number;
   panic_duration: number;
   audio?: AudioSettings;
   network_patches?: NetworkPatch[];
   midi_patches?: MidiPatch[];
+  dmx_outputs?: DmxOutput[];
 }
 
 export interface Workspace {
@@ -237,4 +254,5 @@ export type ServerMessage =
   | { type: "meters"; peaks: number[] }
   | { type: "audio"; audio: AudioStatus }
   | { type: "notice"; notice: Notice }
+  | { type: "dmx"; levels: DmxLevel[] }
   | { type: "result"; id: number; error?: string };

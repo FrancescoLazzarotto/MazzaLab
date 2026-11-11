@@ -3,6 +3,7 @@ import type {
   AudioInfo,
   AudioStatus,
   Command,
+  DmxLevel,
   EngineEvent,
   Id,
   MidiPorts,
@@ -25,6 +26,8 @@ export interface ShowState {
   snapshot: Snapshot | null;
   status: Status | null;
   audio: AudioStatus | null;
+  /** The DMX slots that are lit; null when the server drives no lights. */
+  dmx: DmxLevel[] | null;
   toasts: Toast[];
 }
 
@@ -48,7 +51,7 @@ export class ShowConnection {
   private meterListeners = new Set<MeterListener>();
   private retries = 0;
   private stopped = false;
-  private state: ShowState = { connection: "connecting", snapshot: null, status: null, audio: null, toasts: [] };
+  private state: ShowState = { connection: "connecting", snapshot: null, status: null, audio: null, dmx: null, toasts: [] };
 
   constructor(private readonly url: string) {}
 
@@ -198,6 +201,9 @@ export class ShowConnection {
         break;
       case "notice":
         this.toast(message.notice.level, message.notice.message);
+        break;
+      case "dmx":
+        this.update({ dmx: message.levels });
         break;
       case "result": {
         const pending = this.pending.get(message.id);

@@ -4,6 +4,7 @@ import type { Command, Cue, CueType, Id, WorkspaceSettings } from "./api/types";
 import { ActiveCues } from "./components/ActiveCues";
 import { AudioPanel } from "./components/AudioPanel";
 import { CueList, type SelectMode } from "./components/CueList";
+import { DmxPanel } from "./components/DmxPanel";
 import { Icon } from "./components/icons";
 import { Inspector } from "./components/Inspector";
 import { RenumberDialog } from "./components/RenumberDialog";
@@ -35,7 +36,7 @@ import { loadPreferences, savePreferences, type Preferences } from "./preference
 
 export function App({ connection }: { connection: ShowConnection }) {
   const { t } = useI18n();
-  const { snapshot, status, audio, toasts, connection: connectionState } = useShow(connection);
+  const { snapshot, status, audio, dmx, toasts, connection: connectionState } = useShow(connection);
   // Selection and the visible list are per client, so several operators can
   // work on the same show without fighting over them.
   const [listId, setListId] = useState<Id | null>(null);
@@ -489,6 +490,7 @@ export function App({ connection }: { connection: ShowConnection }) {
               onMaster={(master_db) => updateSettings({ ...workspace.settings, audio: { ...workspace.settings.audio, master_db } })}
               onOpenSettings={() => setSettingsOpen(true)}
             />
+            {dmx !== null && ((workspace.settings.dmx_outputs ?? []).length > 0 || dmx.length > 0) && <DmxPanel levels={dmx} />}
             <ActiveCues
               running={status?.running ?? []}
               cues={allCues}

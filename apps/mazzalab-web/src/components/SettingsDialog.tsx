@@ -1,6 +1,16 @@
 import { useEffect, useState } from "react";
 import type { ShowConnection } from "../api/connection";
-import type { AudioInfo, AudioSettings, MidiPatch, NetworkPatch, NetworkProtocol, Workspace, WorkspaceSettings } from "../api/types";
+import type {
+  AudioInfo,
+  AudioSettings,
+  DmxOutput,
+  DmxProtocol,
+  MidiPatch,
+  NetworkPatch,
+  NetworkProtocol,
+  Workspace,
+  WorkspaceSettings,
+} from "../api/types";
 import { useI18n } from "../i18n";
 import type { Preferences } from "../preferences";
 import { CheckField, LevelField, NumberField, SelectField, TextField, TimeField } from "./fields";
@@ -8,7 +18,7 @@ import { Icon } from "./icons";
 
 const BUFFER_SIZES = [64, 128, 256, 512, 1024, 2048];
 const PROTOCOLS: NetworkProtocol[] = ["osc_udp", "osc_tcp", "plain_udp", "plain_tcp"];
-type Tab = "general" | "audio" | "network" | "midi" | "keys";
+type Tab = "general" | "audio" | "network" | "midi" | "lights" | "keys";
 
 const SHORTCUTS: [string, string][] = [
   ["Space", "action.go"],
@@ -66,7 +76,7 @@ export function SettingsDialog({
         <header>
           <h1>{t("settings.title")}</h1>
           <nav className="inspector-tabs">
-            {(["general", "audio", "network", "midi", "keys"] as const).map((name) => (
+            {(["general", "audio", "network", "midi", "lights", "keys"] as const).map((name) => (
               <button key={name} className={name === tab ? "active" : undefined} onClick={() => setTab(name)}>
                 {t(`settings.${name}`)}
               </button>
@@ -100,6 +110,7 @@ export function SettingsDialog({
           {tab === "audio" && <AudioTab connection={connection} audio={settings.audio ?? {}} onChange={(audio) => set({ audio })} />}
           {tab === "network" && <NetworkTab patches={settings.network_patches ?? []} onChange={(network_patches) => set({ network_patches })} />}
           {tab === "midi" && <MidiTab connection={connection} patches={settings.midi_patches ?? []} onChange={(midi_patches) => set({ midi_patches })} />}
+          {tab === "lights" && <LightsTab outputs={settings.dmx_outputs ?? []} onChange={(dmx_outputs) => set({ dmx_outputs })} />}
           {tab === "keys" && (
             <table className="shortcuts">
               <tbody>
@@ -313,6 +324,66 @@ function MidiTab({
         </button>
       </div>
       {outputs !== null && outputs.length === 0 && <p className="hint warn">{t("settings.noMidiOutputs")}</p>}
+    </div>
+  );
+}
+
+const DMX_PROTOCOLS: DmxProtocol[] = ["art_net", "sacn"];
+
+function LightsTab({ outputs, onChange }: { outputs: DmxOutput[]; onChange: (outputs: DmxOutput[]) => void }) {
+  const { t } = useI18n();
+  const update = (index: number, patch: Partial<DmxOutput>) =>
+    onChange(outputs.map((existing, position) => (position === index ? { ...existing, ...patch } : existing)));
+  const add = () => {
+    // The next universe of the show, on the matching Art-Net universe.
+    const universe = Math.max(0, ...outputs.map((output) => output.universe)) + 1;
+    onChange([...outputs, { universe, protocol: "art_net", net_universe: universe - 1 }]);
+  };
+  return (
+    <div className="form-column">
+      {outputs.length === 0 && <p className="placeholder">{t("settings.noDmxOutputs")}</p>}
+      {outputs.map((output, index) => {
+        const protocol = output.protocol ?? "art_net";
+        return (
+          <div className="row patch-row dmx-row" key={index}>
+            <NumberField label={t("settings.universe")} value={output.universe} min={1} onCommit={(universe) => update(index, { universe: Math.round(universe) })} />
+            <SelectField
+              label={t("settings.protocol")}
+              value={protocol}
+              options={DMX_PROTOCOLS.map((name) => ({ value: name, label: t(`dmx.${name}`) }))}
+              // Art-Net numbers universes from 0 and sACN from 1: keep pointing at the same one.
+              onChange={(next) =>
+                update(index, {
+                  protocol: next,
+                  net_universe: next === protocol ? output.net_universe : Math.max(next === "sacn" ? 1 : 0, output.net_universe + (next === "sacn" ? 1 : -1)),
+                })
+              }
+            />
+            <TextField
+              label={t("settings.host")}
+              value={output.host ?? ""}
+              placeholder={protocol === "art_net" ? t("settings.broadcast") : t("settings.multicast")}
+              onCommit={(host) => update(index, { host: host.trim() || undefined })}
+            />
+            <NumberField
+              label={t("settings.netUniverse")}
+              value={output.net_universe}
+              min={protocol === "sacn" ? 1 : 0}
+              onCommit={(net_universe) => update(index, { net_universe: Math.round(net_universe) })}
+            />
+            <button className="icon-button quiet" title={t("action.delete")} onClick={() => onChange(outputs.filter((_, position) => position !== index))}>
+              <Icon name="trash" size={14} />
+            </button>
+          </div>
+        );
+      })}
+      <div>
+        <button onClick={add}>
+          <Icon name="plus" size={12} />
+          {t("settings.addOutput")}
+        </button>
+      </div>
+      <p className="hint">{t("settings.lightsHint")}</p>
     </div>
   );
 }

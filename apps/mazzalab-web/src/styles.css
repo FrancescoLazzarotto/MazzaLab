@@ -1360,6 +1360,48 @@ input.hotkey {
   color: var(--text-3);
 }
 
+/* Lit DMX slots */
+.dmx-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
+  gap: 3px;
+}
+
+.dmx-slot {
+  display: flex;
+  flex-direction: column;
+  padding: 2px 4px 3px;
+  background: linear-gradient(to top, rgba(226, 204, 148, 0.34) var(--level), var(--surface-0) var(--level));
+  border-radius: 3px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.25;
+}
+
+.dmx-address {
+  color: var(--text-2);
+  font-size: 10px;
+}
+
+.dmx-value {
+  font-size: 12px;
+}
+
+.dmx-more {
+  align-self: center;
+  color: var(--text-3);
+  font-size: 11px;
+  text-align: center;
+}
+
+.dmx-row .field:nth-child(1),
+.dmx-row .field:nth-child(4) {
+  flex: 0 0 82px;
+}
+
+.dmx-row .field:nth-child(2) {
+  flex: 0 0 104px;
+}
+
 /* Dialogs */
 .overlay {
   position: fixed;

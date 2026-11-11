@@ -100,6 +100,7 @@ export const TOOLBOX: CueType[][] = [
 /** Cue types whose action this build really performs. */
 export const WORKING_TYPES: ReadonlySet<CueType> = new Set<CueType>([
   "audio",
+  "light",
   "fade",
   "network",
   "midi",
@@ -226,7 +227,7 @@ export function isAudioFile(name: string): boolean {
 }
 
 /** What stops a cue from doing anything when it runs, if something does. */
-export type Problem = "no_file" | "no_target" | "missing_target" | "no_message" | "not_supported";
+export type Problem = "no_file" | "no_target" | "missing_target" | "no_message" | "no_commands" | "not_supported";
 
 export function problemOf(cue: Cue, exists: (id: Id) => boolean): Problem | null {
   if (needsTarget(cue.type)) {
@@ -235,6 +236,7 @@ export function problemOf(cue: Cue, exists: (id: Id) => boolean): Problem | null
   }
   if (cue.type === "audio" && !cue.file) return "no_file";
   if (cue.type === "network" && cue.message.trim() === "") return "no_message";
+  if (cue.type === "light" && (cue.commands ?? []).length === 0) return "no_commands";
   if (!WORKING_TYPES.has(cue.type)) return "not_supported";
   return null;
 }

@@ -115,6 +115,10 @@ export function CueList({
     if (cue.type === "audio" || cue.type === "video") return cue.file ? fileName(cue.file) : "";
     if (cue.type === "midi") return midiSummary(cue.message);
     if (cue.type === "network") return cue.message.split(/\r?\n/)[0];
+    if (cue.type === "light") {
+      const lines = cue.commands ?? [];
+      return lines.length > 1 ? `${lines[0]}  +${lines.length - 1}` : (lines[0] ?? "");
+    }
     if (!needsTarget(cue.type) || !cue.target) return "";
     const target = findCue(allCues, cue.target);
     return target ? `${target.number ?? "–"}  ${displayName(target)}` : "?";
