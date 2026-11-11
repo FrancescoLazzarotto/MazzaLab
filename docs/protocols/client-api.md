@@ -19,6 +19,7 @@ JSON text frames in both directions.
 | `meters` | `peaks`: peak level in dBFS of each audio output since the previous message | with `status`, while there is signal (and once more when it ends) |
 | `audio` | `audio`: `running`, `device_id`, `device_name`, `sample_rate`, `channels`, `buffer_size`, `fallback`, `error` | on connect and when the audio output changes |
 | `notice` | `notice`: `level` (`info`, `warning`, `error`) and `message` | when the operator should know something: unreadable file, missing network patch, device lost |
+| `dmx` | `levels`: the DMX slots that are lit, each as `[universe, address, value]` with values from 1 to 255 | on connect and whenever they change, when the server drives lights |
 | `result` | `id` of the request, `error` when it failed | in answer to each client message |
 
 ### Client to server
@@ -129,3 +130,23 @@ Next to a show file, the `backups` folder holds:
   as recovered; the headless server does so with `--recover`.
 - `NAME.1.mazzalab` … `NAME.10.mazzalab` — the versions replaced by the last
   saves, 1 being the most recent.
+
+## Lights
+
+`workspace.settings.dmx_outputs` says where each universe of the show
+goes: `universe` (counted from 1, as cues name it), `protocol` (`art_net`
+or `sacn`), `host` (an address, optionally with a port; empty broadcasts
+Art-Net and uses the multicast group for sACN) and `net_universe`, the
+number on the wire (Art-Net counts from 0, sACN from 1).
+
+A Light cue holds `commands`, one per line, and a `duration` for the fade.
+A command is `channels @ level`:
+
+- channels are addresses from 1 to 512, `2/7` for universe 2, ranges with
+  `thru` (`1 thru 10`), joined with `+`; `all` is a whole universe;
+- the level is a percentage, `full` or `out`.
+
+A cue takes over the slots it names and leaves the others where they are,
+so looks build on each other. Lines that cannot be read are reported as a
+notice and the rest of the cue still runs. Stopping a cue, or a panic, does
+not change the lights: a cue with `all @ out` is a blackout.

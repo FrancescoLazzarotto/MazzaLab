@@ -47,6 +47,12 @@ Rete e MIDI: i Network cue inviano OSC e testo su UDP e TCP verso le
 patch di rete dello show; i cue MIDI inviano note, CC, program change,
 SysEx e MSC verso le patch MIDI.
 
+Luci: i cue Light impostano i canali DMX con comandi in stile console e
+tempi di fade; gli universi escono in Art-Net o sACN.
+
+Affidabilità: autosave delle modifiche non salvate, backup delle ultime
+dieci versioni a ogni salvataggio, recupero automatico dopo un crash.
+
 Interfaccia: barra dei tipi di cue, selezione multipla, copia/incolla,
 duplica, raggruppa, rinumera, drag & drop (riordino e import di file
 audio), modifica in linea, inspector a schede con forma d'onda e matrice,
@@ -54,7 +60,7 @@ pannello uscita audio, impostazioni (generale, audio, rete, scorciatoie),
 modalità Show, segnalazione dei cue rotti, avvisi all'operatore, tasti
 rapidi per cue.
 
-Stima della copertura rispetto a QLab: 20–25% delle funzioni. Le
+Stima della copertura rispetto a QLab: 30–35% delle funzioni. Le
 fondamenta (motore, protocollo, server) non vanno riscritte.
 
 ## Ordine delle fasi
@@ -362,6 +368,12 @@ Voci ancora aperte qui sopra di cui esiste già un pezzo:
 - **Modalità show/edit**: c'è il blocco delle modifiche, senza password.
 - **Network cue**: OSC su UDP e TCP, testo su UDP e TCP. Mancano HTTP,
   WebSocket e i fade dei valori OSC.
+- **Luci**: uscita Art-Net e sACN (unicast, broadcast o multicast), Light
+  cue con comandi in stile console (`1 thru 10 @ 50`, `2/7 @ full`,
+  `all @ out`) e tempo di fade, i look si sommano come su una console
+  tracking, monitor dei canali accesi. Mancano priorità e sincronizzazione
+  sACN, interfacce DMX USB, RDM, fixture (GDTF/OFL), gruppi e palette,
+  effetti, merge HTP, dashboard e programmer.
 - **MIDI**: in uscita note, CC, program change, SysEx e MSC verso le
   patch MIDI dello show. Mancano l'ingresso, il MIDI File cue e MTC.
 - **Trigger dei cue**: tasti rapidi per cue, da qualsiasi schermo

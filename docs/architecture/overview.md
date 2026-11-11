@@ -17,7 +17,8 @@ operator pressing GO.
                                                          |
  model                              mazzalab-core   mazzalab-project (.mazzalab files)
 
- outputs        mazzalab-audio   mazzalab-network   mazzalab-midi   (planned: video, lighting)
+ outputs        mazzalab-audio   mazzalab-network   mazzalab-midi   mazzalab-lighting
+                (planned: video)
 ```
 
 - **`mazzalab-core`**: the show data model (workspace, cue lists, cues, cue
@@ -53,6 +54,10 @@ operator pressing GO.
 - **`mazzalab-midi`**: encodes MIDI cues (voice messages, System Exclusive,
   MIDI Show Control) and sends them to the show's MIDI patches, keeping the
   ports open between messages.
+- **`mazzalab-lighting`**: reads Light cues written as console-style
+  commands, keeps the level of every DMX slot in a deterministic rig that
+  fades between looks, and sends the universes as Art-Net or sACN: 40 times
+  a second while levels move, once a second otherwise.
 - **`mazzalab-web`**: the operator UI (React + TypeScript), served by the
   server. It is the same UI on the desktop, in a browser and on a tablet.
 - **`mazzalab-desktop`**: a Tauri app that runs the server in-process and

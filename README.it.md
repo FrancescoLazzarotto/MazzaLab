@@ -89,7 +89,8 @@ compilato l'interfaccia web.
 | `crates/mazzalab-audio` | Decodifica, mixer in tempo reale con matrice di routing e meter, scelta del dispositivo, forme d'onda |
 | `crates/mazzalab-network` | Network cue: dal testo del messaggio a OSC o byte, inviati su UDP e TCP |
 | `crates/mazzalab-midi` | Cue MIDI: messaggi di canale, SysEx e MIDI Show Control inviati alle uscite |
-| `crates/mazzalab-{video,lighting,timeline,ui,plugin}` | Sottosistemi previsti |
+| `crates/mazzalab-lighting` | Cue Light: comandi in stile console, rig DMX con fade, uscita Art-Net e sACN |
+| `crates/mazzalab-{video,timeline,ui,plugin}` | Sottosistemi previsti |
 | `apps/mazzalab-server` | Server dello show in tempo reale: OSC, API HTTP/WebSocket, uscite |
 | `apps/mazzalab-web` | Interfaccia operatore (React + TypeScript) |
 | `apps/mazzalab-desktop` | App desktop (Tauri) con il server incorporato |
