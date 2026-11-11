@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ShowConnection } from "../api/connection";
-import type { AudioInfo, AudioSettings, NetworkPatch, NetworkProtocol, Workspace, WorkspaceSettings } from "../api/types";
+import type { AudioInfo, AudioSettings, MidiPatch, NetworkPatch, NetworkProtocol, Workspace, WorkspaceSettings } from "../api/types";
 import { useI18n } from "../i18n";
 import type { Preferences } from "../preferences";
 import { CheckField, LevelField, NumberField, SelectField, TextField, TimeField } from "./fields";
@@ -8,7 +8,7 @@ import { Icon } from "./icons";
 
 const BUFFER_SIZES = [64, 128, 256, 512, 1024, 2048];
 const PROTOCOLS: NetworkProtocol[] = ["osc_udp", "osc_tcp", "plain_udp", "plain_tcp"];
-type Tab = "general" | "audio" | "network" | "keys";
+type Tab = "general" | "audio" | "network" | "midi" | "keys";
 
 const SHORTCUTS: [string, string][] = [
   ["Space", "action.go"],
@@ -66,7 +66,7 @@ export function SettingsDialog({
         <header>
           <h1>{t("settings.title")}</h1>
           <nav className="inspector-tabs">
-            {(["general", "audio", "network", "keys"] as const).map((name) => (
+            {(["general", "audio", "network", "midi", "keys"] as const).map((name) => (
               <button key={name} className={name === tab ? "active" : undefined} onClick={() => setTab(name)}>
                 {t(`settings.${name}`)}
               </button>
@@ -99,6 +99,7 @@ export function SettingsDialog({
           )}
           {tab === "audio" && <AudioTab connection={connection} audio={settings.audio ?? {}} onChange={(audio) => set({ audio })} />}
           {tab === "network" && <NetworkTab patches={settings.network_patches ?? []} onChange={(network_patches) => set({ network_patches })} />}
+          {tab === "midi" && <MidiTab connection={connection} patches={settings.midi_patches ?? []} onChange={(midi_patches) => set({ midi_patches })} />}
           {tab === "keys" && (
             <table className="shortcuts">
               <tbody>
@@ -249,6 +250,69 @@ function NetworkTab({ patches, onChange }: { patches: NetworkPatch[]; onChange: 
         </button>
       </div>
       <p className="hint">{t("settings.networkHint")}</p>
+    </div>
+  );
+}
+
+function MidiTab({
+  connection,
+  patches,
+  onChange,
+}: {
+  connection: ShowConnection;
+  patches: MidiPatch[];
+  onChange: (patches: MidiPatch[]) => void;
+}) {
+  const { t } = useI18n();
+  const [outputs, setOutputs] = useState<string[] | null>(null);
+  useEffect(() => {
+    let current = true;
+    connection
+      .midiPorts()
+      .then((ports) => current && setOutputs(ports.outputs))
+      .catch(() => current && setOutputs([]));
+    return () => {
+      current = false;
+    };
+  }, [connection]);
+
+  const update = (index: number, patch: Partial<MidiPatch>) =>
+    onChange(patches.map((existing, position) => (position === index ? { ...existing, ...patch } : existing)));
+  const add = () => {
+    let n = patches.length + 1;
+    while (patches.some((patch) => patch.name === `MIDI ${n}`)) n++;
+    onChange([...patches, { name: `MIDI ${n}`, port: outputs?.[0] ?? "" }]);
+  };
+  return (
+    <div className="form-column">
+      {patches.length === 0 && <p className="placeholder">{t("settings.noMidiPatches")}</p>}
+      {patches.map((patch, index) => (
+        <div className="row patch-row" key={index}>
+          <TextField label={t("settings.patchName")} value={patch.name} onCommit={(name) => name.trim() && update(index, { name: name.trim() })} />
+          <SelectField
+            label={t("settings.midiOutput")}
+            value={patch.port}
+            options={[
+              ...(outputs ?? []).map((port) => ({ value: port, label: port })),
+              // The port a show was patched to stays visible when unplugged.
+              ...(outputs !== null && !outputs.includes(patch.port)
+                ? [{ value: patch.port, label: patch.port ? `${patch.port} (${t("settings.unplugged")})` : "—" }]
+                : []),
+            ]}
+            onChange={(port) => update(index, { port })}
+          />
+          <button className="icon-button quiet" title={t("action.delete")} onClick={() => onChange(patches.filter((_, position) => position !== index))}>
+            <Icon name="trash" size={14} />
+          </button>
+        </div>
+      ))}
+      <div>
+        <button onClick={add}>
+          <Icon name="plus" size={12} />
+          {t("settings.addPatch")}
+        </button>
+      </div>
+      {outputs !== null && outputs.length === 0 && <p className="hint warn">{t("settings.noMidiOutputs")}</p>}
     </div>
   );
 }

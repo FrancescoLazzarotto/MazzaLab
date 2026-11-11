@@ -26,6 +26,13 @@ interface CueBase {
   skip_if_disarmed?: boolean;
   flagged?: boolean;
   target?: Id;
+  triggers?: Triggers;
+}
+
+/** Ways of starting a cue other than GO and other cues. */
+export interface Triggers {
+  /** A key or combination such as `F5`, `Q` or `Ctrl+Shift+1`. */
+  hotkey?: string;
 }
 
 /** Crosspoint levels in dB, `matrix[file channel][output]`; null is silent. */
@@ -101,11 +108,18 @@ export interface NetworkPatch {
   protocol?: NetworkProtocol;
 }
 
+export interface MidiPatch {
+  name: string;
+  /** Name of the output port, as the system lists it. */
+  port: string;
+}
+
 export interface WorkspaceSettings {
   double_go_protection: number;
   panic_duration: number;
   audio?: AudioSettings;
   network_patches?: NetworkPatch[];
+  midi_patches?: MidiPatch[];
 }
 
 export interface Workspace {
@@ -166,6 +180,12 @@ export interface OutputDevice {
 export interface AudioInfo {
   status: AudioStatus | null;
   devices: OutputDevice[];
+}
+
+/** The MIDI ports of the machine the server runs on. */
+export interface MidiPorts {
+  outputs: string[];
+  inputs: string[];
 }
 
 export interface Waveform {

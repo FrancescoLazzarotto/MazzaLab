@@ -1,4 +1,4 @@
-import type { Command, Container, Cue, CueType, Id, Matrix } from "./api/types";
+import type { Command, Container, Cue, CueType, Id, Matrix, MidiMessage } from "./api/types";
 
 /** A cue with its nesting depth, as shown in the cue list. */
 export interface Row {
@@ -102,6 +102,7 @@ export const WORKING_TYPES: ReadonlySet<CueType> = new Set<CueType>([
   "audio",
   "fade",
   "network",
+  "midi",
   "group",
   "start",
   "stop",
@@ -161,6 +162,24 @@ export function displayName(cue: Cue): string {
   if (cue.name && cue.name.length > 0) return cue.name;
   if ((cue.type === "audio" || cue.type === "video") && cue.file) return fileStem(cue.file);
   return typeLabel(cue.type);
+}
+
+/** What a MIDI cue sends, in a few characters: `CC 7 = 127 · ch 1`. */
+export function midiSummary(message: MidiMessage): string {
+  switch (message.kind) {
+    case "note_on":
+      return `Note On ${message.note} vel ${message.velocity} · ch ${message.channel}`;
+    case "note_off":
+      return `Note Off ${message.note} · ch ${message.channel}`;
+    case "control_change":
+      return `CC ${message.controller} = ${message.value} · ch ${message.channel}`;
+    case "program_change":
+      return `PC ${message.program} · ch ${message.channel}`;
+    case "msc":
+      return `MSC ${message.q_number ? `cue ${message.q_number}` : `cmd ${message.command}`} · dev ${message.device_id}`;
+    case "sys_ex":
+      return `SysEx ${message.data.length} B`;
+  }
 }
 
 /** Cue types whose action is aimed at another cue. */

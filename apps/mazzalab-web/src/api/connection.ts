@@ -5,6 +5,7 @@ import type {
   Command,
   EngineEvent,
   Id,
+  MidiPorts,
   Notice,
   ServerMessage,
   Snapshot,
@@ -97,6 +98,12 @@ export class ShowConnection {
     const response = await fetch(`${this.httpBase}/api/audio`);
     if (!response.ok) throw new Error(await errorOf(response));
     return (await response.json()) as AudioInfo;
+  }
+
+  async midiPorts(): Promise<MidiPorts> {
+    const response = await fetch(`${this.httpBase}/api/midi`);
+    if (!response.ok) throw new Error(await errorOf(response));
+    return (await response.json()) as MidiPorts;
   }
 
   async waveform(cue: Id, buckets: number, signal?: AbortSignal): Promise<Waveform> {
