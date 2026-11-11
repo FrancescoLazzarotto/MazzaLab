@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Command, Cue } from "./api/types";
 import { meterFraction } from "./components/Meters";
-import { playbackPosition } from "./components/Waveform";
+import { playbackPosition, rulerStep } from "./components/Waveform";
 import {
   cloneCues,
   defaultMatrix,
@@ -200,6 +200,15 @@ describe("audio routing and display", () => {
     expect(meterFraction(0)).toBe(1);
     expect(meterFraction(6)).toBe(1);
     expect(meterFraction(-120)).toBe(0);
+  });
+
+  it("spaces ruler labels so they stay readable", () => {
+    // Eight seconds over 1100 px: a label every second is 137 px apart.
+    expect(rulerStep(8, 1100)).toBe(1);
+    expect(rulerStep(8, 300)).toBe(2);
+    expect(rulerStep(3600, 1100)).toBe(300);
+    expect(rulerStep(0.5, 1100)).toBe(0.1);
+    expect(rulerStep(0, 1100)).toBe(3600);
   });
 
   it("follows playback through trims, rate and loops", () => {

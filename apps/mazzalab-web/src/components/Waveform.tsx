@@ -7,6 +7,10 @@ import { useI18n } from "../i18n";
 const BUCKETS = 1600;
 /** How close, in pixels, the pointer has to be to grab a trim handle. */
 const GRAB = 8;
+/** Height of the time ruler above the peaks. */
+const RULER = 16;
+/** Distances between ruler labels, in seconds, to choose from. */
+const RULER_STEPS = [0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 1800, 3600];
 
 type Handle = "start" | "end";
 
@@ -22,10 +26,24 @@ export function playbackPosition(cue: AudioCue, elapsed: number, duration: numbe
   return start + (travelled % pass);
 }
 
+/** The smallest step that keeps ruler labels at least `minPixels` apart. */
+export function rulerStep(duration: number, width: number, minPixels = 72): number {
+  if (duration <= 0 || width <= 0) return RULER_STEPS[RULER_STEPS.length - 1];
+  return RULER_STEPS.find((step) => (step / duration) * width >= minPixels) ?? RULER_STEPS[RULER_STEPS.length - 1];
+}
+
+/** Ruler labels: `0:05`, with tenths only when the step needs them. */
+function rulerLabel(seconds: number, step: number): string {
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds - minutes * 60;
+  const text = step < 1 ? rest.toFixed(1).padStart(4, "0") : String(Math.round(rest)).padStart(2, "0");
+  return `${minutes}:${text}`;
+}
+
 /**
- * The cue's audio file drawn as peaks, with the part that plays highlighted,
- * the built-in fades sketched on top, draggable start and end handles, and a
- * cursor following playback.
+ * The cue's audio file drawn as peaks under a time ruler, with the part that
+ * plays highlighted, the built-in fades sketched on top, draggable start and
+ * end handles, and a cursor following playback.
  */
 export function Waveform({
   connection,
@@ -97,13 +115,45 @@ export function Waveform({
       context.clearRect(0, 0, width, height);
       const style = getComputedStyle(element);
       const color = (name: string, fallback: string) => style.getPropertyValue(name).trim() || fallback;
-      const accent = color("--accent", "#3fb68b");
-      const muted = color("--line", "#2e333b");
-      const text = color("--text", "#e7e9ec");
-      const warn = color("--warn", "#e0a43a");
+      const colors = {
+        wave: color("--wave", "#9fb0c6"),
+        waveOff: color("--wave-off", "#3b4047"),
+        line: color("--hairline", "#232427"),
+        tick: color("--border", "#303236"),
+        label: color("--text-3", "#6d7076"),
+        handle: color("--text", "#e9e9ea"),
+        active: color("--focus", "#5b9dff"),
+        fade: color("--text-2", "#a2a4a9"),
+        cursor: color("--go", "#2fbf71"),
+      };
 
       const x = (time: number) => (duration > 0 ? (time / duration) * width : 0);
-      const middle = height / 2;
+      const top = RULER;
+      const middle = top + (height - top) / 2;
+      const half = (height - top) / 2 - 3;
+
+      // Ruler.
+      context.fillStyle = colors.line;
+      context.fillRect(0, top - 1, width, 1);
+      if (duration > 0) {
+        const step = rulerStep(duration, width);
+        context.font = '10px "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif';
+        context.textBaseline = "middle";
+        context.textAlign = "left";
+        for (let time = 0; time < duration; time += step) {
+          const position = Math.round(x(time));
+          context.fillStyle = colors.tick;
+          context.fillRect(position, top - 5, 1, 5);
+          if (width - position > 34) {
+            context.fillStyle = colors.label;
+            context.fillText(rulerLabel(time, step), position + 4, top / 2);
+          }
+        }
+      }
+
+      // Peaks: the part that plays stands out from what is trimmed away.
+      context.fillStyle = colors.line;
+      context.fillRect(0, Math.round(middle), width, 1);
       if (data && data.peaks.length > 0) {
         const count = data.peaks.length / 2;
         const startX = x(start);
@@ -117,14 +167,11 @@ export function Waveform({
             low = Math.min(low, data.peaks[bucket * 2]);
             high = Math.max(high, data.peaks[bucket * 2 + 1]);
           }
-          const top = middle - (high / 127) * (middle - 2);
-          const bottom = middle - (low / 127) * (middle - 2);
-          context.fillStyle = column >= startX && column <= endX ? accent : muted;
-          context.fillRect(column, top, 1, Math.max(1, bottom - top));
+          const from = middle - (high / 127) * half;
+          const to = middle - (low / 127) * half;
+          context.fillStyle = column >= startX && column <= endX ? colors.wave : colors.waveOff;
+          context.fillRect(column, from, 1, Math.max(1, to - from));
         }
-      } else {
-        context.fillStyle = muted;
-        context.fillRect(0, middle, width, 1);
       }
 
       if (duration > 0) {
@@ -133,37 +180,38 @@ export function Waveform({
         const fadeIn = Math.min(cue.fade_in ?? 0, length);
         const fadeOut = Math.min(cue.fade_out ?? 0, length);
         if (fadeIn > 0 || fadeOut > 0) {
-          context.strokeStyle = warn;
-          context.lineWidth = 1.5;
+          const ceiling = top + 3;
+          const floor = height - 2;
+          context.strokeStyle = colors.fade;
+          context.lineWidth = 1;
           context.beginPath();
-          context.moveTo(x(start), fadeIn > 0 ? height - 2 : 2);
-          context.lineTo(x(start + fadeIn), 2);
-          context.lineTo(x(end - fadeOut), 2);
-          context.lineTo(x(end), fadeOut > 0 ? height - 2 : 2);
+          context.moveTo(x(start), fadeIn > 0 ? floor : ceiling);
+          context.lineTo(x(start + fadeIn), ceiling);
+          context.lineTo(x(end - fadeOut), ceiling);
+          context.lineTo(x(end), fadeOut > 0 ? floor : ceiling);
           context.stroke();
         }
-        // Trim handles.
+        // Trim handles: a line through the peaks with a flag in the ruler.
         for (const [handle, time] of [
           ["start", start],
           ["end", end],
         ] as const) {
-          const position = Math.min(width - 1, Math.max(1, x(time)));
-          const active = draft?.handle === handle || hover === handle;
-          context.fillStyle = active ? text : accent;
-          context.fillRect(position - 1, 0, 2, height);
-          context.beginPath();
+          const position = Math.min(width - 1, Math.max(0, Math.round(x(time))));
+          context.fillStyle = draft?.handle === handle || hover === handle ? colors.active : colors.handle;
+          context.fillRect(position, 0, 1, height);
           const direction = handle === "start" ? 1 : -1;
-          context.moveTo(position, 0);
-          context.lineTo(position + direction * 8, 0);
-          context.lineTo(position, 10);
+          context.beginPath();
+          context.moveTo(position + (direction > 0 ? 1 : 0), 0);
+          context.lineTo(position + direction * 7, 0);
+          context.lineTo(position + (direction > 0 ? 1 : 0), 8);
           context.fill();
         }
         const current = runRef.current;
         if (current) {
           const ahead = current.run.paused ? 0 : (performance.now() - current.at) / 1000;
-          const position = x(playbackPosition(cue, current.run.elapsed + ahead, duration));
-          context.fillStyle = text;
-          context.fillRect(position - 0.5, 0, 1.5, height);
+          const position = Math.round(x(playbackPosition(cue, current.run.elapsed + ahead, duration)));
+          context.fillStyle = colors.cursor;
+          context.fillRect(position, top, 1, height - top);
           frame = requestAnimationFrame(draw);
         }
       }
@@ -201,6 +249,15 @@ export function Waveform({
   };
 
   const interactive = editable && duration > 0;
+  const summary = !file
+    ? t("waveform.noFile")
+    : error
+      ? error
+      : loading
+        ? t("waveform.loading")
+        : data
+          ? `${data.channels} ch · ${(data.sample_rate / 1000).toFixed(1)} kHz`
+          : "";
   return (
     <div className="waveform">
       <canvas
@@ -237,19 +294,12 @@ export function Waveform({
         onPointerLeave={() => setHover(null)}
       />
       <div className="waveform-foot">
-        <span className="mono">{formatTime(start)}</span>
-        <span className="muted">
-          {!file
-            ? t("waveform.noFile")
-            : error
-              ? error
-              : loading
-                ? t("waveform.loading")
-                : data
-                  ? `${data.channels} ch · ${(data.sample_rate / 1000).toFixed(1)} kHz · ${formatTime(Math.max(0, end - start))}`
-                  : ""}
-        </span>
-        <span className="mono">{formatTime(end)}</span>
+        <span>{summary}</span>
+        {duration > 0 && (
+          <span>
+            {formatTime(start)} – {formatTime(end)} <span className="waveform-length">({formatTime(Math.max(0, end - start))})</span>
+          </span>
+        )}
       </div>
     </div>
   );
