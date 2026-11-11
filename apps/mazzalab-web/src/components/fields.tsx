@@ -185,3 +185,63 @@ export function CheckField({
     </label>
   );
 }
+
+/** A level in dB with a fader next to the number. */
+export function LevelField({
+  label,
+  value,
+  onCommit,
+  min = -60,
+  max = 12,
+}: {
+  label: string;
+  value: number;
+  onCommit: (value: number) => void;
+  min?: number;
+  max?: number;
+}) {
+  // While the fader is dragged the number follows it; the value is only
+  // sent when the fader is released.
+  const [dragging, setDragging] = useState<number | null>(null);
+  const shown = dragging ?? value;
+  const [draft, setDraft, revert] = useDraft(String(Math.round(shown * 10) / 10));
+  const commitText = () => {
+    const parsed = Number.parseFloat(draft.replace(",", "."));
+    if (Number.isFinite(parsed) && parsed !== value) onCommit(Math.min(max, parsed));
+    else revert();
+  };
+  return (
+    <Field label={label}>
+      <div className="level">
+        <input
+          type="range"
+          min={min}
+          max={max}
+          step={0.5}
+          value={Math.max(min, shown)}
+          onChange={(event) => setDragging(Number(event.target.value))}
+          onPointerUp={() => {
+            if (dragging !== null && dragging !== value) onCommit(dragging);
+            setDragging(null);
+          }}
+          onKeyUp={() => {
+            if (dragging !== null && dragging !== value) onCommit(dragging);
+            setDragging(null);
+          }}
+          onDoubleClick={() => onCommit(0)}
+        />
+        <input
+          className="level-number"
+          inputMode="decimal"
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={commitText}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") commitText();
+            if (event.key === "Escape") revert();
+          }}
+        />
+      </div>
+    </Field>
+  );
+}
