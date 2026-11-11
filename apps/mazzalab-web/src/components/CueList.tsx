@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type DragEvent } from "react";
 import type { Cue, Id, RunningCue } from "../api/types";
-import { actionLength, displayName, fileName, findCue, flatten, needsTarget, problemOf, typeLabel, type Drop } from "../cues";
+import { actionLength, displayName, fileName, findCue, flatten, midiSummary, needsTarget, problemOf, typeLabel, type Drop } from "../cues";
 import { formatTime } from "../format";
 import { useI18n } from "../i18n";
 import { CueIcon, Icon } from "./icons";
@@ -113,6 +113,8 @@ export function CueList({
   const exists = (id: Id) => findCue(allCues, id) !== undefined;
   const targetLabel = (cue: Cue): string => {
     if (cue.type === "audio" || cue.type === "video") return cue.file ? fileName(cue.file) : "";
+    if (cue.type === "midi") return midiSummary(cue.message);
+    if (cue.type === "network") return cue.message.split(/\r?\n/)[0];
     if (!needsTarget(cue.type) || !cue.target) return "";
     const target = findCue(allCues, cue.target);
     return target ? `${target.number ?? "–"}  ${displayName(target)}` : "?";
@@ -212,6 +214,7 @@ export function CueList({
                       <CueIcon type={cue.type} size={15} />
                     </span>
                     <span className="name-text">{cell("name", displayName(cue))}</span>
+                    {cue.triggers?.hotkey && <kbd className="hotkey-badge">{cue.triggers.hotkey}</kbd>}
                     {cue.notes && <span className="notes-text">{cue.notes}</span>}
                   </span>
                 </td>

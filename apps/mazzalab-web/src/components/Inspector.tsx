@@ -14,9 +14,11 @@ import type {
 } from "../api/types";
 import { displayName, flatten, needsTarget, problemOf, typeLabel } from "../cues";
 import { useI18n } from "../i18n";
-import { CheckField, LevelField, NumberField, SelectField, TextField, TimeField } from "./fields";
+import { hotkeyOf, isReserved } from "../hotkeys";
+import { CheckField, HotkeyField, LevelField, NumberField, SelectField, TextField, TimeField } from "./fields";
 import { CueIcon, Icon } from "./icons";
 import { MatrixEditor } from "./MatrixEditor";
+import { MidiFields } from "./MidiFields";
 import { Waveform } from "./Waveform";
 
 const COLORS: CueColor[] = ["red", "orange", "yellow", "green", "blue", "purple", "grey"];
@@ -29,7 +31,7 @@ type Patch = Record<string, unknown>;
 
 function tabsFor(cue: Cue): Tab[] {
   if (cue.type === "audio") return ["basics", "time", "levels"];
-  const plain = ["start", "stop", "pause", "reset", "devamp", "goto", "arm", "disarm", "memo", "mic", "camera", "midi", "midi_file", "timecode", "target", "load", "script"];
+  const plain = ["start", "stop", "pause", "reset", "devamp", "goto", "arm", "disarm", "memo", "mic", "camera", "midi_file", "timecode", "target", "load", "script"];
   return plain.includes(cue.type) ? ["basics"] : ["basics", "settings"];
 }
 
@@ -146,12 +148,22 @@ function Basics({ cue, allCues, set }: { cue: Cue; allCues: Cue[]; set: (patch: 
           <TimeField label={t("inspector.preWait")} value={cue.pre_wait ?? 0} onCommit={(pre_wait) => set({ pre_wait })} />
           <TimeField label={t("inspector.postWait")} value={cue.post_wait ?? 0} onCommit={(post_wait) => set({ post_wait })} />
         </div>
-        <SelectField
-          label={t("inspector.continue")}
-          value={cue.continue_mode ?? "do_not_continue"}
-          options={CONTINUE_MODES.map((mode) => ({ value: mode, label: t(`continue.${mode}`) }))}
-          onChange={(continue_mode) => set({ continue_mode })}
-        />
+        <div className="row">
+          <SelectField
+            label={t("inspector.continue")}
+            value={cue.continue_mode ?? "do_not_continue"}
+            options={CONTINUE_MODES.map((mode) => ({ value: mode, label: t(`continue.${mode}`) }))}
+            onChange={(continue_mode) => set({ continue_mode })}
+          />
+          <HotkeyField
+            label={t("inspector.hotkey")}
+            value={cue.triggers?.hotkey}
+            placeholder={t("inspector.hotkeyNone")}
+            nameOf={hotkeyOf}
+            refuse={(hotkey) => (isReserved(hotkey) ? t("inspector.hotkeyReserved") : null)}
+            onCommit={(hotkey) => set({ triggers: hotkey ? { ...cue.triggers, hotkey } : undefined })}
+          />
+        </div>
         <div className="row checks">
           <CheckField label={t("inspector.armed")} checked={cue.armed ?? true} onChange={(armed) => set({ armed })} />
           <CheckField label={t("inspector.flagged")} checked={cue.flagged ?? false} onChange={(flagged) => set({ flagged })} />
@@ -336,6 +348,8 @@ function TypeSettings({ cue, settings, set }: { cue: Cue; settings: WorkspaceSet
         </div>
       );
     }
+    case "midi":
+      return <MidiFields patch={cue.patch} message={cue.message} patches={settings.midi_patches ?? []} onChange={set} />;
     case "text":
       return (
         <div className="form-columns">

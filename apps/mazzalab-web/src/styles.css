@@ -172,6 +172,17 @@ select {
   background-position: right 8px center;
 }
 
+/* Numbers are typed; the browser's stepper arrows only add noise. */
+input[type="number"] {
+  appearance: textfield;
+}
+
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
 input[type="checkbox"] {
   appearance: none;
   flex: none;
@@ -795,6 +806,13 @@ select.status-item {
   text-overflow: ellipsis;
 }
 
+.hotkey-badge {
+  flex: none;
+  padding: 0 5px;
+  font-size: 10.5px;
+  line-height: 16px;
+}
+
 .inline-edit {
   height: 22px;
   padding: 0 5px;
@@ -990,8 +1008,11 @@ tr[class*="color-"]:not(.selected) {
 }
 
 .field-label {
+  overflow: hidden;
   color: var(--text-3);
   font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .row {
@@ -1016,6 +1037,15 @@ tr[class*="color-"]:not(.selected) {
 .row.checks {
   height: var(--control);
   align-items: center;
+}
+
+input.hotkey {
+  cursor: default;
+  caret-color: transparent;
+}
+
+.field:has(> input.hotkey) {
+  flex: 0 0 104px;
 }
 
 .check {

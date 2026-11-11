@@ -248,3 +248,55 @@ export function LevelField({
     </Field>
   );
 }
+
+/**
+ * A key combination, set by pressing it. Escape leaves it as it was and
+ * Backspace clears it; `accept` can refuse a key with a reason.
+ */
+export function HotkeyField({
+  label,
+  value,
+  onCommit,
+  nameOf,
+  refuse,
+  placeholder,
+}: {
+  label: string;
+  value: string | undefined;
+  onCommit: (value: string | undefined) => void;
+  /** Names a key press, or returns null for one that is not a key yet. */
+  nameOf: (event: React.KeyboardEvent<HTMLInputElement>) => string | null;
+  /** The reason a key cannot be used, if there is one. */
+  refuse: (hotkey: string) => string | null;
+  placeholder: string;
+}) {
+  const [problem, setProblem] = useState<string | null>(null);
+  return (
+    <Field label={label}>
+      <input
+        className={problem ? "hotkey invalid" : "hotkey"}
+        readOnly
+        value={value ?? ""}
+        placeholder={placeholder}
+        title={problem ?? undefined}
+        onBlur={() => setProblem(null)}
+        onKeyDown={(event) => {
+          if (event.key === "Tab") return;
+          event.preventDefault();
+          event.stopPropagation();
+          if (event.key === "Escape") return event.currentTarget.blur();
+          if (event.key === "Backspace" || event.key === "Delete") {
+            setProblem(null);
+            if (value !== undefined) onCommit(undefined);
+            return;
+          }
+          const hotkey = nameOf(event);
+          if (hotkey === null) return;
+          const reason = refuse(hotkey);
+          setProblem(reason);
+          if (reason === null && hotkey !== value) onCommit(hotkey);
+        }}
+      />
+    </Field>
+  );
+}

@@ -29,6 +29,7 @@ import {
   topLevel,
   type Drop,
 } from "./cues";
+import { cuesForHotkey, hotkeyOf } from "./hotkeys";
 import { useI18n } from "./i18n";
 import { loadPreferences, savePreferences, type Preferences } from "./preferences";
 
@@ -269,6 +270,14 @@ export function App({ connection }: { connection: ShowConnection }) {
         return;
       }
       if (typing) return;
+      // A cue's own hotkey comes first; the screen's keys cannot be taken.
+      const hotkey = hotkeyOf(event);
+      const triggered = hotkey ? cuesForHotkey(allCues, hotkey) : [];
+      if (triggered.length > 0) {
+        event.preventDefault();
+        if (!event.repeat) for (const cue of triggered) run({ command: "start", cue });
+        return;
+      }
       // Transport and navigation work in both modes.
       if (event.key === "Escape") {
         event.preventDefault();
@@ -338,7 +347,7 @@ export function App({ connection }: { connection: ShowConnection }) {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
     };
-  }, [copy, deleteSelected, duplicate, editable, focus, go, groupSelected, modal, moveSelection, paste, rows, run, save]);
+  }, [allCues, copy, deleteSelected, duplicate, editable, focus, go, groupSelected, modal, moveSelection, paste, rows, run, save]);
 
   // Files dropped outside the cue list would otherwise replace the page.
   useEffect(() => {
