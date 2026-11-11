@@ -5,7 +5,7 @@ use std::f32::consts::TAU;
 use std::sync::mpsc;
 use std::time::Duration;
 
-use mazzalab_audio::{AudioOutput, probe_workspace};
+use mazzalab_audio::{AudioOutput, DeviceRequest, output_devices, probe_workspace};
 use mazzalab_core::{ActionLength, AudioCue, Cue, CueKind, Workspace};
 use mazzalab_engine::Engine;
 
@@ -56,11 +56,12 @@ fn plays_a_cue_to_its_end() {
     assert_eq!(length, ActionLength::Fixed(Duration::from_millis(300)));
 
     let (finished_tx, finished) = mpsc::channel();
-    let mut audio = AudioOutput::start(&dir, move |cue| {
+    let mut audio = AudioOutput::start(&dir, DeviceRequest::default(), move |cue| {
         let _ = finished_tx.send(cue);
     })
     .unwrap();
     println!("device: {:?}", audio.info());
+    assert!(!audio.info().fallback);
 
     let list = workspace.cue_lists[0].id;
     let mut engine = Engine::new(workspace);
@@ -70,4 +71,43 @@ fn plays_a_cue_to_its_end() {
 
     let done = finished.recv_timeout(Duration::from_secs(5)).unwrap();
     assert_eq!(done, cue_id);
+    // The tone was at -6 dB of 0.1 full scale, about -26 dBFS.
+    let peaks = audio.take_peaks_db();
+    println!("peaks: {peaks:?}");
+    assert!(peaks.iter().any(|peak| (-30.0..-20.0).contains(peak)));
+}
+
+#[test]
+#[ignore = "needs an audio output device"]
+fn lists_devices_and_falls_back_from_an_unknown_one() {
+    let devices = output_devices();
+    for device in &devices {
+        println!("{device:?}");
+    }
+    assert!(devices.iter().any(|device| device.is_default));
+
+    let request = DeviceRequest {
+        device: Some("nowhere:no such device".into()),
+        ..DeviceRequest::default()
+    };
+    let audio = AudioOutput::start(".", request, |_| {}).unwrap();
+    assert!(audio.info().fallback);
+}
+
+#[test]
+#[ignore = "needs an audio output device"]
+fn opens_a_listed_device_by_id_with_a_buffer_size() {
+    let device = output_devices()
+        .into_iter()
+        .find(|device| device.is_default)
+        .unwrap();
+    let request = DeviceRequest {
+        device: Some(device.id.clone()),
+        sample_rate: device.default_sample_rate,
+        buffer_size: Some(512),
+    };
+    let audio = AudioOutput::start(".", request, |_| {}).unwrap();
+    println!("opened: {:?}", audio.info());
+    assert_eq!(audio.info().id, device.id);
+    assert!(!audio.info().fallback);
 }

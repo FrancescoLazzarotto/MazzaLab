@@ -3,13 +3,17 @@
 //! lock-free queue and leave through another one to be dropped elsewhere.
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use mazzalab_core::{CueId, FadeCurve};
 use rtrb::{Consumer, Producer};
 
 /// Maximum number of channels read from a source.
 pub(crate) const MAX_CHANNELS: usize = 16;
+/// Maximum number of output channels a voice can be routed to.
+pub(crate) const MAX_OUTPUTS: usize = 64;
+/// Maximum number of crosspoints one voice can feed.
+pub(crate) const MAX_ROUTES: usize = 256;
 /// Levels at or below this are treated as silence.
 pub(crate) const SILENT_DB: f32 = -90.0;
 /// Short fade applied when a voice is stopped, to avoid clicks.
@@ -83,6 +87,177 @@ impl Level {
     }
 }
 
+/// A linear gain that glides along a quarter sine, used for the fades built
+/// into a cue (fade in at the start, fade out before the end). It multiplies
+/// the cue's [`Level`], so fade cues and built-in fades do not fight.
+#[derive(Debug, Clone, Copy)]
+struct Envelope {
+    gain: f32,
+    from: f32,
+    to: f32,
+    total: u32,
+    done: u32,
+}
+
+impl Envelope {
+    fn new(gain: f32) -> Self {
+        Self {
+            gain,
+            from: gain,
+            to: gain,
+            total: 0,
+            done: 0,
+        }
+    }
+
+    fn fade_to(&mut self, to: f32, frames: u32) {
+        if frames == 0 {
+            *self = Self::new(to);
+        } else {
+            self.from = self.gain;
+            self.to = to;
+            self.total = frames;
+            self.done = 0;
+        }
+    }
+
+    fn next_gain(&mut self) -> f32 {
+        if self.done < self.total {
+            self.done += 1;
+            let t = self.done as f32 / self.total as f32;
+            // Equal-power shape: quick to become audible, smooth at the top.
+            let shaped = if self.to >= self.from {
+                (t * std::f32::consts::FRAC_PI_2).sin()
+            } else {
+                1.0 - ((1.0 - t) * std::f32::consts::FRAC_PI_2).sin()
+            };
+            self.gain = self.from + (self.to - self.from) * shaped;
+            if self.done >= self.total {
+                self.gain = self.to;
+            }
+        }
+        self.gain
+    }
+}
+
+/// One crosspoint: a source channel feeding an output channel.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct Route {
+    pub(crate) input: u8,
+    pub(crate) output: u8,
+    pub(crate) gain: f32,
+}
+
+/// The crosspoints of a voice, in a fixed array so that voices never
+/// allocate on the audio thread.
+#[derive(Clone, Copy)]
+pub(crate) struct Routes {
+    count: usize,
+    items: [Route; MAX_ROUTES],
+}
+
+impl std::fmt::Debug for Routes {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_list().entries(self.as_slice()).finish()
+    }
+}
+
+impl Routes {
+    pub(crate) fn empty() -> Self {
+        Self {
+            count: 0,
+            items: [Route {
+                input: 0,
+                output: 0,
+                gain: 0.0,
+            }; MAX_ROUTES],
+        }
+    }
+
+    fn push(&mut self, input: usize, output: usize, gain: f32) {
+        if self.count < MAX_ROUTES && gain != 0.0 {
+            self.items[self.count] = Route {
+                input: input as u8,
+                output: output as u8,
+                gain,
+            };
+            self.count += 1;
+        }
+    }
+
+    pub(crate) fn as_slice(&self) -> &[Route] {
+        &self.items[..self.count]
+    }
+
+    /// The routing used when a cue has no matrix: mono goes to the first two
+    /// outputs, anything else goes channel for channel. A single output
+    /// receives an even mix of every channel.
+    pub(crate) fn default_for(inputs: usize, outputs: usize) -> Self {
+        let inputs = inputs.clamp(1, MAX_CHANNELS);
+        let mut routes = Self::empty();
+        if outputs == 1 {
+            for input in 0..inputs {
+                routes.push(input, 0, 1.0 / inputs as f32);
+            }
+        } else if inputs == 1 {
+            routes.push(0, 0, 1.0);
+            routes.push(0, 1, 1.0);
+        } else {
+            for channel in 0..inputs.min(outputs) {
+                routes.push(channel, channel, 1.0);
+            }
+        }
+        routes
+    }
+
+    /// Crosspoint levels in dB, `matrix[input][output]`; missing and `None`
+    /// entries are silent, as are crosspoints outside the device.
+    pub(crate) fn from_matrix(matrix: &[Vec<Option<f64>>], inputs: usize, outputs: usize) -> Self {
+        let mut routes = Self::empty();
+        for (input, row) in matrix.iter().enumerate().take(inputs.min(MAX_CHANNELS)) {
+            for (output, level) in row.iter().enumerate().take(outputs.min(MAX_OUTPUTS)) {
+                if let Some(db) = level {
+                    routes.push(input, output, db_to_gain(*db as f32));
+                }
+            }
+        }
+        routes
+    }
+}
+
+/// Peak level of every output channel since the last read. Written by the
+/// audio thread and read by anyone, without locks.
+#[derive(Debug)]
+pub struct Meters {
+    peaks: Vec<AtomicU32>,
+}
+
+impl Meters {
+    pub(crate) fn new(channels: usize) -> Self {
+        Self {
+            peaks: (0..channels.min(MAX_OUTPUTS))
+                .map(|_| AtomicU32::new(0))
+                .collect(),
+        }
+    }
+
+    /// Bit patterns of non-negative floats order like the floats themselves,
+    /// so an integer maximum is a float maximum.
+    fn record(&self, channel: usize, peak: f32) {
+        if let Some(slot) = self.peaks.get(channel) {
+            slot.fetch_max(peak.to_bits(), Ordering::Relaxed);
+        }
+    }
+
+    /// Linear peaks since the previous call; resets them.
+    pub fn take(&self) -> Vec<f32> {
+        self.peaks
+            .iter()
+            .map(|slot| f32::from_bits(slot.swap(0, Ordering::Relaxed)))
+            .collect()
+    }
+}
+
 /// Cubic Hermite interpolation between `y1` and `y2`.
 fn hermite(y0: f32, y1: f32, y2: f32, y3: f32, t: f32) -> f32 {
     let c1 = 0.5 * (y2 - y0);
@@ -103,6 +278,8 @@ enum Pull {
 /// buffer, resamples them to the output rate and applies its level.
 pub struct Voice {
     pub(crate) cue: CueId,
+    /// Tells voices of the same cue apart.
+    pub(crate) serial: u64,
     samples: Consumer<f32>,
     ended: Arc<AtomicBool>,
     channels: usize,
@@ -113,9 +290,36 @@ pub struct Voice {
     history: [[f32; MAX_CHANNELS]; 4],
     drained: u8,
     level: Level,
+    envelope: Envelope,
+    routes: Routes,
+    /// Output frames rendered so far.
+    played: u64,
+    /// Output frame at which the built-in fade out starts.
+    fade_out_at: Option<u64>,
+    fade_out_frames: u32,
     paused: bool,
     stopping: bool,
     output_rate: u32,
+}
+
+/// Everything needed to build a [`Voice`].
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct VoiceConfig {
+    pub cue: CueId,
+    pub serial: u64,
+    /// Channels in the source's ring buffer.
+    pub channels: usize,
+    pub source_rate: u32,
+    pub output_rate: u32,
+    /// Playback rate (1.0 is normal speed).
+    pub rate: f64,
+    pub level_db: f32,
+    pub routes: Routes,
+    /// Length of the fade from silence at the start, in output frames.
+    pub fade_in_frames: u32,
+    /// Where the fade to silence starts and how long it lasts, in output
+    /// frames.
+    pub fade_out: Option<(u64, u32)>,
 }
 
 impl std::fmt::Debug for Voice {
@@ -129,36 +333,37 @@ impl std::fmt::Debug for Voice {
 }
 
 impl Voice {
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new(
-        cue: CueId,
-        samples: Consumer<f32>,
-        ended: Arc<AtomicBool>,
-        channels: usize,
-        source_rate: u32,
-        output_rate: u32,
-        rate: f64,
-        level_db: f32,
-    ) -> Self {
-        let rate = if rate.is_finite() && rate > 0.0 {
-            rate
+    pub(crate) fn new(config: VoiceConfig, samples: Consumer<f32>, ended: Arc<AtomicBool>) -> Self {
+        let rate = if config.rate.is_finite() && config.rate > 0.0 {
+            config.rate
         } else {
             1.0
         };
+        let mut envelope = Envelope::new(1.0);
+        if config.fade_in_frames > 0 {
+            envelope = Envelope::new(0.0);
+            envelope.fade_to(1.0, config.fade_in_frames);
+        }
         Self {
-            cue,
+            cue: config.cue,
+            serial: config.serial,
             samples,
             ended,
-            channels: channels.clamp(1, MAX_CHANNELS),
-            step: f64::from(source_rate) * rate / f64::from(output_rate.max(1)),
+            channels: config.channels.clamp(1, MAX_CHANNELS),
+            step: f64::from(config.source_rate) * rate / f64::from(config.output_rate.max(1)),
             // Pull three frames before the first output frame.
             position: 3.0,
             history: [[0.0; MAX_CHANNELS]; 4],
             drained: 0,
-            level: Level::new(level_db),
+            level: Level::new(config.level_db),
+            envelope,
+            routes: config.routes,
+            played: 0,
+            fade_out_at: config.fade_out.map(|(at, _)| at),
+            fade_out_frames: config.fade_out.map_or(0, |(_, frames)| frames),
             paused: false,
             stopping: false,
-            output_rate,
+            output_rate: config.output_rate,
         }
     }
 
@@ -224,21 +429,23 @@ impl Voice {
                 continue;
             }
 
-            let gain = self.level.next_gain();
+            if self.fade_out_at == Some(self.played) {
+                self.envelope.fade_to(0.0, self.fade_out_frames);
+            }
+            self.played += 1;
+            let gain = self.level.next_gain() * self.envelope.next_gain();
             if self.stopping && self.level.is_settled_silent() {
                 return false;
             }
             let t = self.position as f32;
             let [h0, h1, h2, h3] = &self.history;
-            if self.channels == 1 {
-                let value = hermite(h0[0], h1[0], h2[0], h3[0], t) * gain;
-                for sample in frame.iter_mut().take(2) {
-                    *sample += value;
-                }
-            } else {
-                for (channel, sample) in frame.iter_mut().enumerate().take(self.channels) {
-                    *sample +=
-                        hermite(h0[channel], h1[channel], h2[channel], h3[channel], t) * gain;
+            let mut inputs = [0.0_f32; MAX_CHANNELS];
+            for (channel, value) in inputs.iter_mut().enumerate().take(self.channels) {
+                *value = hermite(h0[channel], h1[channel], h2[channel], h3[channel], t) * gain;
+            }
+            for route in self.routes.as_slice() {
+                if let Some(sample) = frame.get_mut(usize::from(route.output)) {
+                    *sample += inputs[usize::from(route.input)] * route.gain;
                 }
             }
             self.position += self.step;
@@ -266,6 +473,11 @@ pub(crate) enum MixerCommand {
     },
     Pause(CueId),
     Resume(CueId),
+    /// Replaces the crosspoints of a playing cue.
+    Route {
+        cue: CueId,
+        routes: Box<Routes>,
+    },
     Master(f32),
 }
 
@@ -273,6 +485,8 @@ pub(crate) enum MixerEvent {
     /// A voice left the mix; `natural` is true when it played to its end
     /// rather than being stopped. Dropped outside the audio thread.
     Done { voice: Box<Voice>, natural: bool },
+    /// Memory to free outside the audio thread.
+    Garbage(Box<Routes>),
 }
 
 pub(crate) struct Mixer {
@@ -284,6 +498,7 @@ pub(crate) struct Mixer {
     events: Producer<MixerEvent>,
     channels: usize,
     master: Level,
+    meters: Arc<Meters>,
 }
 
 impl Mixer {
@@ -291,6 +506,7 @@ impl Mixer {
         commands: Consumer<MixerCommand>,
         events: Producer<MixerEvent>,
         channels: usize,
+        meters: Arc<Meters>,
     ) -> Self {
         Self {
             voices: Vec::with_capacity(256),
@@ -298,6 +514,7 @@ impl Mixer {
             events,
             channels: channels.max(1),
             master: Level::new(0.0),
+            meters,
         }
     }
 
@@ -344,7 +561,15 @@ impl Mixer {
                     voice.paused = false;
                 }
             }
-            MixerCommand::Master(db) => self.master.fade_to(db, 0, FadeCurve::Linear),
+            MixerCommand::Route { cue, routes } => {
+                for voice in find(&mut self.voices, cue) {
+                    voice.routes = *routes;
+                }
+                // The box is freed away from the audio thread.
+                let _ = self.events.push(MixerEvent::Garbage(routes));
+            }
+            // A short glide keeps master moves free of zipper noise.
+            MixerCommand::Master(db) => self.master.fade_to(db, 512, FadeCurve::Linear),
         }
     }
 
@@ -366,10 +591,19 @@ impl Mixer {
                 let _ = self.events.push(MixerEvent::Done { voice, natural });
             }
         }
+        let mut peaks = [0.0_f32; MAX_OUTPUTS];
         for frame in out.chunks_exact_mut(self.channels) {
             let gain = self.master.next_gain();
-            for sample in frame {
+            for (channel, sample) in frame.iter_mut().enumerate() {
                 *sample *= gain;
+                if let Some(peak) = peaks.get_mut(channel) {
+                    *peak = peak.max(sample.abs());
+                }
+            }
+        }
+        for (channel, peak) in peaks.iter().enumerate().take(self.channels) {
+            if *peak > 0.0 {
+                self.meters.record(channel, *peak);
             }
         }
     }
@@ -386,19 +620,59 @@ mod tests {
         mixer: Mixer,
         commands: Producer<MixerCommand>,
         events: Consumer<MixerEvent>,
+        meters: Arc<Meters>,
+        channels: usize,
     }
 
     fn rig(channels: usize) -> Rig {
         let (commands, command_rx) = RingBuffer::new(64);
         let (event_tx, events) = RingBuffer::new(64);
+        let meters = Arc::new(Meters::new(channels));
         Rig {
-            mixer: Mixer::new(command_rx, event_tx, channels),
+            mixer: Mixer::new(command_rx, event_tx, channels, meters.clone()),
             commands,
             events,
+            meters,
+            channels,
         }
     }
 
-    /// A voice whose source is already fully decoded.
+    fn config(
+        cue: u128,
+        channels: usize,
+        source_rate: u32,
+        level_db: f32,
+        outputs: usize,
+    ) -> VoiceConfig {
+        VoiceConfig {
+            cue: CueId::from_u128(cue),
+            serial: 0,
+            channels,
+            source_rate,
+            output_rate: RATE,
+            rate: 1.0,
+            level_db,
+            routes: Routes::default_for(channels, outputs),
+            fade_in_frames: 0,
+            fade_out: None,
+        }
+    }
+
+    fn loaded(samples: &[f32]) -> (Consumer<f32>, Arc<AtomicBool>) {
+        let (mut producer, consumer) = RingBuffer::new(samples.len().max(1));
+        for sample in samples {
+            producer.push(*sample).unwrap();
+        }
+        (consumer, Arc::new(AtomicBool::new(true)))
+    }
+
+    fn voice_with(config: VoiceConfig, samples: &[f32]) -> Box<Voice> {
+        let (consumer, ended) = loaded(samples);
+        Box::new(Voice::new(config, consumer, ended))
+    }
+
+    /// A voice whose source is already fully decoded, with default routing
+    /// to a device that has at least as many outputs as the tests use.
     fn voice(
         cue: u128,
         samples: &[f32],
@@ -406,21 +680,12 @@ mod tests {
         source_rate: u32,
         level_db: f32,
     ) -> Box<Voice> {
-        let (mut producer, consumer) = RingBuffer::new(samples.len().max(1));
-        for sample in samples {
-            producer.push(*sample).unwrap();
-        }
-        let ended = Arc::new(AtomicBool::new(true));
-        Box::new(Voice::new(
-            CueId::from_u128(cue),
-            consumer,
-            ended,
-            channels,
-            source_rate,
-            RATE,
-            1.0,
-            level_db,
-        ))
+        // Routing to a single output is exercised separately.
+        let outputs = if channels == 1 { 2 } else { channels };
+        voice_with(
+            config(cue, channels, source_rate, level_db, outputs),
+            samples,
+        )
     }
 
     fn render(rig: &mut Rig, frames: usize, channels: usize) -> Vec<f32> {
@@ -431,8 +696,10 @@ mod tests {
 
     fn done(rig: &mut Rig) -> Vec<(CueId, bool)> {
         let mut out = Vec::new();
-        while let Ok(MixerEvent::Done { voice, natural }) = rig.events.pop() {
-            out.push((voice.cue, natural));
+        while let Ok(event) = rig.events.pop() {
+            if let MixerEvent::Done { voice, natural } = event {
+                out.push((voice.cue, natural));
+            }
         }
         out
     }
@@ -539,14 +806,9 @@ mod tests {
         let ended = Arc::new(AtomicBool::new(false));
         rig.commands
             .push(MixerCommand::Add(Box::new(Voice::new(
-                CueId::from_u128(1),
+                config(1, 1, RATE, 0.0, 1),
                 consumer,
                 ended.clone(),
-                1,
-                RATE,
-                RATE,
-                1.0,
-                0.0,
             ))))
             .unwrap();
         assert!(render(&mut rig, 4, 1).iter().all(|s| *s == 0.0));
@@ -557,5 +819,120 @@ mod tests {
         let out = render(&mut rig, 8, 1);
         assert_eq!(&out[..4], &[5.0, 6.0, 7.0, 8.0]);
         assert!(done(&mut rig).len() == 1);
+    }
+
+    #[test]
+    fn matrix_routes_channels_to_any_output() {
+        let mut rig = rig(4);
+        let source: Vec<f32> = (0..50).flat_map(|_| [1.0, 0.5]).collect();
+        let mut config = config(1, 2, RATE, 0.0, 4);
+        // Left to output 4 at full level, right to output 1 at -6 dB.
+        config.routes = Routes::from_matrix(
+            &[
+                vec![None, None, None, Some(0.0)],
+                vec![Some(-6.0), None, None, None],
+            ],
+            2,
+            4,
+        );
+        rig.commands
+            .push(MixerCommand::Add(voice_with(config, &source)))
+            .unwrap();
+        let out = render(&mut rig, 10, 4);
+        let frame = &out[4 * 5..4 * 6];
+        assert!((frame[0] - 0.5 * db_to_gain(-6.0)).abs() < 1e-6);
+        assert_eq!(frame[1], 0.0);
+        assert_eq!(frame[2], 0.0);
+        assert!((frame[3] - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn matrix_ignores_outputs_the_device_does_not_have() {
+        let routes = Routes::from_matrix(&[vec![Some(0.0), None, Some(0.0)]], 1, 2);
+        assert_eq!(routes.as_slice().len(), 1);
+        assert_eq!(routes.as_slice()[0].output, 0);
+    }
+
+    #[test]
+    fn stereo_is_mixed_down_on_a_single_output() {
+        let mut rig = rig(1);
+        let source: Vec<f32> = (0..50).flat_map(|_| [1.0, 0.5]).collect();
+        rig.commands
+            .push(MixerCommand::Add(voice_with(
+                config(1, 2, RATE, 0.0, 1),
+                &source,
+            )))
+            .unwrap();
+        let out = render(&mut rig, 10, 1);
+        assert!((out[5] - 0.75).abs() < 1e-6);
+    }
+
+    #[test]
+    fn built_in_fades_shape_the_start_and_the_end() {
+        let mut rig = rig(1);
+        let mut config = config(1, 1, RATE, 0.0, 1);
+        config.fade_in_frames = 100;
+        config.fade_out = Some((400, 100));
+        rig.commands
+            .push(MixerCommand::Add(voice_with(config, &[1.0; 500])))
+            .unwrap();
+        let out = render(&mut rig, 600, 1);
+        assert!(out[0] < 0.05, "starts silent: {}", out[0]);
+        assert!(out[50] > 0.5 && out[50] < 1.0, "rising: {}", out[50]);
+        assert!((out[200] - 1.0).abs() < 1e-6, "full level in the middle");
+        assert!(out[450] < 1.0 && out[450] > 0.0, "falling: {}", out[450]);
+        assert!(out[499] < 0.05, "ends silent: {}", out[499]);
+        assert_eq!(done(&mut rig), vec![(CueId::from_u128(1), true)]);
+    }
+
+    #[test]
+    fn a_fade_cue_does_not_cancel_the_built_in_fade_in() {
+        let mut rig = rig(1);
+        let mut config = config(1, 1, RATE, 0.0, 1);
+        config.fade_in_frames = 200;
+        rig.commands
+            .push(MixerCommand::Add(voice_with(config, &[1.0; 1000])))
+            .unwrap();
+        rig.commands
+            .push(MixerCommand::Fade {
+                cue: CueId::from_u128(1),
+                to_db: -20.0,
+                frames: 0,
+                curve: FadeCurve::Linear,
+            })
+            .unwrap();
+        let out = render(&mut rig, 400, 1);
+        assert!(out[0] < 0.01);
+        assert!((out[300] - 0.1).abs() < 1e-3);
+    }
+
+    #[test]
+    fn route_command_repatches_a_playing_voice() {
+        let mut rig = rig(2);
+        rig.commands
+            .push(MixerCommand::Add(voice(1, &[1.0; 100], 1, RATE, 0.0)))
+            .unwrap();
+        assert_eq!(&render(&mut rig, 1, 2), &[1.0, 1.0]);
+        let routes = Routes::from_matrix(&[vec![None, Some(0.0)]], 1, 2);
+        rig.commands
+            .push(MixerCommand::Route {
+                cue: CueId::from_u128(1),
+                routes: Box::new(routes),
+            })
+            .unwrap();
+        assert_eq!(&render(&mut rig, 1, 2), &[0.0, 1.0]);
+    }
+
+    #[test]
+    fn meters_report_the_peak_of_each_output_once() {
+        let mut rig = rig(2);
+        let source: Vec<f32> = (0..50).flat_map(|_| [0.5, -0.25]).collect();
+        rig.commands
+            .push(MixerCommand::Add(voice(1, &source, 2, RATE, 0.0)))
+            .unwrap();
+        let channels = rig.channels;
+        render(&mut rig, 20, channels);
+        assert_eq!(rig.meters.take(), vec![0.5, 0.25]);
+        assert_eq!(rig.meters.take(), vec![0.0, 0.0]);
     }
 }
