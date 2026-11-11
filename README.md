@@ -83,7 +83,8 @@ the web UI.
 | `crates/mazzalab-osc` | OSC parsing, replies, SLIP framing |
 | `crates/mazzalab-audio` | Decoding, real-time mixer with routing matrix and meters, device selection, waveforms |
 | `crates/mazzalab-network` | Network cues: message text to OSC or raw bytes, sent over UDP and TCP |
-| `crates/mazzalab-{video,lighting,midi,timeline,ui,plugin}` | Planned subsystems |
+| `crates/mazzalab-midi` | MIDI cues: voice messages, SysEx and MIDI Show Control sent to output ports |
+| `crates/mazzalab-{video,lighting,timeline,ui,plugin}` | Planned subsystems |
 | `apps/mazzalab-server` | Real-time show server: OSC, HTTP/WebSocket API, outputs |
 | `apps/mazzalab-web` | Operator UI (React + TypeScript) |
 | `apps/mazzalab-desktop` | Desktop app (Tauri) embedding the server |

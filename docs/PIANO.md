@@ -43,14 +43,16 @@ matrice di routing per cue, fade integrati, meter di picco per uscita,
 precaricamento dei cue al playhead, forma d'onda, modifica del livello
 mentre il cue suona.
 
-Rete: i Network cue inviano OSC e testo su UDP e TCP verso le patch di
-rete dello show.
+Rete e MIDI: i Network cue inviano OSC e testo su UDP e TCP verso le
+patch di rete dello show; i cue MIDI inviano note, CC, program change,
+SysEx e MSC verso le patch MIDI.
 
 Interfaccia: barra dei tipi di cue, selezione multipla, copia/incolla,
 duplica, raggruppa, rinumera, drag & drop (riordino e import di file
 audio), modifica in linea, inspector a schede con forma d'onda e matrice,
 pannello uscita audio, impostazioni (generale, audio, rete, scorciatoie),
-modalità Show, segnalazione dei cue rotti, avvisi all'operatore.
+modalità Show, segnalazione dei cue rotti, avvisi all'operatore, tasti
+rapidi per cue.
 
 Stima della copertura rispetto a QLab: 20–25% delle funzioni. Le
 fondamenta (motore, protocollo, server) non vanno riscritte.
@@ -360,6 +362,10 @@ Voci ancora aperte qui sopra di cui esiste già un pezzo:
 - **Modalità show/edit**: c'è il blocco delle modifiche, senza password.
 - **Network cue**: OSC su UDP e TCP, testo su UDP e TCP. Mancano HTTP,
   WebSocket e i fade dei valori OSC.
+- **MIDI**: in uscita note, CC, program change, SysEx e MSC verso le
+  patch MIDI dello show. Mancano l'ingresso, il MIDI File cue e MTC.
+- **Trigger dei cue**: tasti rapidi per cue, da qualsiasi schermo
+  operatore. Mancano MIDI, timecode, orario e OSC come trigger.
 - **Avvisi**: file illeggibili, patch mancanti e dispositivi assenti
   arrivano all'operatore come notifiche; manca il controllo pre-show unico.
 

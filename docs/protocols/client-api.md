@@ -63,6 +63,7 @@ the target container once the cue has been taken out of its old place.
 | `POST /api/command` | run a command (JSON body) |
 | `POST /api/save` | save the show to its file |
 | `GET /api/audio` | `status` (as in the `audio` message, or `null` without an audio backend) and `devices`: every output device with `id`, `name`, `host`, `is_default`, `max_channels`, `sample_rates`, `default_sample_rate` |
+| `GET /api/midi` | the MIDI ports of the server's machine: `outputs` and `inputs`, by name |
 | `GET /api/waveform?cue=ID&buckets=N` | the outline of an audio cue's file: `duration`, `channels`, `sample_rate`, and `peaks`, a minimum and a maximum (-127…127) for each of N slices. Cached per file |
 | `GET /api/media` | the files in the show's `media` folder |
 | `POST /api/media?name=FILE` | stores the request body as a file in the `media` folder next to the show file and answers `{ "file": "media/FILE" }`, ready to be used as a cue's `file`. Uploading the same bytes again reuses the file; different bytes under the same name get `FILE (2)` |
@@ -95,3 +96,25 @@ the first one. Each non-empty line of its `message` is one message:
   decimal point floats, `true` / `false` booleans, anything else (or
   anything in double quotes) a string;
 - plain: the text as bytes, with `\n`, `\r`, `\t`, `\\` and `\xHH` escapes.
+
+## MIDI patches
+
+`workspace.settings.midi_patches` lists the outputs MIDI cues send to:
+`name` and `port` (a name from `/api/midi`). A MIDI cue names a patch, or
+uses the first one. Its `message` is one of:
+
+| `kind` | Fields |
+| --- | --- |
+| `note_on`, `note_off` | `channel` (1–16), `note`, `velocity` |
+| `control_change` | `channel`, `controller`, `value` |
+| `program_change` | `channel`, `program` |
+| `msc` | `device_id`, `command_format`, `command`, optional `q_number` and `q_list` (digits and dots) |
+| `sys_ex` | `data`: the bytes between `F0` and `F7`, each below `0x80` |
+
+## Triggers
+
+A cue's `triggers.hotkey` names a key or combination that starts it from
+any operator screen: `Q`, `F5`, `Num3`, `Ctrl+Shift+1`. Modifiers come in
+the order Ctrl, Alt, Shift; letters and digits are named after the physical
+key. The keys the operator screen uses itself (Space, Esc, arrows, Enter,
+Delete, V and the Ctrl shortcuts) cannot be assigned.
