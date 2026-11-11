@@ -90,6 +90,32 @@ pub struct MidiPatch {
     pub port: String,
 }
 
+/// How DMX leaves the machine.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DmxProtocol {
+    /// Art-Net (ArtDmx), broadcast unless an address is given.
+    #[default]
+    ArtNet,
+    /// sACN (ANSI E1.31), multicast unless an address is given.
+    Sacn,
+}
+
+/// Sends one of the show's DMX universes to the network.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DmxOutput {
+    /// The show's universe, counted from 1, as light cues name it.
+    pub universe: u16,
+    #[serde(default)]
+    pub protocol: DmxProtocol,
+    /// Address of the node, optionally with a port; empty broadcasts
+    /// (Art-Net) or uses the universe's multicast group (sACN).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub host: String,
+    /// The universe number on the wire: Art-Net counts from 0, sACN from 1.
+    pub net_universe: u16,
+}
+
 /// Workspace-wide behaviour settings.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WorkspaceSettings {
@@ -107,6 +133,9 @@ pub struct WorkspaceSettings {
     /// Outputs for MIDI cues; a cue without a patch uses the first.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub midi_patches: Vec<MidiPatch>,
+    /// Where the universes that Light cues set are sent.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dmx_outputs: Vec<DmxOutput>,
 }
 
 impl Default for WorkspaceSettings {
@@ -117,6 +146,7 @@ impl Default for WorkspaceSettings {
             audio: AudioSettings::default(),
             network_patches: Vec::new(),
             midi_patches: Vec::new(),
+            dmx_outputs: Vec::new(),
         }
     }
 }
