@@ -44,7 +44,21 @@ pub trait Output: Send {
     fn audio_status(&self) -> Option<AudioStatus> {
         None
     }
+
+    /// The DMX slots that are lit, as `(universe, address, value)`, for the
+    /// backend that drives lights. Unless `force` is set, `None` means
+    /// nothing changed since the last call.
+    fn dmx_levels(&mut self, _force: bool) -> Option<Vec<DmxLevel>> {
+        None
+    }
 }
+
+/// A lit DMX slot: universe, address and value (1–255).
+pub type DmxLevel = (u16, u16, u8);
+
+/// How long after a batch of events the lights are looked at again: the
+/// lighting thread needs a moment to act on a cue.
+const DMX_SETTLE: Duration = Duration::from_millis(60);
 
 /// What the audio output is doing, as shown to operators.
 #[derive(Debug, Clone, PartialEq, Default, Serialize)]
@@ -118,6 +132,8 @@ pub enum Update {
     Meters(Arc<Vec<f32>>),
     Audio(Arc<AudioStatus>),
     Notice(Arc<Notice>),
+    /// The DMX slots that are lit, whenever they change.
+    Dmx(Arc<Vec<DmxLevel>>),
 }
 
 enum Request {
@@ -149,6 +165,9 @@ enum Request {
         cue: CueId,
         reply: oneshot::Sender<Option<PathBuf>>,
     },
+    Dmx {
+        reply: oneshot::Sender<Option<Vec<DmxLevel>>>,
+    },
 }
 
 const GONE: &str = "the show is no longer running";
@@ -175,6 +194,11 @@ impl ShowHandle {
     /// The state of the audio output, if the show has one.
     pub async fn audio_status(&self) -> Option<AudioStatus> {
         self.ask(|reply| Request::Audio { reply }).await.flatten()
+    }
+
+    /// The DMX slots that are lit, if the show drives lights.
+    pub async fn dmx_levels(&self) -> Option<Vec<DmxLevel>> {
+        self.ask(|reply| Request::Dmx { reply }).await.flatten()
     }
 
     /// The absolute path of the media file of an audio or video cue.
@@ -297,6 +321,7 @@ pub fn spawn(
         last_revision: None,
         last_status: None,
         last_audio: None,
+        dmx_recheck: None,
         meters_live: false,
         unreadable: HashSet::new(),
         workspace_id: handle.workspace_id.clone(),
@@ -321,6 +346,8 @@ struct Actor {
     last_revision: Option<u64>,
     last_status: Option<(Instant, Status)>,
     last_audio: Option<AudioStatus>,
+    /// When to look at the lights again after cues fired.
+    dmx_recheck: Option<Instant>,
     /// Whether the last meters sent showed any signal.
     meters_live: bool,
     /// Media files that could not be probed, so they are not tried again on
@@ -419,6 +446,13 @@ impl Actor {
             }
             Request::Audio { reply } => {
                 let _ = reply.send(self.audio_status());
+            }
+            Request::Dmx { reply } => {
+                let levels = self
+                    .outputs
+                    .iter_mut()
+                    .find_map(|output| output.dmx_levels(true));
+                let _ = reply.send(levels);
             }
             Request::CueFile { cue, reply } => {
                 let file = self
@@ -526,6 +560,7 @@ impl Actor {
             for output in &mut self.outputs {
                 output.handle(&self.show, &events);
             }
+            self.dmx_recheck = Some(Instant::now() + DMX_SETTLE);
             let dtos: Vec<EventDto> = events.iter().map(EventDto::from).collect();
             let _ = self.updates.send(Update::Events(Arc::new(dtos)));
             let osc = self.cue_updates(&events);
@@ -575,10 +610,28 @@ impl Actor {
                     || status.playheads != previous.playheads
             }
         };
+        let recheck = self.dmx_recheck.is_some_and(|at| Instant::now() >= at);
+        if recheck {
+            self.dmx_recheck = None;
+        }
         if due {
             let _ = self.updates.send(Update::Status(Arc::new(status.clone())));
             self.last_status = Some((Instant::now(), status));
             self.send_meters();
+        }
+        if due || recheck {
+            self.send_dmx();
+        }
+    }
+
+    /// Broadcasts the lit DMX slots when they have changed.
+    fn send_dmx(&mut self) {
+        if let Some(levels) = self
+            .outputs
+            .iter_mut()
+            .find_map(|output| output.dmx_levels(false))
+        {
+            let _ = self.updates.send(Update::Dmx(Arc::new(levels)));
         }
     }
 
@@ -606,6 +659,9 @@ impl Actor {
         }
         if let Some(due) = self.autosave_due {
             wake = wake.min(due);
+        }
+        if let Some(recheck) = self.dmx_recheck {
+            wake = wake.min(recheck);
         }
         wake
     }

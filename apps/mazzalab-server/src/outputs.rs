@@ -3,11 +3,11 @@
 use std::path::{Path, PathBuf};
 
 use mazzalab_audio::{AudioOutput, DeviceRequest};
-use mazzalab_core::{ActionLength, AudioSettings, CueId, CueKind};
+use mazzalab_core::{ActionLength, AudioSettings, CueId, CueKind, DmxOutput};
 use mazzalab_engine::{Event, EventKind};
 use mazzalab_show::Show;
 
-use crate::actor::{AudioStatus, Completion, NoticeLevel, Output};
+use crate::actor::{AudioStatus, Completion, DmxLevel, NoticeLevel, Output};
 
 /// Logs every engine event; useful headless and while developing backends.
 #[derive(Debug, Default)]
@@ -326,5 +326,94 @@ impl Output for MidiBackend {
                 );
             }
         }
+    }
+}
+
+/// Drives the lights: runs Light cues on a DMX rig and sends its universes
+/// to the show's DMX outputs.
+#[derive(Debug)]
+pub struct LightingBackend {
+    sender: Option<mazzalab_lighting::Sender>,
+    completion: Completion,
+    /// The outputs last handed to the sender.
+    outputs: Option<Vec<DmxOutput>>,
+    /// The sender's version when levels were last reported.
+    reported: Option<u64>,
+}
+
+impl LightingBackend {
+    pub fn new(completion: Completion) -> Self {
+        let on_error = completion.clone();
+        let sender = mazzalab_lighting::Sender::new(move |output, error| {
+            on_error.notify(
+                NoticeLevel::Warning,
+                format!("DMX output for universe {}: {error}", output.universe),
+            );
+        })
+        .map_err(|error| tracing::error!(%error, "light cues are disabled"))
+        .ok();
+        Self {
+            sender,
+            completion,
+            outputs: None,
+            reported: None,
+        }
+    }
+}
+
+impl Output for LightingBackend {
+    fn handle(&mut self, show: &Show, events: &[Event]) {
+        let Some(sender) = &self.sender else {
+            return;
+        };
+        let workspace = show.workspace();
+        for event in events {
+            let EventKind::ActionStarted { cue, armed: true } = event.kind else {
+                continue;
+            };
+            let Some(CueKind::Light(light)) = workspace.find_cue(cue).map(|cue| &cue.kind) else {
+                continue;
+            };
+            // Lines that can be read are run; the others are pointed out.
+            let mut assignments = Vec::new();
+            for line in light.commands.iter().filter(|line| !line.trim().is_empty()) {
+                match mazzalab_lighting::parse_command(line) {
+                    Ok(assignment) => assignments.push(assignment),
+                    Err(error) => self.completion.notify(
+                        NoticeLevel::Warning,
+                        format!("Cue {}: \"{line}\": {error}", label(show, cue)),
+                    ),
+                }
+            }
+            if !assignments.is_empty() {
+                sender.apply(assignments, light.duration);
+            }
+        }
+    }
+
+    fn sync(&mut self, show: &Show) {
+        let outputs = &show.workspace().settings.dmx_outputs;
+        if self.outputs.as_ref() != Some(outputs) {
+            if let Some(sender) = &self.sender {
+                sender.set_outputs(outputs.clone());
+            }
+            self.outputs = Some(outputs.clone());
+        }
+    }
+
+    fn dmx_levels(&mut self, force: bool) -> Option<Vec<DmxLevel>> {
+        let sender = self.sender.as_ref()?;
+        let version = sender.version();
+        if !force && self.reported == Some(version) {
+            return None;
+        }
+        self.reported = Some(version);
+        Some(
+            sender
+                .levels()
+                .into_iter()
+                .map(|(slot, value)| (slot.universe, slot.address, value))
+                .collect(),
+        )
     }
 }

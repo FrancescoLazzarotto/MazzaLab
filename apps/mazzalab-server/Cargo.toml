@@ -19,6 +19,7 @@ futures-util = "0.3"
 mazzalab-audio.workspace = true
 mazzalab-core.workspace = true
 mazzalab-engine.workspace = true
+mazzalab-lighting.workspace = true
 mazzalab-midi.workspace = true
 mazzalab-network.workspace = true
 mazzalab-osc.workspace = true

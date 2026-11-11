@@ -7,7 +7,8 @@
 //!   also serve the built UI;
 //! * pluggable [`Output`]s fed with engine events: [`AudioBackend`] plays
 //!   audio cues, [`NetworkBackend`] and [`MidiBackend`] send the messages
-//!   of Network and MIDI cues.
+//!   of Network and MIDI cues, [`LightingBackend`] runs Light cues and
+//!   sends DMX.
 //!
 //! The desktop app embeds this crate; `mazzalab-server` runs it headless.
 
@@ -27,9 +28,11 @@ use mazzalab_show::Show;
 use tokio::net::{TcpListener, UdpSocket};
 use tokio::task::JoinHandle;
 
-pub use actor::{AudioStatus, Completion, Notice, NoticeLevel, Output, ShowHandle, Update};
+pub use actor::{
+    AudioStatus, Completion, DmxLevel, Notice, NoticeLevel, Output, ShowHandle, Update,
+};
 pub use http::{MEDIA_FOLDER, router};
-pub use outputs::{AudioBackend, LogOutput, MidiBackend, NetworkBackend};
+pub use outputs::{AudioBackend, LightingBackend, LogOutput, MidiBackend, NetworkBackend};
 
 pub const DEFAULT_HTTP_PORT: u16 = 53080;
 

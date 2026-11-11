@@ -5,7 +5,7 @@ use mazzalab_engine::{Event, EventKind};
 use mazzalab_show::{Command, Snapshot, Status};
 use serde::{Deserialize, Serialize};
 
-use crate::actor::{AudioStatus, Notice};
+use crate::actor::{AudioStatus, DmxLevel, Notice};
 
 /// Server to client.
 #[derive(Debug, Clone, Serialize)]
@@ -24,6 +24,9 @@ pub enum ServerMessage<'a> {
     Audio { audio: &'a AudioStatus },
     /// A message for the operator.
     Notice { notice: &'a Notice },
+    /// The DMX slots that are lit, as `[universe, address, value]`: sent on
+    /// connect and whenever they change.
+    Dmx { levels: &'a [DmxLevel] },
     /// Answer to a client request carrying the same `id`.
     Result {
         id: u64,

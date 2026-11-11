@@ -2340,6 +2340,7 @@ dependencies = [
  "mazzalab-audio",
  "mazzalab-core",
  "mazzalab-engine",
+ "mazzalab-lighting",
  "mazzalab-midi",
  "mazzalab-network",
  "mazzalab-osc",

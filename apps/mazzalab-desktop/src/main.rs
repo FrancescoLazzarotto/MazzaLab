@@ -18,8 +18,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use mazzalab_core::Workspace;
 use mazzalab_server::{
-    AudioBackend, Completion, LogOutput, MidiBackend, NetworkBackend, Output, RunningServer,
-    ServerConfig,
+    AudioBackend, Completion, LightingBackend, LogOutput, MidiBackend, NetworkBackend, Output,
+    RunningServer, ServerConfig,
 };
 use tauri::menu::{Menu, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::{
@@ -605,6 +605,7 @@ async fn start_server(
             Box::new(LogOutput),
             Box::new(NetworkBackend::new(completion.clone())),
             Box::new(MidiBackend::new(completion.clone())),
+            Box::new(LightingBackend::new(completion.clone())),
             Box::new(AudioBackend::new(&base_dir, completion)),
         ]
     };

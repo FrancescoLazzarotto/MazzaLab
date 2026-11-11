@@ -408,7 +408,11 @@ async fn client(socket: WebSocket, handle: ShowHandle) {
     let audio = audio
         .as_ref()
         .map(|audio| send(&ServerMessage::Audio { audio }));
-    for message in initial.into_iter().chain(audio).flatten() {
+    let dmx = handle.dmx_levels().await;
+    let dmx = dmx
+        .as_ref()
+        .map(|levels| send(&ServerMessage::Dmx { levels }));
+    for message in initial.into_iter().chain(audio).chain(dmx).flatten() {
         if sink.send(message).await.is_err() {
             return;
         }
@@ -435,6 +439,7 @@ async fn client(socket: WebSocket, handle: ShowHandle) {
                 Ok(Update::Meters(peaks)) => send(&ServerMessage::Meters { peaks: &peaks }),
                 Ok(Update::Audio(audio)) => send(&ServerMessage::Audio { audio: &audio }),
                 Ok(Update::Notice(notice)) => send(&ServerMessage::Notice { notice: &notice }),
+                Ok(Update::Dmx(levels)) => send(&ServerMessage::Dmx { levels: &levels }),
                 Ok(Update::Osc(_)) => continue,
                 // Too slow to keep up: resynchronise with a fresh snapshot.
                 Err(RecvError::Lagged(_)) => match handle.snapshot().await {
