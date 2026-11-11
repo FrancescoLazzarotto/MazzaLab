@@ -30,17 +30,29 @@ Tre condizioni, tutte necessarie:
    - 0 crash nella suite di test di carico;
    - failover sul backup in meno di 1 secondo.
 
-## Stato attuale (ottobre 2026)
+## Stato attuale (novembre 2026)
 
 Fatto: modello dei cue e motore deterministico (attese, continue, gruppi
 in tutti i modi, fade, panic, undo/redo), file di show versionato, OSC
 compatibile con QLab (sottoinsieme, UDP/TCP con SLIP, `/updates`), server
-con API HTTP/WebSocket, interfaccia web (lista, inspector, cue attivi,
-IT/EN), audio stereo sul dispositivo predefinito con livelli e fade, app
-desktop con menu File e avviso per le modifiche non salvate, CLI con
-simulazione, CI su tre sistemi.
+con API HTTP/WebSocket, app desktop con menu File e avviso per le
+modifiche non salvate, CLI con simulazione, CI su tre sistemi.
 
-Stima della copertura rispetto a QLab: 10–15% delle funzioni. Le
+Audio: scelta del dispositivo con frequenza e buffer (cambio a caldo),
+matrice di routing per cue, fade integrati, meter di picco per uscita,
+precaricamento dei cue al playhead, forma d'onda, modifica del livello
+mentre il cue suona.
+
+Rete: i Network cue inviano OSC e testo su UDP e TCP verso le patch di
+rete dello show.
+
+Interfaccia: barra dei tipi di cue, selezione multipla, copia/incolla,
+duplica, raggruppa, rinumera, drag & drop (riordino e import di file
+audio), modifica in linea, inspector a schede con forma d'onda e matrice,
+pannello uscita audio, impostazioni (generale, audio, rete, scorciatoie),
+modalità Show, segnalazione dei cue rotti, avvisi all'operatore.
+
+Stima della copertura rispetto a QLab: 20–25% delle funzioni. Le
 fondamenta (motore, protocollo, server) non vanno riscritte.
 
 ## Ordine delle fasi
@@ -103,14 +115,14 @@ Lavori che servono a tutte le fasi successive. Conviene farli prima.
 Parità con QLab e poi oltre.
 
 ### Dispositivi e routing
-- [ ] Elenco e scelta del dispositivo, frequenza di campionamento e
+- [x] Elenco e scelta del dispositivo, frequenza di campionamento e
       dimensione del buffer.
 - [ ] Driver a bassa latenza: ASIO su Windows (feature `asio` di `cpal`),
       CoreAudio su macOS, JACK e PipeWire su Linux.
 - [ ] Più dispositivi insieme, con compensazione della deriva di clock.
 - [ ] **Patch di uscita** con nome: dispositivo, canali, livello, mute,
       polarità e ritardo per canale.
-- [ ] **Matrice per cue**: canali del file → uscite della patch, con
+- [x] **Matrice per cue**: canali del file → uscite della patch, con
       livello per incrocio.
 - [ ] Uscita di preascolto (cuffia) separata, per provare un cue senza
       mandarlo in sala.
@@ -122,10 +134,10 @@ Parità con QLab e poi oltre.
 - [ ] Slice e loop per slice; il cue Devamp funziona davvero.
 - [ ] Cambio di velocità con intonazione mantenuta (time-stretch; verificare
       la licenza della libreria scelta).
-- [ ] Fade integrati in apertura e chiusura di ogni cue.
+- [x] Fade integrati in apertura e chiusura di ogni cue.
 - [ ] Formati: WAV, AIFF, FLAC, MP3, AAC, OGG, Opus, più l'audio dei file
       video.
-- [ ] Probe della durata anche quando un file viene cambiato dalla UI.
+- [x] Probe della durata anche quando un file viene cambiato dalla UI.
 
 ### Fade e dinamica
 - [ ] Fade cue completi: livelli per incrocio della matrice, fade di
@@ -155,12 +167,12 @@ Parità con QLab e poi oltre.
 ## Fase 2 — Interfaccia operatore (XL)
 
 ### Editing
-- [ ] Trascinare i cue per riordinarli e spostarli nei gruppi
+- [x] Trascinare i cue per riordinarli e spostarli nei gruppi
       (`move_cue` è già nel server).
-- [ ] Trascinare file dal sistema operativo o dal browser per creare cue.
-- [ ] Copia, incolla, duplica; selezione multipla e modifica di gruppo
+- [x] Trascinare file dal sistema operativo o dal browser per creare cue.
+- [x] Copia, incolla, duplica; selezione multipla e modifica di gruppo
       nell'inspector.
-- [ ] Rinumerazione e auto-numerazione con passo configurabile.
+- [x] Rinumerazione e auto-numerazione con passo configurabile.
 - [ ] Template dei cue.
 - [ ] Ricerca e filtri (per tipo, colore, flag, testo nelle note).
 - [ ] Gestione delle cue list: aggiungere, rinominare, eliminare, più
@@ -326,8 +338,41 @@ Parità con QLab e poi oltre.
 
 ---
 
+## Fatto in parte
+
+Voci ancora aperte qui sopra di cui esiste già un pezzo:
+
+- **Gestione dei media**: i file importati dalla UI finiscono in `media/`
+  accanto allo show (stesso file = nessuna copia doppia). Mancano
+  "Consolida show", il ricollegamento dei file mancanti e l'avviso se un
+  media cambia su disco.
+- **Registro dei backend di uscita**: l'audio si riconfigura senza fermare
+  il server; manca un registro comune per luci, video e dispositivi.
+- **Precaricamento**: i cue al playhead (e quelli nei gruppi al playhead)
+  sono decodificati prima del GO. Manca la misura della latenza GO → suono.
+- **Meter**: picco per uscita. Mancano RMS, LUFS e i meter per cue.
+- **Forma d'onda**: disegno, inizio e fine trascinabili, cursore di
+  riproduzione, fade disegnati. Mancano zoom, slice, scrub e preascolto.
+- **Cue list**: aggiungere, rinominare, eliminare. Manca la vista di più
+  liste insieme.
+- **Impostazioni dello show**: nome, doppio GO, panic, audio, patch di
+  rete. Mancano i cue di apertura e chiusura.
+- **Modalità show/edit**: c'è il blocco delle modifiche, senza password.
+- **Network cue**: OSC su UDP e TCP, testo su UDP e TCP. Mancano HTTP,
+  WebSocket e i fade dei valori OSC.
+- **Avvisi**: file illeggibili, patch mancanti e dispositivi assenti
+  arrivano all'operatore come notifiche; manca il controllo pre-show unico.
+
 ## Fatto
 
+- [x] Scelta del dispositivo audio, frequenza e buffer, con ripiego
+      sull'uscita predefinita se il dispositivo dello show manca.
+- [x] Matrice di routing per cue, fade integrati, livello modificabile
+      mentre il cue suona.
+- [x] Upload dei media dalla UI e lettura automatica di durata e canali.
+- [x] Comandi `batch` (più modifiche, un solo undo) e `set_numbers`.
+- [x] Editing nella UI: selezione multipla, copia/incolla, duplica,
+      raggruppa, rinumera, drag & drop, modifica in linea.
 - [x] Finestre di apertura e salvataggio nel menu File (Nuovo, Apri,
       Salva, Salva con nome).
 - [x] Avviso alla chiusura, e prima di Nuovo e Apri, se ci sono modifiche
