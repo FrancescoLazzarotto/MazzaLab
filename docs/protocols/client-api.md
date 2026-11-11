@@ -13,7 +13,7 @@ JSON text frames in both directions.
 
 | `type` | Payload | Sent |
 | --- | --- | --- |
-| `snapshot` | `snapshot`: revision, `dirty`, `can_undo`, `can_redo`, the whole `workspace` | on connect and after every change to the show |
+| `snapshot` | `snapshot`: revision, `dirty`, `recovered` (the unsaved changes come from an autosave), `can_undo`, `can_redo`, the whole `workspace` | on connect and after every change to the show |
 | `status` | `status`: `now`, `panicking`, `playheads`, `running` (cue, phase, elapsed, length, paused) | on connect, 20 times a second while cues run, once a second otherwise |
 | `events` | `events`: engine events in order (`triggered`, `action_started`, `action_completed`, `stopped`, `paused`, `resumed`, `panicking`, `playhead_moved`, `skipped`) | as they happen |
 | `meters` | `peaks`: peak level in dBFS of each audio output since the previous message | with `status`, while there is signal (and once more when it ends) |
@@ -118,3 +118,14 @@ any operator screen: `Q`, `F5`, `Num3`, `Ctrl+Shift+1`. Modifiers come in
 the order Ctrl, Alt, Shift; letters and digits are named after the physical
 key. The keys the operator screen uses itself (Space, Esc, arrows, Enter,
 Delete, V and the Ctrl shortcuts) cannot be assigned.
+
+## Safety copies
+
+Next to a show file, the `backups` folder holds:
+
+- `NAME.autosave.mazzalab` — unsaved changes, written a few seconds after
+  they are made and removed on save. If it is newer than the show file when
+  the show is opened, the desktop app opens it instead and marks the show
+  as recovered; the headless server does so with `--recover`.
+- `NAME.1.mazzalab` … `NAME.10.mazzalab` — the versions replaced by the last
+  saves, 1 being the most recent.

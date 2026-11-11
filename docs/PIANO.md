@@ -106,7 +106,7 @@ Lavori che servono a tutte le fasi successive. Conviene farli prima.
 - [ ] **Gestione dei media**: cartella dei media dello show, "Consolida
       show" (copia tutti i media nella cartella), ricerca e ricollegamento
       dei file mancanti, avviso se un media cambia su disco.
-- [ ] **Autosave, backup a rotazione e recupero dopo un crash**.
+- [x] **Autosave, backup a rotazione e recupero dopo un crash**.
 - [ ] **Registro dei backend di uscita**: audio, luci, video e dispositivi
       si configurano e si riavviano senza fermare il server.
 - [ ] **Pannello diagnostica**: carico del thread audio, xrun, latenza,
