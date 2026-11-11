@@ -81,13 +81,14 @@ the web UI.
 | `crates/mazzalab-show` | Show controller: commands, undo/redo, status, OSC handling |
 | `crates/mazzalab-project` | `.mazzalab` show file format |
 | `crates/mazzalab-osc` | OSC parsing, replies, SLIP framing |
-| `crates/mazzalab-audio` | Decoding, real-time mixer, device output |
-| `crates/mazzalab-{video,lighting,midi,network,timeline,ui,plugin}` | Planned subsystems |
+| `crates/mazzalab-audio` | Decoding, real-time mixer with routing matrix and meters, device selection, waveforms |
+| `crates/mazzalab-network` | Network cues: message text to OSC or raw bytes, sent over UDP and TCP |
+| `crates/mazzalab-{video,lighting,midi,timeline,ui,plugin}` | Planned subsystems |
 | `apps/mazzalab-server` | Real-time show server: OSC, HTTP/WebSocket API, outputs |
 | `apps/mazzalab-web` | Operator UI (React + TypeScript) |
 | `apps/mazzalab-desktop` | Desktop app (Tauri) embedding the server |
 | `apps/mazzalab-cli` | `mazzalab` command line tool |
-| `docs/` | Architecture, ADRs, protocols |
+| `docs/` | Architecture, ADRs, protocols ([OSC](docs/protocols/osc.md), [client API](docs/protocols/client-api.md)) |
 
 ## Background
 

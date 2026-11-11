@@ -86,8 +86,9 @@ compilato l'interfaccia web.
 | `crates/mazzalab-show` | Controller dello show: comandi, undo/redo, stato, gestione OSC |
 | `crates/mazzalab-project` | Formato dei file `.mazzalab` |
 | `crates/mazzalab-osc` | Parsing OSC, risposte, framing SLIP |
-| `crates/mazzalab-audio` | Decodifica, mixer in tempo reale, uscita audio |
-| `crates/mazzalab-{video,lighting,midi,network,timeline,ui,plugin}` | Sottosistemi previsti |
+| `crates/mazzalab-audio` | Decodifica, mixer in tempo reale con matrice di routing e meter, scelta del dispositivo, forme d'onda |
+| `crates/mazzalab-network` | Network cue: dal testo del messaggio a OSC o byte, inviati su UDP e TCP |
+| `crates/mazzalab-{video,lighting,midi,timeline,ui,plugin}` | Sottosistemi previsti |
 | `apps/mazzalab-server` | Server dello show in tempo reale: OSC, API HTTP/WebSocket, uscite |
 | `apps/mazzalab-web` | Interfaccia operatore (React + TypeScript) |
 | `apps/mazzalab-desktop` | App desktop (Tauri) con il server incorporato |

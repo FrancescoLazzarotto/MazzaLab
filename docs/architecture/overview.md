@@ -17,7 +17,7 @@ operator pressing GO.
                                                          |
  model                              mazzalab-core   mazzalab-project (.mazzalab files)
 
- outputs        mazzalab-audio   (planned: video, lighting, midi, network)
+ outputs        mazzalab-audio   mazzalab-network   (planned: video, lighting, midi)
 ```
 
 - **`mazzalab-core`**: the show data model (workspace, cue lists, cues, cue
@@ -41,8 +41,15 @@ operator pressing GO.
   **outputs**.
 - **`mazzalab-audio`**: one reader thread per playing cue decodes ahead into
   a lock-free ring buffer. The mixer runs inside the device callback, never
-  allocates or locks, and resamples, applies dB levels and fades, and sums
-  the voices. Natural ends are reported back to the engine.
+  allocates or locks, and resamples, applies dB levels, fades and each
+  cue's routing matrix, sums the voices and measures the peak of every
+  output. Natural ends are reported back to the engine. The output device,
+  its sample rate and buffer size come from the show's settings and can be
+  changed while the server runs. Cues standing by at a playhead are decoded
+  before GO.
+- **`mazzalab-network`**: turns the text of Network cues into OSC packets or
+  raw bytes and sends them to the show's network patches over UDP or TCP
+  from a background thread.
 - **`mazzalab-web`**: the operator UI (React + TypeScript), served by the
   server. It is the same UI on the desktop, in a browser and on a tablet.
 - **`mazzalab-desktop`**: a Tauri app that runs the server in-process and
