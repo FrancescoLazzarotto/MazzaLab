@@ -2,18 +2,23 @@
 //! clock and serializes every request. Everything else talks to it through a
 //! cloneable [`ShowHandle`] and listens to [`Update`] broadcasts.
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use mazzalab_core::CueId;
+use mazzalab_core::{AudioCue, CueId, CueKind};
 use mazzalab_engine::{Event, EventKind};
 use mazzalab_show::{Command, OscOutcome, Show, Snapshot, Status};
 use rosc::{OscMessage, OscType};
+use serde::Serialize;
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio::time::Instant;
 
 use crate::protocol::EventDto;
+
+/// Meter readings at or below this are silence.
+const METER_SILENCE_DB: f32 = -100.0;
 
 /// Status is broadcast at this rate while something is running.
 const RUNNING_TICK: Duration = Duration::from_millis(50);
@@ -25,17 +30,79 @@ pub trait Output: Send {
     /// Called after every batch of engine events, in order. `show` already
     /// reflects the events.
     fn handle(&mut self, show: &Show, events: &[Event]);
+
+    /// Called once at start and then whenever the show's structure or
+    /// settings change, so the backend can follow edits made while it runs.
+    fn sync(&mut self, _show: &Show) {}
+
+    /// Peak level in dBFS of every audio output channel since the last call.
+    fn meters(&mut self) -> Option<Vec<f32>> {
+        None
+    }
+
+    /// The state of the audio output, for the backend that owns it.
+    fn audio_status(&self) -> Option<AudioStatus> {
+        None
+    }
+}
+
+/// What the audio output is doing, as shown to operators.
+#[derive(Debug, Clone, PartialEq, Default, Serialize)]
+pub struct AudioStatus {
+    /// Whether a device is open and playing.
+    pub running: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device_name: Option<String>,
+    pub sample_rate: u32,
+    pub channels: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub buffer_size: Option<u32>,
+    /// The device asked for was missing and the default one is in use.
+    pub fallback: bool,
+    /// Why no device could be opened.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+/// Something the operator should know: a file that cannot be played, a
+/// device that does not answer...
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Notice {
+    pub level: NoticeLevel,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NoticeLevel {
+    Info,
+    Warning,
+    Error,
 }
 
 /// Given to outputs so they can report that an open-ended action (e.g. an
-/// audio file of unknown length) has finished.
+/// audio file of unknown length) has finished, and tell operators about
+/// problems.
 #[derive(Debug, Clone)]
-pub struct Completion(mpsc::UnboundedSender<CueId>);
+pub struct Completion {
+    finished: mpsc::UnboundedSender<CueId>,
+    notices: mpsc::UnboundedSender<Notice>,
+}
 
 impl Completion {
     pub fn action_finished(&self, cue: CueId) {
         // The actor only goes away on shutdown, when nobody cares anymore.
-        let _ = self.0.send(cue);
+        let _ = self.finished.send(cue);
+    }
+
+    /// Shows a message to every connected operator.
+    pub fn notify(&self, level: NoticeLevel, message: impl Into<String>) {
+        let _ = self.notices.send(Notice {
+            level,
+            message: message.into(),
+        });
     }
 }
 
@@ -47,6 +114,10 @@ pub enum Update {
     Events(Arc<Vec<EventDto>>),
     /// `/update/...` messages for OSC clients that subscribed with `/updates 1`.
     Osc(Arc<Vec<OscMessage>>),
+    /// Peak level in dBFS of every audio output channel.
+    Meters(Arc<Vec<f32>>),
+    Audio(Arc<AudioStatus>),
+    Notice(Arc<Notice>),
 }
 
 enum Request {
@@ -71,6 +142,13 @@ enum Request {
         path: PathBuf,
         reply: oneshot::Sender<Result<(), String>>,
     },
+    Audio {
+        reply: oneshot::Sender<Option<AudioStatus>>,
+    },
+    CueFile {
+        cue: CueId,
+        reply: oneshot::Sender<Option<PathBuf>>,
+    },
 }
 
 const GONE: &str = "the show is no longer running";
@@ -80,11 +158,38 @@ pub struct ShowHandle {
     requests: mpsc::Sender<Request>,
     updates: broadcast::Sender<Update>,
     workspace_id: Arc<str>,
+    base_dir: Option<Arc<Path>>,
 }
 
 impl ShowHandle {
     pub fn workspace_id(&self) -> &str {
         &self.workspace_id
+    }
+
+    /// The folder of the show file, which relative media paths start from.
+    /// `None` for a show that has no file.
+    pub fn base_dir(&self) -> Option<&Path> {
+        self.base_dir.as_deref()
+    }
+
+    /// The state of the audio output, if the show has one.
+    pub async fn audio_status(&self) -> Option<AudioStatus> {
+        self.ask(|reply| Request::Audio { reply }).await.flatten()
+    }
+
+    /// The absolute path of the media file of an audio or video cue.
+    pub async fn cue_file(&self, cue: CueId) -> Option<PathBuf> {
+        self.ask(|reply| Request::CueFile { cue, reply })
+            .await
+            .flatten()
+    }
+
+    /// Shows a message to every connected operator.
+    pub fn notify(&self, level: NoticeLevel, message: impl Into<String>) {
+        let _ = self.updates.send(Update::Notice(Arc::new(Notice {
+            level,
+            message: message.into(),
+        })));
     }
 
     pub fn subscribe(&self) -> broadcast::Receiver<Update> {
@@ -147,23 +252,33 @@ pub fn spawn(
     let (requests, receiver) = mpsc::channel(256);
     let (updates, _) = broadcast::channel(1024);
     let (finished_tx, finished_rx) = mpsc::unbounded_channel();
-    let outputs = make_outputs(Completion(finished_tx));
+    let (notices_tx, notices_rx) = mpsc::unbounded_channel();
+    let outputs = make_outputs(Completion {
+        finished: finished_tx,
+        notices: notices_tx,
+    });
+    let base_dir: Option<Arc<Path>> = path.as_deref().and_then(folder).map(Arc::from);
     let handle = ShowHandle {
         requests,
         updates: updates.clone(),
         workspace_id: show.workspace().id.to_string().into(),
+        base_dir: base_dir.clone(),
     };
     let actor = Actor {
         show,
         start: Instant::now(),
         path,
+        base_dir,
         outputs,
         updates,
         last_revision: None,
         last_status: None,
+        last_audio: None,
+        meters_live: false,
+        unreadable: HashSet::new(),
         workspace_id: handle.workspace_id.clone(),
     };
-    let task = tokio::spawn(actor.run(receiver, finished_rx));
+    let task = tokio::spawn(actor.run(receiver, finished_rx, notices_rx));
     (handle, task)
 }
 
@@ -171,10 +286,17 @@ struct Actor {
     show: Show,
     start: Instant,
     path: Option<PathBuf>,
+    base_dir: Option<Arc<Path>>,
     outputs: Vec<Box<dyn Output>>,
     updates: broadcast::Sender<Update>,
     last_revision: Option<u64>,
     last_status: Option<(Instant, Status)>,
+    last_audio: Option<AudioStatus>,
+    /// Whether the last meters sent showed any signal.
+    meters_live: bool,
+    /// Media files that could not be probed, so they are not tried again on
+    /// every edit.
+    unreadable: HashSet<(CueId, PathBuf)>,
     workspace_id: Arc<str>,
 }
 
@@ -183,6 +305,7 @@ impl Actor {
         mut self,
         mut requests: mpsc::Receiver<Request>,
         mut finished: mpsc::UnboundedReceiver<CueId>,
+        mut notices: mpsc::UnboundedReceiver<Notice>,
     ) {
         loop {
             self.sync();
@@ -199,6 +322,9 @@ impl Actor {
                     self.advance();
                     // A backend may report a cue that was stopped meanwhile.
                     let _ = self.show.action_finished(cue);
+                }
+                Some(notice) = notices.recv() => {
+                    let _ = self.updates.send(Update::Notice(Arc::new(notice)));
                 }
                 () = tokio::time::sleep_until(wake) => {}
             }
@@ -250,6 +376,76 @@ impl Actor {
                     mazzalab_project::save(&path, &workspace).map_err(|error| error.to_string());
                 let _ = reply.send(result);
             }
+            Request::Audio { reply } => {
+                let _ = reply.send(self.audio_status());
+            }
+            Request::CueFile { cue, reply } => {
+                let file = self
+                    .show
+                    .workspace()
+                    .find_cue(cue)
+                    .and_then(|cue| match &cue.kind {
+                        CueKind::Audio(audio) => audio.file.clone(),
+                        CueKind::Video(video) => video.file.clone(),
+                        _ => None,
+                    })
+                    .map(|file| self.media_base().join(file));
+                let _ = reply.send(file);
+            }
+        }
+    }
+
+    /// Where relative media paths start from.
+    fn media_base(&self) -> PathBuf {
+        self.base_dir
+            .as_deref()
+            .map_or_else(|| PathBuf::from("."), Path::to_path_buf)
+    }
+
+    fn audio_status(&self) -> Option<AudioStatus> {
+        self.outputs.iter().find_map(|output| output.audio_status())
+    }
+
+    /// Reads the length and channel count of audio files that do not have
+    /// them yet: new cues, cues whose file was changed, restored edits.
+    fn probe_media(&mut self) {
+        let base = self.media_base();
+        let pending: Vec<(CueId, PathBuf)> = self
+            .show
+            .workspace()
+            .cues()
+            .filter_map(|cue| match &cue.kind {
+                CueKind::Audio(AudioCue {
+                    file: Some(file),
+                    media_duration,
+                    media_channels,
+                    ..
+                }) if media_duration.is_none() || media_channels.is_none() => {
+                    Some((cue.id, file.clone()))
+                }
+                _ => None,
+            })
+            .filter(|entry| !self.unreadable.contains(entry))
+            .collect();
+        for (cue, file) in pending {
+            match mazzalab_audio::probe(&base.join(&file)) {
+                Ok(info) => {
+                    if info.duration.is_none() {
+                        // Nothing more to learn from this file.
+                        self.unreadable.insert((cue, file));
+                    }
+                    self.show
+                        .set_media_info(cue, info.duration, Some(info.channels as u8));
+                }
+                Err(error) => {
+                    tracing::warn!(%cue, %error, "audio file unavailable");
+                    let _ = self.updates.send(Update::Notice(Arc::new(Notice {
+                        level: NoticeLevel::Warning,
+                        message: error.to_string(),
+                    })));
+                    self.unreadable.insert((cue, file));
+                }
+            }
         }
     }
 
@@ -269,10 +465,23 @@ impl Actor {
             }
         }
 
+        if self.last_revision != Some(self.show.revision()) {
+            self.probe_media();
+        }
         let revision = self.show.revision();
         let structure_changed = self.last_revision != Some(revision);
         if structure_changed {
             self.last_revision = Some(revision);
+            for output in &mut self.outputs {
+                output.sync(&self.show);
+            }
+            let audio = self.audio_status();
+            if audio != self.last_audio {
+                if let Some(audio) = &audio {
+                    let _ = self.updates.send(Update::Audio(Arc::new(audio.clone())));
+                }
+                self.last_audio = audio;
+            }
             let _ = self
                 .updates
                 .send(Update::Snapshot(Arc::new(self.show.snapshot())));
@@ -300,7 +509,21 @@ impl Actor {
         if due {
             let _ = self.updates.send(Update::Status(Arc::new(status.clone())));
             self.last_status = Some((Instant::now(), status));
+            self.send_meters();
         }
+    }
+
+    /// Broadcasts the audio meters while there is signal, and once more when
+    /// it ends so that clients see them fall.
+    fn send_meters(&mut self) {
+        let Some(peaks) = self.outputs.iter_mut().find_map(|output| output.meters()) else {
+            return;
+        };
+        let live = peaks.iter().any(|peak| *peak > METER_SILENCE_DB);
+        if live || self.meters_live {
+            let _ = self.updates.send(Update::Meters(Arc::new(peaks)));
+        }
+        self.meters_live = live;
     }
 
     fn next_wake(&self) -> Instant {

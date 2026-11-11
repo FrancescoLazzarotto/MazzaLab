@@ -19,13 +19,14 @@ futures-util = "0.3"
 mazzalab-audio.workspace = true
 mazzalab-core.workspace = true
 mazzalab-engine.workspace = true
+mazzalab-network.workspace = true
 mazzalab-osc.workspace = true
 mazzalab-project.workspace = true
 mazzalab-show.workspace = true
 rosc.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-tokio = { version = "1.54", features = ["rt-multi-thread", "macros", "net", "sync", "time", "signal", "io-util"] }
+tokio = { version = "1.54", features = ["rt-multi-thread", "macros", "net", "sync", "time", "signal", "io-util", "fs"] }
 tower-http = { version = "0.6", features = ["fs", "cors"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

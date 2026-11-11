@@ -5,6 +5,8 @@ use mazzalab_engine::{Event, EventKind};
 use mazzalab_show::{Command, Snapshot, Status};
 use serde::{Deserialize, Serialize};
 
+use crate::actor::{AudioStatus, Notice};
+
 /// Server to client.
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -15,6 +17,13 @@ pub enum ServerMessage<'a> {
     Status { status: &'a Status },
     /// Engine events, in order.
     Events { events: &'a [EventDto] },
+    /// Peak level in dBFS of every audio output channel, sent while there is
+    /// signal.
+    Meters { peaks: &'a [f32] },
+    /// The audio output: sent on connect and whenever it changes.
+    Audio { audio: &'a AudioStatus },
+    /// A message for the operator.
+    Notice { notice: &'a Notice },
     /// Answer to a client request carrying the same `id`.
     Result {
         id: u64,

@@ -7,7 +7,9 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::Parser;
-use mazzalab_server::{AudioBackend, DEFAULT_HTTP_PORT, LogOutput, Output, ServerConfig};
+use mazzalab_server::{
+    AudioBackend, DEFAULT_HTTP_PORT, LogOutput, NetworkBackend, Output, ServerConfig,
+};
 use tracing_subscriber::EnvFilter;
 
 #[derive(Parser)]
@@ -74,12 +76,12 @@ async fn main() -> ExitCode {
     };
     let no_audio = args.no_audio;
     let server = match mazzalab_server::start(config, workspace, move |completion| {
-        let mut outputs: Vec<Box<dyn Output>> = vec![Box::new(LogOutput)];
+        let mut outputs: Vec<Box<dyn Output>> = vec![
+            Box::new(LogOutput),
+            Box::new(NetworkBackend::new(completion.clone())),
+        ];
         if !no_audio {
-            match AudioBackend::start(&base_dir, completion) {
-                Ok(audio) => outputs.push(Box::new(audio)),
-                Err(error) => tracing::warn!(%error, "continuing without audio"),
-            }
+            outputs.push(Box::new(AudioBackend::new(&base_dir, completion)));
         }
         outputs
     })

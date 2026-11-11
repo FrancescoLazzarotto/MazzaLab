@@ -17,7 +17,9 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use mazzalab_core::Workspace;
-use mazzalab_server::{AudioBackend, Completion, LogOutput, Output, RunningServer, ServerConfig};
+use mazzalab_server::{
+    AudioBackend, Completion, LogOutput, NetworkBackend, Output, RunningServer, ServerConfig,
+};
 use tauri::menu::{Menu, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::{
     App, AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent, Wry,
@@ -570,12 +572,11 @@ async fn start_server(
 ) -> Result<RunningServer, Box<dyn Error>> {
     let base_dir = base_dir(show);
     let outputs = move |completion: Completion| -> Vec<Box<dyn Output>> {
-        let mut outputs: Vec<Box<dyn Output>> = vec![Box::new(LogOutput)];
-        match AudioBackend::start(&base_dir, completion) {
-            Ok(audio) => outputs.push(Box::new(audio)),
-            Err(error) => tracing::warn!(%error, "continuing without audio"),
-        }
-        outputs
+        vec![
+            Box::new(LogOutput),
+            Box::new(NetworkBackend::new(completion.clone())),
+            Box::new(AudioBackend::new(&base_dir, completion)),
+        ]
     };
     let config = ServerConfig {
         show_path: Some(show.to_path_buf()),

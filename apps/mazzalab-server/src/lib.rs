@@ -5,13 +5,15 @@
 //! * OSC on UDP and TCP (QLab-compatible addresses, default port 53000);
 //! * an HTTP + WebSocket API for the web UI (default port 53080), which can
 //!   also serve the built UI;
-//! * pluggable [`Output`]s (audio, lighting, ...) fed with engine events.
+//! * pluggable [`Output`]s fed with engine events: [`AudioBackend`] plays
+//!   audio cues, [`NetworkBackend`] sends the messages of Network cues.
 //!
 //! The desktop app embeds this crate; `mazzalab-server` runs it headless.
 
 mod actor;
 mod http;
 mod osc_net;
+mod outputs;
 pub mod protocol;
 
 use std::io;
@@ -19,13 +21,13 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
 
 use mazzalab_core::Workspace;
-use mazzalab_engine::{Event, EventKind};
 use mazzalab_show::Show;
 use tokio::net::{TcpListener, UdpSocket};
 use tokio::task::JoinHandle;
 
-pub use actor::{Completion, Output, ShowHandle, Update};
-pub use http::router;
+pub use actor::{AudioStatus, Completion, Notice, NoticeLevel, Output, ShowHandle, Update};
+pub use http::{MEDIA_FOLDER, router};
+pub use outputs::{AudioBackend, LogOutput, NetworkBackend};
 
 pub const DEFAULT_HTTP_PORT: u16 = 53080;
 
@@ -136,58 +138,4 @@ pub async fn start(
         http,
         tasks,
     })
-}
-
-/// Logs every engine event; useful headless and while developing backends.
-#[derive(Debug, Default)]
-pub struct LogOutput;
-
-impl Output for LogOutput {
-    fn handle(&mut self, show: &Show, events: &[Event]) {
-        for event in events {
-            let label = |cue| {
-                show.workspace().find_cue(cue).map_or_else(
-                    || cue.to_string(),
-                    |cue| {
-                        format!(
-                            "{} {}",
-                            cue.number.as_deref().unwrap_or("-"),
-                            cue.display_name()
-                        )
-                    },
-                )
-            };
-            let at = event.at.as_secs_f64();
-            match event.kind {
-                EventKind::ActionStarted { cue, armed } => {
-                    tracing::info!(at, armed, "action {}", label(cue));
-                }
-                EventKind::ActionCompleted(cue) => tracing::info!(at, "done {}", label(cue)),
-                EventKind::Stopped(cue) => tracing::info!(at, "stop {}", label(cue)),
-                EventKind::Panicking { cue, .. } => tracing::info!(at, "panic {}", label(cue)),
-                _ => tracing::debug!(at, ?event.kind),
-            }
-        }
-    }
-}
-
-/// Plays audio cues on the default output device.
-#[derive(Debug)]
-pub struct AudioBackend(pub mazzalab_audio::AudioOutput);
-
-impl AudioBackend {
-    /// Starts audio output; finished sounds are reported through `completion`.
-    pub fn start(
-        base_dir: &Path,
-        completion: Completion,
-    ) -> Result<Self, mazzalab_audio::AudioError> {
-        mazzalab_audio::AudioOutput::start(base_dir, move |cue| completion.action_finished(cue))
-            .map(Self)
-    }
-}
-
-impl Output for AudioBackend {
-    fn handle(&mut self, show: &Show, events: &[Event]) {
-        self.0.handle_events(show.workspace(), events);
-    }
 }
