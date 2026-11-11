@@ -82,6 +82,14 @@ pub struct NetworkPatch {
     pub protocol: NetworkProtocol,
 }
 
+/// A named MIDI output that MIDI cues send to.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MidiPatch {
+    pub name: String,
+    /// Name of the output port, as the system lists it.
+    pub port: String,
+}
+
 /// Workspace-wide behaviour settings.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WorkspaceSettings {
@@ -96,6 +104,9 @@ pub struct WorkspaceSettings {
     /// Destinations for Network cues; a cue without a patch uses the first.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub network_patches: Vec<NetworkPatch>,
+    /// Outputs for MIDI cues; a cue without a patch uses the first.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub midi_patches: Vec<MidiPatch>,
 }
 
 impl Default for WorkspaceSettings {
@@ -105,6 +116,7 @@ impl Default for WorkspaceSettings {
             panic_duration: default_panic_duration(),
             audio: AudioSettings::default(),
             network_patches: Vec::new(),
+            midi_patches: Vec::new(),
         }
     }
 }

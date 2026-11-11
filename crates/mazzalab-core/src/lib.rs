@@ -17,10 +17,12 @@ mod workspace;
 pub use cue::{
     ActionLength, AudioCue, CameraCue, ContinueMode, Cue, CueColor, CueKind, FadeCue, FadeCurve,
     GroupCue, GroupMode, LightCue, LoadCue, MicCue, MidiCue, MidiFileCue, MidiMessage, NetworkCue,
-    ScriptCue, SmpteFormat, TargetCue, TextCue, TimecodeCue, TimecodeSignal, VideoCue, WaitCue,
+    ScriptCue, SmpteFormat, TargetCue, TextCue, TimecodeCue, TimecodeSignal, Triggers, VideoCue,
+    WaitCue,
 };
 pub use id::{CueId, WorkspaceId};
 pub use validate::{Issue, validate};
 pub use workspace::{
-    AudioSettings, Container, CueList, NetworkPatch, NetworkProtocol, Workspace, WorkspaceSettings,
+    AudioSettings, Container, CueList, MidiPatch, NetworkPatch, NetworkProtocol, Workspace,
+    WorkspaceSettings,
 };

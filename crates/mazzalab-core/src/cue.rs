@@ -73,6 +73,21 @@ fn is_unit(value: &f64) -> bool {
     *value == 1.0
 }
 
+/// Ways of starting a cue other than GO and other cues.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct Triggers {
+    /// A key or key combination that starts the cue from any operator
+    /// screen, written as `F5`, `Q` or `Ctrl+Shift+1`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hotkey: Option<String>,
+}
+
+impl Triggers {
+    pub fn is_empty(&self) -> bool {
+        self.hotkey.is_none()
+    }
+}
+
 /// A single cue. Timing fields are shared by every cue type; the
 /// type-specific part lives in [`Cue::kind`].
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -104,6 +119,8 @@ pub struct Cue {
     /// The cue acted upon by fade and control cues.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target: Option<CueId>,
+    #[serde(default, skip_serializing_if = "Triggers::is_empty")]
+    pub triggers: Triggers,
     #[serde(flatten)]
     pub kind: CueKind,
 }
@@ -124,6 +141,7 @@ impl Cue {
             skip_if_disarmed: false,
             flagged: false,
             target: None,
+            triggers: Triggers::default(),
             kind,
         }
     }
