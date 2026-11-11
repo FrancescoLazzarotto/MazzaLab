@@ -154,6 +154,9 @@ fn setup(app: &mut App) -> Result<(), Box<dyn Error>> {
     .title(session.title())
     .inner_size(1440.0, 900.0)
     .min_inner_size(900.0, 600.0)
+    // The UI reorders cues and imports files with the browser's own drag
+    // and drop, which the native handler would otherwise swallow.
+    .disable_drag_drop_handler()
     .build()?;
     app.manage(Desktop {
         lang,
