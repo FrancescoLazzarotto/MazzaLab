@@ -158,6 +158,8 @@ pub struct Snapshot {
     /// Increments on every structural change.
     pub revision: u64,
     pub dirty: bool,
+    /// The unsaved changes come from an autosave of an earlier session.
+    pub recovered: bool,
     pub can_undo: bool,
     pub can_redo: bool,
     pub current_list: CueId,
@@ -208,6 +210,7 @@ pub struct Show {
     redo: Vec<Workspace>,
     revision: u64,
     dirty: bool,
+    recovered: bool,
 }
 
 impl Show {
@@ -224,6 +227,17 @@ impl Show {
             redo: Vec::new(),
             revision: 0,
             dirty: false,
+            recovered: false,
+        }
+    }
+
+    /// A show whose state was recovered from an autosave: it has changes
+    /// that are not in its file, although nothing was edited yet.
+    pub fn recovered(workspace: Workspace) -> Self {
+        Self {
+            dirty: true,
+            recovered: true,
+            ..Self::new(workspace)
         }
     }
 
@@ -255,6 +269,7 @@ impl Show {
     pub fn mark_saved(&mut self) {
         if self.dirty {
             self.dirty = false;
+            self.recovered = false;
             self.revision += 1;
         }
     }
@@ -356,6 +371,7 @@ impl Show {
         Snapshot {
             revision: self.revision,
             dirty: self.dirty,
+            recovered: self.recovered,
             can_undo: !self.undo.is_empty(),
             can_redo: !self.redo.is_empty(),
             current_list: self.current_list,
