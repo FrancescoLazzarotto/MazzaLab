@@ -24,7 +24,11 @@ export function CueList({
   const { t } = useI18n();
   const rows = flatten(cues);
   const selectedRow = useRef<HTMLTableRowElement>(null);
-  useEffect(() => selectedRow.current?.scrollIntoView({ block: "nearest" }), [selection]);
+  useEffect(() => {
+    // Not returned: recent browsers hand back a promise, which React would
+    // take for a cleanup function.
+    void selectedRow.current?.scrollIntoView({ block: "nearest" });
+  }, [selection]);
 
   if (rows.length === 0) {
     return <p className="muted empty">{t("list.empty")}</p>;
