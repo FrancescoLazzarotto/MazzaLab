@@ -1,11 +1,10 @@
-import { useEffect, useRef, useState, type DragEvent } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type DragEvent } from "react";
 import type { Cue, Id, RunningCue } from "../api/types";
 import { actionLength, displayName, fileName, findCue, flatten, needsTarget, problemOf, typeLabel, type Drop } from "../cues";
 import { formatTime } from "../format";
 import { useI18n } from "../i18n";
 import { CueIcon, Icon } from "./icons";
 
-const CONTINUE_GLYPH = { do_not_continue: "", auto_continue: "↓", auto_follow: "⤓" } as const;
 const DRAG_TYPE = "application/x-mazzalab-cues";
 
 export type SelectMode = "single" | "toggle" | "range";
@@ -31,6 +30,16 @@ function sameDrop(a: Drop | null, b: Drop | null): boolean {
   if (a === null || b === null) return a === b;
   if (a.where === "end" || b.where === "end") return a.where === b.where;
   return a.where === b.where && a.anchor === b.anchor;
+}
+
+/** A time that fills up as it elapses. */
+function TimeCell({ text, progress }: { text: string; progress: number | null }) {
+  if (progress === null) return <>{text}</>;
+  return (
+    <span className="elapsing" style={{ "--progress": `${Math.min(1, progress) * 100}%` } as CSSProperties}>
+      {text}
+    </span>
+  );
 }
 
 export function CueList({
@@ -106,7 +115,7 @@ export function CueList({
     if (cue.type === "audio" || cue.type === "video") return cue.file ? fileName(cue.file) : "";
     if (!needsTarget(cue.type) || !cue.target) return "";
     const target = findCue(allCues, cue.target);
-    return target ? `${target.number ?? "–"} · ${displayName(target)}` : "?";
+    return target ? `${target.number ?? "–"}  ${displayName(target)}` : "?";
   };
 
   return (
@@ -119,125 +128,124 @@ export function CueList({
       }}
       onDrop={(event) => finish(event, { where: "end" })}
     >
-      {rows.length === 0 ? (
-        <p className="muted empty">{editable ? t("list.empty") : t("list.emptyShow")}</p>
-      ) : (
-        <table>
-          <thead>
-            <tr>
-              <th className="col-marker" />
-              <th className="col-number">{t("list.number")}</th>
-              <th className="col-name">{t("list.name")}</th>
-              <th className="col-target">{t("list.target")}</th>
-              <th className="col-time">{t("list.preWait")}</th>
-              <th className="col-time">{t("list.duration")}</th>
-              <th className="col-time">{t("list.postWait")}</th>
-              <th className="col-marker" />
-              <th className="col-marker" />
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map(({ cue, depth }) => {
-              const run = running.get(cue.id);
-              const length = actionLength(cue);
-              const progress = run && run.length ? Math.min(1, run.elapsed / run.length) : run ? 1 : 0;
-              const problem = problemOf(cue, exists);
-              const dropHere = drop && drop.where !== "end" && drop.anchor === cue.id ? `drop-${drop.where}` : null;
-              const classes = [
-                selection.has(cue.id) && "selected",
-                cue.id === playhead && "playhead",
-                run && (run.paused ? "paused" : run.phase === "pre_wait" ? "waiting" : "running"),
-                cue.armed === false && "disarmed",
-                cue.color && `color-${cue.color}`,
-                dropHere,
-              ]
-                .filter(Boolean)
-                .join(" ");
-              const cell = (field: Editing["field"], shown: string) =>
-                editing?.cue === cue.id && editing.field === field ? (
-                  <input
-                    className="inline-edit"
-                    autoFocus
-                    defaultValue={field === "number" ? (cue.number ?? "") : (cue.name ?? "")}
-                    onFocus={(event) => event.target.select()}
-                    onBlur={(event) => commit(cue, field, event.target.value)}
-                    onClick={(event) => event.stopPropagation()}
-                    onKeyDown={(event) => {
-                      event.stopPropagation();
-                      if (event.key === "Enter") event.currentTarget.blur();
-                      if (event.key === "Escape") setEditing(null);
-                    }}
-                  />
-                ) : (
-                  shown
-                );
-              return (
-                <tr
-                  key={cue.id}
-                  ref={cue.id === focus ? focusRow : undefined}
-                  className={classes}
-                  draggable={editable && editing === null}
-                  onClick={(event) => onSelect(cue.id, event.shiftKey ? "range" : event.ctrlKey || event.metaKey ? "toggle" : "single")}
-                  onDragStart={(event) => {
-                    dragged.current = cue.id;
-                    event.dataTransfer.setData(DRAG_TYPE, cue.id);
-                    event.dataTransfer.effectAllowed = "move";
+      <table>
+        <thead>
+          <tr>
+            <th className="col-gutter" />
+            <th className="col-number">{t("list.number")}</th>
+            <th className="col-name">{t("list.name")}</th>
+            <th className="col-target">{t("list.target")}</th>
+            <th className="col-time">{t("list.preWait")}</th>
+            <th className="col-time">{t("list.duration")}</th>
+            <th className="col-time">{t("list.postWait")}</th>
+            <th className="col-mark" />
+            <th className="col-mark" />
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(({ cue, depth }) => {
+            const run = running.get(cue.id);
+            const length = actionLength(cue);
+            const problem = problemOf(cue, exists);
+            const mode = cue.continue_mode ?? "do_not_continue";
+            const dropHere = drop && drop.where !== "end" && drop.anchor === cue.id ? `drop-${drop.where}` : null;
+            const classes = [
+              selection.has(cue.id) && "selected",
+              cue.id === playhead && "playhead",
+              run && (run.paused ? "paused" : run.phase === "pre_wait" ? "waiting" : "running"),
+              cue.armed === false && "disarmed",
+              cue.color && `color-${cue.color}`,
+              dropHere,
+            ]
+              .filter(Boolean)
+              .join(" ");
+            const cell = (field: Editing["field"], shown: string) =>
+              editing?.cue === cue.id && editing.field === field ? (
+                <input
+                  className="inline-edit"
+                  autoFocus
+                  defaultValue={field === "number" ? (cue.number ?? "") : (cue.name ?? "")}
+                  onFocus={(event) => event.target.select()}
+                  onBlur={(event) => commit(cue, field, event.target.value)}
+                  onClick={(event) => event.stopPropagation()}
+                  onKeyDown={(event) => {
+                    event.stopPropagation();
+                    if (event.key === "Enter") event.currentTarget.blur();
+                    if (event.key === "Escape") setEditing(null);
                   }}
-                  onDragEnd={() => {
-                    dragged.current = null;
-                    setDrop(null);
-                  }}
-                  onDragOver={(event) => over(event, dropFor(event, cue))}
-                  onDrop={(event) => finish(event, dropFor(event, cue))}
-                  style={run ? { ["--progress" as string]: `${progress * 100}%` } : undefined}
-                >
-                  <td className="col-marker playhead-cell" onDoubleClick={() => onSetPlayhead(cue.id)} title={t("action.setPlayhead")}>
-                    {cue.id === playhead ? "▶" : ""}
-                  </td>
-                  <td className="col-number" onDoubleClick={() => editable && setEditing({ cue: cue.id, field: "number" })}>
-                    {cell("number", cue.number ?? "")}
-                  </td>
-                  <td className="col-name" onDoubleClick={() => editable && setEditing({ cue: cue.id, field: "name" })}>
-                    <span className="name-cell" style={{ paddingLeft: `${depth * 1.3}rem` }}>
-                      <span className="type-icon" title={typeLabel(cue.type)}>
-                        <CueIcon type={cue.type} />
-                      </span>
-                      <span className="name-text">{cell("name", displayName(cue))}</span>
-                      {cue.notes && <span className="notes-text">{cue.notes}</span>}
-                    </span>
-                  </td>
-                  <td className="col-target">{targetLabel(cue)}</td>
-                  <td className="col-time">
-                    {run?.phase === "pre_wait" ? formatTime(run.elapsed) : cue.pre_wait ? formatTime(cue.pre_wait) : ""}
-                  </td>
-                  <td className="col-time">
-                    {run?.phase === "action" ? formatTime(run.elapsed) : length ? formatTime(length) : cue.type === "audio" && cue.infinite_loop ? "∞" : ""}
-                  </td>
-                  <td className="col-time">{cue.post_wait ? formatTime(cue.post_wait) : ""}</td>
-                  <td className="col-marker continue" title={t(`continue.${cue.continue_mode ?? "do_not_continue"}`)}>
-                    {CONTINUE_GLYPH[cue.continue_mode ?? "do_not_continue"]}
-                  </td>
-                  <td className="col-marker status-cell">
-                    {problem && problem !== "not_supported" ? (
-                      <span className="problem" title={t(`problem.${problem}`)}>
-                        <Icon name="warning" size={14} />
-                      </span>
-                    ) : problem ? (
-                      <span className="problem soft" title={t("problem.not_supported")}>
-                        <Icon name="warning" size={14} />
-                      </span>
-                    ) : cue.flagged ? (
-                      <span className="flag">
-                        <Icon name="flag" size={14} />
-                      </span>
-                    ) : null}
-                  </td>
-                </tr>
+                />
+              ) : (
+                shown
               );
-            })}
-          </tbody>
-        </table>
-      )}
+            // While a cue runs, the wait or the action it is in counts up
+            // and fills; an action of unknown length is simply lit.
+            const preProgress = run?.phase === "pre_wait" && run.length ? run.elapsed / run.length : null;
+            const actionProgress = run?.phase === "action" ? (run.length ? run.elapsed / run.length : 1) : null;
+            return (
+              <tr
+                key={cue.id}
+                ref={cue.id === focus ? focusRow : undefined}
+                className={classes}
+                draggable={editable && editing === null}
+                onClick={(event) => onSelect(cue.id, event.shiftKey ? "range" : event.ctrlKey || event.metaKey ? "toggle" : "single")}
+                onDragStart={(event) => {
+                  dragged.current = cue.id;
+                  event.dataTransfer.setData(DRAG_TYPE, cue.id);
+                  event.dataTransfer.effectAllowed = "move";
+                }}
+                onDragEnd={() => {
+                  dragged.current = null;
+                  setDrop(null);
+                }}
+                onDragOver={(event) => over(event, dropFor(event, cue))}
+                onDrop={(event) => finish(event, dropFor(event, cue))}
+              >
+                <td className="col-gutter" onDoubleClick={() => onSetPlayhead(cue.id)} title={t("action.setPlayhead")}>
+                  {cue.id === playhead && <Icon name="playhead" size={11} />}
+                </td>
+                <td className="col-number" onDoubleClick={() => editable && setEditing({ cue: cue.id, field: "number" })}>
+                  {cell("number", cue.number ?? "")}
+                </td>
+                <td className="col-name" onDoubleClick={() => editable && setEditing({ cue: cue.id, field: "name" })}>
+                  <span className="name-cell" style={{ paddingLeft: `${depth * 18}px` }}>
+                    <span className="type-icon" title={typeLabel(cue.type)}>
+                      <CueIcon type={cue.type} size={15} />
+                    </span>
+                    <span className="name-text">{cell("name", displayName(cue))}</span>
+                    {cue.notes && <span className="notes-text">{cue.notes}</span>}
+                  </span>
+                </td>
+                <td className="col-target">{targetLabel(cue)}</td>
+                <td className="col-time">
+                  <TimeCell text={run?.phase === "pre_wait" ? formatTime(run.elapsed) : cue.pre_wait ? formatTime(cue.pre_wait) : ""} progress={preProgress} />
+                </td>
+                <td className="col-time">
+                  <TimeCell
+                    text={run?.phase === "action" ? formatTime(run.elapsed) : length ? formatTime(length) : cue.type === "audio" && cue.infinite_loop ? "∞" : ""}
+                    progress={actionProgress}
+                  />
+                </td>
+                <td className="col-time">{cue.post_wait ? formatTime(cue.post_wait) : ""}</td>
+                <td className="col-mark continue" title={t(`continue.${mode}`)}>
+                  {mode !== "do_not_continue" && <Icon name={mode} size={13} />}
+                </td>
+                <td className="col-mark">
+                  {problem ? (
+                    <span className={problem === "not_supported" ? "problem soft" : "problem"} title={t(`problem.${problem}`)}>
+                      <Icon name="warning" size={13} />
+                    </span>
+                  ) : cue.flagged ? (
+                    <span className="flag">
+                      <Icon name="flag" size={13} />
+                    </span>
+                  ) : null}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      {rows.length === 0 && <p className="empty">{editable ? t("list.empty") : t("list.emptyShow")}</p>}
     </div>
   );
 }
