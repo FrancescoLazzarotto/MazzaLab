@@ -1,55 +1,131 @@
-import type { ContinueMode, Cue, CueColor, FadeCurve, GroupMode } from "../api/types";
-import { displayName, flatten, needsTarget, typeLabel } from "../cues";
+import { useRef, useState } from "react";
+import type { ShowConnection } from "../api/connection";
+import type {
+  AudioCue,
+  AudioStatus,
+  ContinueMode,
+  Cue,
+  CueColor,
+  FadeCurve,
+  GroupMode,
+  Id,
+  RunningCue,
+  WorkspaceSettings,
+} from "../api/types";
+import { displayName, fileName, flatten, needsTarget, problemOf, typeLabel } from "../cues";
 import { useI18n } from "../i18n";
-import { CheckField, NumberField, SelectField, TextField, TimeField } from "./fields";
+import { CheckField, LevelField, NumberField, SelectField, TextField, TimeField } from "./fields";
+import { CueIcon, Icon } from "./icons";
+import { MatrixEditor } from "./MatrixEditor";
+import { Waveform } from "./Waveform";
 
 const COLORS: CueColor[] = ["red", "orange", "yellow", "green", "blue", "purple", "grey"];
 const CONTINUE_MODES: ContinueMode[] = ["do_not_continue", "auto_continue", "auto_follow"];
 const GROUP_MODES: GroupMode[] = ["timeline", "start_first_and_enter", "start_first", "start_random", "playlist"];
 const CURVES: FadeCurve[] = ["linear", "s_curve"];
 
+type Tab = "basics" | "time" | "levels" | "settings";
+type Patch = Record<string, unknown>;
+
+function tabsFor(cue: Cue): Tab[] {
+  if (cue.type === "audio") return ["basics", "time", "levels"];
+  const plain = ["start", "stop", "pause", "reset", "devamp", "goto", "arm", "disarm", "memo", "mic", "camera", "midi", "midi_file", "timecode", "target", "load", "script"];
+  return plain.includes(cue.type) ? ["basics"] : ["basics", "settings"];
+}
+
 export function Inspector({
-  cue,
+  connection,
+  cues,
   allCues,
+  settings,
+  audio,
+  running,
+  editable,
   onChange,
+  onChangeMany,
 }: {
-  cue: Cue | undefined;
+  connection: ShowConnection;
+  /** The selected cues. */
+  cues: Cue[];
   allCues: Cue[];
+  settings: WorkspaceSettings;
+  audio: AudioStatus | null;
+  running: Map<Id, RunningCue>;
+  editable: boolean;
   onChange: (cue: Cue) => void;
+  onChangeMany: (cues: Cue[]) => void;
 }) {
   const { t } = useI18n();
-  if (!cue) {
+  const [tab, setTab] = useState<Tab>("basics");
+
+  if (cues.length === 0) {
     return (
-      <section className="panel inspector">
-        <h2>{t("inspector.title")}</h2>
+      <section className="inspector empty-inspector">
         <p className="muted">{t("inspector.none")}</p>
       </section>
     );
   }
-  // Every edit sends the whole cue; the server keeps group children.
-  const set = (patch: Record<string, unknown>) => onChange({ ...cue, ...patch } as Cue);
+  if (cues.length > 1) {
+    return <ManyInspector cues={cues} editable={editable} onChangeMany={onChangeMany} />;
+  }
 
-  const targets = flatten(allCues).filter((row) => row.cue.id !== cue.id);
+  const cue = cues[0];
+  const tabs = tabsFor(cue);
+  const current = tabs.includes(tab) ? tab : "basics";
+  // Every edit sends the whole cue; the server keeps group children.
+  const set = (patch: Patch) => onChange({ ...cue, ...patch } as Cue);
+  const ids = new Set(flatten(allCues).map((row) => row.cue.id));
+  const problem = problemOf(cue, (id) => ids.has(id));
 
   return (
-    <section className="panel inspector">
-      <h2>
-        {t("inspector.title")} <span className="muted">· {typeLabel(cue.type)}</span>
-      </h2>
+    <section className="inspector">
+      <header className="inspector-head">
+        <span className="inspector-title">
+          <CueIcon type={cue.type} />
+          <strong>{cue.number ?? "–"}</strong>
+          <span className="inspector-name">{displayName(cue)}</span>
+        </span>
+        <nav className="inspector-tabs" role="tablist">
+          {tabs.map((name) => (
+            <button key={name} role="tab" aria-selected={name === current} className={name === current ? "active" : undefined} onClick={() => setTab(name)}>
+              {name === "settings" ? typeLabel(cue.type) : t(`tab.${name}`)}
+            </button>
+          ))}
+        </nav>
+        {problem && (
+          <span className={problem === "not_supported" ? "problem soft" : "problem"}>
+            <Icon name="warning" size={14} /> {t(`problem.${problem}`)}
+          </span>
+        )}
+      </header>
+      <fieldset className="inspector-body" disabled={!editable}>
+        {current === "basics" && <Basics cue={cue} allCues={allCues} set={set} />}
+        {current === "time" && cue.type === "audio" && (
+          <AudioTime connection={connection} cue={cue} run={running.get(cue.id)} editable={editable} set={set} />
+        )}
+        {current === "levels" && cue.type === "audio" && <AudioLevels cue={cue} outputs={audio?.channels ?? 2} set={set} />}
+        {current === "settings" && <TypeSettings cue={cue} settings={settings} set={set} />}
+      </fieldset>
+    </section>
+  );
+}
 
-      <fieldset>
-        <legend>{t("inspector.basics")}</legend>
+function Basics({ cue, allCues, set }: { cue: Cue; allCues: Cue[]; set: (patch: Patch) => void }) {
+  const { t } = useI18n();
+  const targets = flatten(allCues).filter((row) => row.cue.id !== cue.id);
+  return (
+    <div className="form-columns">
+      <div className="form-column">
         <div className="row">
           <TextField label={t("inspector.number")} value={cue.number ?? ""} onCommit={(number) => set({ number: number || undefined })} />
           <SelectField
             label={t("inspector.color")}
             value={cue.color ?? ""}
-            options={[{ value: "", label: t("inspector.noColor") }, ...COLORS.map((color) => ({ value: color, label: color }))]}
+            options={[{ value: "", label: t("inspector.noColor") }, ...COLORS.map((color) => ({ value: color, label: t(`color.${color}`) }))]}
             onChange={(color) => set({ color: color || undefined })}
           />
         </div>
-        <TextField label={t("inspector.name")} value={cue.name ?? ""} placeholder={typeLabel(cue.type)} onCommit={(name) => set({ name })} />
-        <TextField label={t("inspector.notes")} value={cue.notes ?? ""} multiline onCommit={(notes) => set({ notes })} />
+        <TextField label={t("inspector.name")} value={cue.name ?? ""} placeholder={displayName({ ...cue, name: "" } as Cue)} onCommit={(name) => set({ name })} />
         {needsTarget(cue.type) && (
           <SelectField
             label={t("inspector.target")}
@@ -58,16 +134,14 @@ export function Inspector({
               { value: "", label: t("inspector.noTarget") },
               ...targets.map((row) => ({
                 value: row.cue.id,
-                label: `${row.cue.number ?? "-"} · ${displayName(row.cue)}`,
+                label: `${row.cue.number ?? "–"} · ${displayName(row.cue)}`,
               })),
             ]}
             onChange={(target) => set({ target: target || undefined })}
           />
         )}
-      </fieldset>
-
-      <fieldset>
-        <legend>{t("inspector.timing")}</legend>
+      </div>
+      <div className="form-column">
         <div className="row">
           <TimeField label={t("inspector.preWait")} value={cue.pre_wait ?? 0} onCommit={(pre_wait) => set({ pre_wait })} />
           <TimeField label={t("inspector.postWait")} value={cue.post_wait ?? 0} onCommit={(post_wait) => set({ post_wait })} />
@@ -78,112 +152,283 @@ export function Inspector({
           options={CONTINUE_MODES.map((mode) => ({ value: mode, label: t(`continue.${mode}`) }))}
           onChange={(continue_mode) => set({ continue_mode })}
         />
-        <div className="row">
+        <div className="row checks">
           <CheckField label={t("inspector.armed")} checked={cue.armed ?? true} onChange={(armed) => set({ armed })} />
           <CheckField label={t("inspector.flagged")} checked={cue.flagged ?? false} onChange={(flagged) => set({ flagged })} />
         </div>
-      </fieldset>
-
-      <TypeFields cue={cue} set={set} />
-    </section>
+      </div>
+      <div className="form-column grow">
+        <TextField label={t("inspector.notes")} value={cue.notes ?? ""} multiline onCommit={(notes) => set({ notes })} />
+      </div>
+    </div>
   );
 }
 
-function TypeFields({ cue, set }: { cue: Cue; set: (patch: Record<string, unknown>) => void }) {
+function FadeFields({ cue, set }: { cue: Extract<Cue, { type: "fade" }>; set: (patch: Patch) => void }) {
+  const { t } = useI18n();
+  return (
+    <>
+      <div className="row">
+        <TimeField label={t("inspector.duration")} value={cue.duration ?? 0} onCommit={(duration) => set({ duration })} />
+        <SelectField
+          label={t("inspector.curve")}
+          value={cue.curve ?? "s_curve"}
+          options={CURVES.map((curve) => ({ value: curve, label: t(`curve.${curve}`) }))}
+          onChange={(curve) => set({ curve })}
+        />
+      </div>
+      <LevelField label={t("inspector.fadeTo")} value={cue.level_db ?? 0} onCommit={(level_db) => set({ level_db })} />
+      <CheckField
+        label={t("inspector.stopTarget")}
+        checked={cue.stop_target_when_done ?? false}
+        onChange={(stop_target_when_done) => set({ stop_target_when_done })}
+      />
+    </>
+  );
+}
+
+function AudioTime({
+  connection,
+  cue,
+  run,
+  editable,
+  set,
+}: {
+  connection: ShowConnection;
+  cue: AudioCue;
+  run: RunningCue | undefined;
+  editable: boolean;
+  set: (patch: Patch) => void;
+}) {
+  const { t } = useI18n();
+  const picker = useRef<HTMLInputElement>(null);
+  const [progress, setProgress] = useState<number | null>(null);
+  // A new file starts from a clean slate: its length and channels are read
+  // again by the server.
+  const setFile = (file: string | undefined) =>
+    set({ file, media_duration: undefined, media_channels: undefined, start_time: undefined, end_time: undefined });
+  const importFile = (file: File) => {
+    setProgress(0);
+    connection
+      .uploadMedia(file, setProgress)
+      .then(setFile)
+      .catch((error: Error) => connection.toast("error", `${file.name}: ${error.message}`))
+      .finally(() => setProgress(null));
+  };
+  return (
+    <div className="audio-time">
+      <div className="row file-row">
+        <TextField label={t("inspector.file")} value={cue.file ?? ""} placeholder="media/file.wav" onCommit={(file) => setFile(file || undefined)} />
+        <button onClick={() => picker.current?.click()} disabled={progress !== null}>
+          {progress === null ? t("inspector.chooseFile") : `${Math.round(progress * 100)}%`}
+        </button>
+        <input
+          ref={picker}
+          type="file"
+          accept="audio/*,.wav,.aif,.aiff,.flac,.mp3,.m4a,.ogg,.opus"
+          hidden
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) importFile(file);
+            event.target.value = "";
+          }}
+        />
+      </div>
+      <Waveform connection={connection} cue={cue} run={run} editable={editable} onChange={set} />
+      <div className="row wrap">
+        <TimeField label={t("inspector.startTime")} value={cue.start_time ?? 0} onCommit={(start_time) => set({ start_time })} />
+        <TimeField label={t("inspector.endTime")} value={cue.end_time} optional onCommit={(end_time) => set({ end_time })} />
+        <TimeField label={t("inspector.fadeIn")} value={cue.fade_in ?? 0} onCommit={(fade_in) => set({ fade_in })} />
+        <TimeField label={t("inspector.fadeOut")} value={cue.fade_out ?? 0} onCommit={(fade_out) => set({ fade_out })} />
+        <NumberField label={t("inspector.playCount")} value={cue.play_count ?? 1} min={1} onCommit={(play_count) => set({ play_count: Math.round(play_count) })} />
+        <NumberField label={t("inspector.rate")} value={cue.rate ?? 1} step={0.05} min={0.05} onCommit={(rate) => set({ rate })} />
+        <CheckField label={t("inspector.loop")} checked={cue.infinite_loop ?? false} onChange={(infinite_loop) => set({ infinite_loop })} />
+      </div>
+    </div>
+  );
+}
+
+function AudioLevels({ cue, outputs, set }: { cue: AudioCue; outputs: number; set: (patch: Patch) => void }) {
+  const { t } = useI18n();
+  return (
+    <div className="form-columns">
+      <div className="form-column">
+        <LevelField label={t("inspector.level")} value={cue.level_db ?? 0} onCommit={(level_db) => set({ level_db })} />
+        <p className="hint">{t("inspector.levelHint")}</p>
+      </div>
+      <div className="form-column grow">
+        <span className="field-label">{t("inspector.matrix")}</span>
+        <MatrixEditor cue={cue} outputs={outputs} onChange={(matrix) => set({ matrix })} />
+      </div>
+    </div>
+  );
+}
+
+function TypeSettings({ cue, settings, set }: { cue: Cue; settings: WorkspaceSettings; set: (patch: Patch) => void }) {
   const { t } = useI18n();
   switch (cue.type) {
-    case "audio":
-      return (
-        <fieldset>
-          <legend>{typeLabel(cue.type)}</legend>
-          <TextField label={t("inspector.file")} value={cue.file ?? ""} placeholder="audio/file.wav" onCommit={(file) => set({ file: file || undefined, media_duration: undefined })} />
-          <div className="row">
-            <NumberField label={t("inspector.level")} value={cue.level_db ?? 0} step={0.5} onCommit={(level_db) => set({ level_db })} />
-            <NumberField label={t("inspector.rate")} value={cue.rate ?? 1} step={0.05} min={0.05} onCommit={(rate) => set({ rate })} />
-          </div>
-          <div className="row">
-            <TimeField label={t("inspector.startTime")} value={cue.start_time ?? 0} onCommit={(start_time) => set({ start_time })} />
-            <TimeField label={t("inspector.endTime")} value={cue.end_time} optional onCommit={(end_time) => set({ end_time })} />
-          </div>
-          <div className="row">
-            <NumberField label={t("inspector.playCount")} value={cue.play_count ?? 1} min={1} onCommit={(play_count) => set({ play_count: Math.round(play_count) })} />
-            <CheckField label={t("inspector.loop")} checked={cue.infinite_loop ?? false} onChange={(infinite_loop) => set({ infinite_loop })} />
-          </div>
-        </fieldset>
-      );
     case "video":
       return (
-        <fieldset>
-          <legend>{typeLabel(cue.type)}</legend>
-          <TextField label={t("inspector.file")} value={cue.file ?? ""} onCommit={(file) => set({ file: file || undefined })} />
-          <NumberField label={t("inspector.opacity")} value={cue.opacity ?? 1} step={0.05} min={0} onCommit={(opacity) => set({ opacity: Math.min(1, opacity) })} />
-        </fieldset>
+        <div className="form-columns">
+          <div className="form-column">
+            <TextField label={t("inspector.file")} value={cue.file ?? ""} onCommit={(file) => set({ file: file || undefined })} />
+            <NumberField label={t("inspector.opacity")} value={cue.opacity ?? 1} step={0.05} min={0} onCommit={(opacity) => set({ opacity: Math.min(1, opacity) })} />
+          </div>
+        </div>
       );
     case "wait":
       return (
-        <fieldset>
-          <legend>{typeLabel(cue.type)}</legend>
-          <TimeField label={t("inspector.duration")} value={cue.duration} onCommit={(duration) => set({ duration })} />
-        </fieldset>
+        <div className="form-columns">
+          <div className="form-column">
+            <TimeField label={t("inspector.duration")} value={cue.duration} onCommit={(duration) => set({ duration })} />
+          </div>
+        </div>
       );
     case "fade":
       return (
-        <fieldset>
-          <legend>{typeLabel(cue.type)}</legend>
-          <div className="row">
-            <TimeField label={t("inspector.duration")} value={cue.duration ?? 0} onCommit={(duration) => set({ duration })} />
-            <NumberField label={t("inspector.level")} value={cue.level_db ?? 0} step={1} onCommit={(level_db) => set({ level_db })} />
+        <div className="form-columns">
+          <div className="form-column">
+            <FadeFields cue={cue} set={set} />
           </div>
-          <SelectField
-            label={t("inspector.curve")}
-            value={cue.curve ?? "s_curve"}
-            options={CURVES.map((curve) => ({ value: curve, label: t(`curve.${curve}`) }))}
-            onChange={(curve) => set({ curve })}
-          />
-          <CheckField label={t("inspector.stopTarget")} checked={cue.stop_target_when_done ?? false} onChange={(stop_target_when_done) => set({ stop_target_when_done })} />
-        </fieldset>
+        </div>
       );
     case "light":
       return (
-        <fieldset>
-          <legend>{typeLabel(cue.type)}</legend>
-          <TextField
-            label={t("inspector.commands")}
-            value={(cue.commands ?? []).join("\n")}
-            multiline
-            onCommit={(text) => set({ commands: text.split("\n").map((line) => line.trim()).filter(Boolean) })}
-          />
-          <TimeField label={t("inspector.duration")} value={cue.duration ?? 0} onCommit={(duration) => set({ duration })} />
-        </fieldset>
+        <div className="form-columns">
+          <div className="form-column grow">
+            <TextField
+              label={t("inspector.commands")}
+              value={(cue.commands ?? []).join("\n")}
+              multiline
+              onCommit={(text) => set({ commands: text.split("\n").map((line) => line.trim()).filter(Boolean) })}
+            />
+          </div>
+          <div className="form-column">
+            <TimeField label={t("inspector.duration")} value={cue.duration ?? 0} onCommit={(duration) => set({ duration })} />
+          </div>
+        </div>
       );
-    case "network":
+    case "network": {
+      const patches = settings.network_patches ?? [];
       return (
-        <fieldset>
-          <legend>{typeLabel(cue.type)}</legend>
-          <TextField label={t("inspector.message")} value={cue.message} placeholder="/address arg1 arg2" onCommit={(message) => set({ message })} />
-          <TimeField label={t("inspector.duration")} value={cue.duration ?? 0} onCommit={(duration) => set({ duration })} />
-        </fieldset>
+        <div className="form-columns">
+          <div className="form-column">
+            <SelectField
+              label={t("inspector.patch")}
+              value={cue.patch ?? ""}
+              options={[
+                { value: "", label: patches.length > 0 ? `${t("inspector.firstPatch")} (${patches[0].name})` : t("inspector.noPatches") },
+                ...patches.map((patch) => ({ value: patch.name, label: `${patch.name} — ${patch.host}:${patch.port}` })),
+                // A patch that was renamed or removed stays visible.
+                ...(cue.patch && !patches.some((patch) => patch.name === cue.patch) ? [{ value: cue.patch, label: `${cue.patch} (?)` }] : []),
+              ]}
+              onChange={(patch) => set({ patch: patch || undefined })}
+            />
+            <p className="hint">{t("inspector.networkHint")}</p>
+          </div>
+          <div className="form-column grow">
+            <TextField
+              label={t("inspector.message")}
+              value={cue.message}
+              placeholder={"/cue/12/start\n/eos/sub/3 0.75"}
+              multiline
+              onCommit={(message) => set({ message })}
+            />
+          </div>
+        </div>
       );
+    }
     case "text":
       return (
-        <fieldset>
-          <legend>{typeLabel(cue.type)}</legend>
-          <TextField label={t("inspector.text")} value={cue.text} multiline onCommit={(text) => set({ text })} />
-        </fieldset>
+        <div className="form-columns">
+          <div className="form-column grow">
+            <TextField label={t("inspector.text")} value={cue.text} multiline onCommit={(text) => set({ text })} />
+          </div>
+        </div>
       );
     case "group":
       return (
-        <fieldset>
-          <legend>{typeLabel(cue.type)}</legend>
-          <SelectField
-            label={t("inspector.mode")}
-            value={cue.mode ?? "timeline"}
-            options={GROUP_MODES.map((mode) => ({ value: mode, label: t(`group.${mode}`) }))}
-            onChange={(mode) => set({ mode })}
-          />
-        </fieldset>
+        <div className="form-columns">
+          <div className="form-column">
+            <SelectField
+              label={t("inspector.mode")}
+              value={cue.mode ?? "timeline"}
+              options={GROUP_MODES.map((mode) => ({ value: mode, label: t(`group.${mode}`) }))}
+              onChange={(mode) => set({ mode })}
+            />
+            <p className="hint">
+              {(cue.children ?? []).length} {t("inspector.children")}
+            </p>
+          </div>
+        </div>
       );
     default:
       return null;
   }
+}
+
+/** Edits what several selected cues have in common. */
+function ManyInspector({ cues, editable, onChangeMany }: { cues: Cue[]; editable: boolean; onChangeMany: (cues: Cue[]) => void }) {
+  const { t } = useI18n();
+  const set = (patch: Patch) => onChangeMany(cues.map((cue) => ({ ...cue, ...patch }) as Cue));
+  /** The value every cue shares, or `undefined` when they differ. */
+  const shared = <T,>(read: (cue: Cue) => T): T | undefined => {
+    const first = read(cues[0]);
+    return cues.every((cue) => read(cue) === first) ? first : undefined;
+  };
+  const mixed = { value: "__mixed", label: t("inspector.mixed") };
+  const color = shared((cue) => cue.color ?? "");
+  const mode = shared((cue) => cue.continue_mode ?? "do_not_continue");
+  const audio = cues.filter((cue): cue is AudioCue => cue.type === "audio");
+  return (
+    <section className="inspector">
+      <header className="inspector-head">
+        <span className="inspector-title">
+          <strong>{cues.length}</strong> {t("inspector.selected")}
+        </span>
+        <span className="muted inspector-files">{audio.length > 0 ? audio.map((cue) => (cue.file ? fileName(cue.file) : "–")).slice(0, 4).join(", ") : ""}</span>
+      </header>
+      <fieldset className="inspector-body" disabled={!editable}>
+        <div className="form-columns">
+          <div className="form-column">
+            <SelectField
+              label={t("inspector.color")}
+              value={color ?? mixed.value}
+              options={[
+                ...(color === undefined ? [mixed] : []),
+                { value: "", label: t("inspector.noColor") },
+                ...COLORS.map((name) => ({ value: name as string, label: t(`color.${name}`) })),
+              ]}
+              onChange={(value) => value !== mixed.value && set({ color: value || undefined })}
+            />
+            <SelectField
+              label={t("inspector.continue")}
+              value={mode ?? mixed.value}
+              options={[...(mode === undefined ? [mixed] : []), ...CONTINUE_MODES.map((name) => ({ value: name as string, label: t(`continue.${name}`) }))]}
+              onChange={(value) => value !== mixed.value && set({ continue_mode: value })}
+            />
+          </div>
+          <div className="form-column">
+            <div className="row">
+              <TimeField label={t("inspector.preWait")} value={shared((cue) => cue.pre_wait ?? 0)} optional onCommit={(pre_wait) => set({ pre_wait: pre_wait ?? 0 })} />
+              <TimeField label={t("inspector.postWait")} value={shared((cue) => cue.post_wait ?? 0)} optional onCommit={(post_wait) => set({ post_wait: post_wait ?? 0 })} />
+            </div>
+            <div className="row checks">
+              <CheckField label={t("inspector.armed")} checked={shared((cue) => cue.armed ?? true) ?? false} onChange={(armed) => set({ armed })} />
+              <CheckField label={t("inspector.flagged")} checked={shared((cue) => cue.flagged ?? false) ?? false} onChange={(flagged) => set({ flagged })} />
+            </div>
+          </div>
+          {audio.length === cues.length && (
+            <div className="form-column">
+              <LevelField
+                label={t("inspector.level")}
+                value={shared((cue) => (cue.type === "audio" ? (cue.level_db ?? 0) : 0)) ?? 0}
+                onCommit={(level_db) => set({ level_db })}
+              />
+            </div>
+          )}
+        </div>
+      </fieldset>
+    </section>
+  );
 }
