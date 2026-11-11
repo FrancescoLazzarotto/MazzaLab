@@ -8,6 +8,7 @@ import { Icon } from "./components/icons";
 import { Inspector } from "./components/Inspector";
 import { RenumberDialog } from "./components/RenumberDialog";
 import { SettingsDialog } from "./components/SettingsDialog";
+import { StatusBar } from "./components/StatusBar";
 import { Toasts } from "./components/Toasts";
 import { Toolbox } from "./components/Toolbox";
 import { TopBar } from "./components/TopBar";
@@ -358,7 +359,6 @@ export function App({ connection }: { connection: ShowConnection }) {
     <div className={`app ${preferences.mode}-mode`}>
       <TopBar
         snapshot={snapshot}
-        connection={connectionState}
         mode={preferences.mode}
         onMode={(mode) => setPreferences({ ...preferences, mode })}
         onUndo={() => run({ command: "undo" })}
@@ -381,8 +381,26 @@ export function App({ connection }: { connection: ShowConnection }) {
               onPanic={() => run({ command: "panic" })}
               onReset={() => run({ command: "reset" })}
             />
-            {editable && <Toolbox onAdd={addCue} />}
-            <div className="list-bar">
+            {editable && (
+              <div className="toolbar">
+                <Toolbox onAdd={addCue} />
+                <div className="list-actions">
+                  <button className="icon-button" onClick={duplicate} disabled={selected.length === 0} title={`${t("action.duplicate")} (Ctrl+D)`}>
+                    <Icon name="copy" />
+                  </button>
+                  <button className="icon-button" onClick={groupSelected} disabled={selected.length === 0} title={`${t("action.group")} (Ctrl+G)`}>
+                    <Icon name="group" />
+                  </button>
+                  <button className="icon-button" onClick={() => setRenumbering(true)} disabled={selected.length === 0} title={t("action.renumber")}>
+                    <Icon name="renumber" />
+                  </button>
+                  <button className="icon-button" onClick={deleteSelected} disabled={selected.length === 0} title={`${t("action.delete")} (Del)`}>
+                    <Icon name="trash" />
+                  </button>
+                </div>
+              </div>
+            )}
+            {(editable || workspace.cue_lists.length > 1) && (
               <nav className="tabs">
                 {workspace.cue_lists.map((candidate) =>
                   renamingList === candidate.id ? (
@@ -405,47 +423,27 @@ export function App({ connection }: { connection: ShowConnection }) {
                   ) : (
                     <button
                       key={candidate.id}
-                      className={candidate.id === list?.id ? "active" : undefined}
+                      className={candidate.id === list?.id ? "tab active" : "tab"}
                       onClick={() => setListId(candidate.id)}
                       onDoubleClick={() => editable && setRenamingList(candidate.id)}
                       title={editable ? t("list.renameHint") : undefined}
                     >
                       {candidate.name}
-                      <span className="count">{flatten(candidate.cues).length}</span>
                     </button>
                   ),
                 )}
                 {editable && (
-                  <>
-                    <button className="icon-button" onClick={addList} title={t("list.add")}>
-                      <Icon name="plus" size={14} />
-                    </button>
-                    {workspace.cue_lists.length > 1 && list && (
-                      <button className="icon-button" onClick={() => run({ command: "delete_cue_list", list: list.id })} title={t("list.delete")}>
-                        <Icon name="trash" size={14} />
-                      </button>
-                    )}
-                  </>
+                  <button className="icon-button quiet" onClick={addList} title={t("list.add")}>
+                    <Icon name="plus" size={13} />
+                  </button>
+                )}
+                {editable && workspace.cue_lists.length > 1 && list && (
+                  <button className="icon-button quiet" onClick={() => run({ command: "delete_cue_list", list: list.id })} title={t("list.delete")}>
+                    <Icon name="trash" size={13} />
+                  </button>
                 )}
               </nav>
-              {editable && (
-                <div className="list-actions">
-                  <span className="muted">{selected.length > 1 ? `${selected.length} ${t("inspector.selected")}` : ""}</span>
-                  <button onClick={duplicate} disabled={selected.length === 0} title="Ctrl+D">
-                    {t("action.duplicate")}
-                  </button>
-                  <button onClick={groupSelected} disabled={selected.length === 0} title="Ctrl+G">
-                    {t("action.group")}
-                  </button>
-                  <button onClick={() => setRenumbering(true)} disabled={selected.length === 0}>
-                    {t("action.renumber")}
-                  </button>
-                  <button onClick={deleteSelected} disabled={selected.length === 0} title="Delete">
-                    {t("action.delete")}
-                  </button>
-                </div>
-              )}
-            </div>
+            )}
             <CueList
               cues={list?.cues ?? []}
               allCues={allCues}
@@ -520,6 +518,14 @@ export function App({ connection }: { connection: ShowConnection }) {
           }}
         />
       )}
+      <StatusBar
+        cueCount={rows.length}
+        listCount={workspace?.cue_lists.length ?? 0}
+        selectedCount={selected.length}
+        audio={audio}
+        connection={connectionState}
+        onAudio={() => setSettingsOpen(true)}
+      />
       <Toasts connection={connection} toasts={toasts} />
     </div>
   );

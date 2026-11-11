@@ -2,6 +2,7 @@ import type { Cue, Id, RunningCue } from "../api/types";
 import { displayName, findCue } from "../cues";
 import { formatTime } from "../format";
 import { useI18n } from "../i18n";
+import { CueIcon, Icon } from "./icons";
 
 export function ActiveCues({
   running,
@@ -19,40 +20,51 @@ export function ActiveCues({
   const { t } = useI18n();
   return (
     <section className="panel active">
-      <h2>{t("active.title")}</h2>
-      {running.length === 0 && <p className="muted">{t("active.none")}</p>}
+      <h2>
+        {t("active.title")}
+        {running.length > 0 && <span className="count">{running.length}</span>}
+      </h2>
+      {running.length === 0 && <p className="placeholder">{t("active.none")}</p>}
       <ul>
         {running.map((run) => {
           const cue = findCue(cues, run.cue);
           if (!cue) return null;
           const fraction = run.length ? Math.min(1, run.elapsed / run.length) : null;
-          const remaining = run.length !== null ? run.length - run.elapsed : null;
-          const phase = run.paused ? t("phase.paused") : t(`phase.${run.phase}`);
+          const remaining = run.length !== null ? Math.max(0, run.length - run.elapsed) : null;
+          const state = run.paused ? "paused" : run.phase;
           return (
-            <li key={run.cue} className={run.paused ? "paused" : undefined}>
+            <li key={run.cue} className={state}>
               <div className="active-head">
                 <span className="active-name">
-                  <strong>{cue.number ?? "-"}</strong> {displayName(cue)}
+                  <CueIcon type={cue.type} size={14} />
+                  <span className="active-number">{cue.number ?? "–"}</span>
+                  <span className="active-title">{displayName(cue)}</span>
                 </span>
-                <span className="muted">{phase}</span>
+                <span className="active-buttons">
+                  {run.paused ? (
+                    <button className="icon-button" onClick={() => onResume(run.cue)} title={t("action.resume")}>
+                      <Icon name="play" size={11} />
+                    </button>
+                  ) : (
+                    <button className="icon-button" onClick={() => onPause(run.cue)} title={t("action.pause")}>
+                      <Icon name="pause" size={11} />
+                    </button>
+                  )}
+                  <button className="icon-button" onClick={() => onStop(run.cue)} title={t("action.stop")}>
+                    <Icon name="stop" size={11} />
+                  </button>
+                </span>
               </div>
-              <div className="meter" aria-hidden>
+              <div className="progress" aria-hidden>
                 <div
                   className={fraction === null ? "indeterminate" : undefined}
                   style={fraction === null ? undefined : { width: `${fraction * 100}%` }}
                 />
               </div>
               <div className="active-foot">
-                <span className="mono">{formatTime(run.elapsed)}</span>
-                <span className="mono">{remaining !== null ? `-${formatTime(remaining)}` : ""}</span>
-                <span className="buttons">
-                  {run.paused ? (
-                    <button onClick={() => onResume(run.cue)}>{t("action.resume")}</button>
-                  ) : (
-                    <button onClick={() => onPause(run.cue)}>{t("action.pause")}</button>
-                  )}
-                  <button onClick={() => onStop(run.cue)}>{t("action.stop")}</button>
-                </span>
+                <span>{formatTime(run.elapsed)}</span>
+                <span className="active-state">{t(`phase.${state}`)}</span>
+                <span>{remaining !== null ? `−${formatTime(remaining)}` : ""}</span>
               </div>
             </li>
           );
