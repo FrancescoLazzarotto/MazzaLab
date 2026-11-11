@@ -141,8 +141,9 @@ fn setup(app: &mut App) -> Result<(), Box<dyn Error>> {
     let lang = Lang::detect();
     let ui_dir = ui_dir(app);
     let show = initial_show(app)?;
-    let workspace = load(&show)?;
-    let server = tauri::async_runtime::block_on(start_server(&show, workspace, ui_dir.clone()))?;
+    let (workspace, recovered) = load(&show)?;
+    let server =
+        tauri::async_runtime::block_on(start_server(&show, workspace, recovered, ui_dir.clone()))?;
     tracing::info!(show = %show.display(), osc = %server.osc_udp, http = %server.http, "show server running");
     let session = Session { show, server };
 
@@ -260,7 +261,7 @@ async fn new_show(app: AppHandle) {
             &error.to_string(),
         );
     }
-    switch_to(&app, &mut session, path, workspace).await;
+    switch_to(&app, &mut session, path, workspace, false).await;
 }
 
 /// File > Open.
@@ -278,7 +279,9 @@ async fn open_show(app: AppHandle) {
         return;
     };
     match load(&path) {
-        Ok(workspace) => switch_to(&app, &mut session, path, workspace).await,
+        Ok((workspace, recovered)) => {
+            switch_to(&app, &mut session, path, workspace, recovered).await;
+        }
         Err(error) => report(
             &app,
             lang.t(
@@ -336,7 +339,9 @@ async fn save_show_as(app: AppHandle) {
     };
     let saved = current.server.handle.save_copy(path.clone()).await;
     match saved.and_then(|()| load(&path)) {
-        Ok(workspace) => switch_to(&app, &mut session, path, workspace).await,
+        Ok((workspace, recovered)) => {
+            switch_to(&app, &mut session, path, workspace, recovered).await;
+        }
         Err(error) => report(
             &app,
             lang.t(
@@ -408,9 +413,9 @@ async fn confirm_discard(app: &AppHandle, session: Option<&Session>, lang: Lang)
     match answer.await.unwrap_or_default() {
         MessageDialogResult::Yes => {}
         MessageDialogResult::Custom(label) if label == save => {}
-        MessageDialogResult::No => return true,
+        MessageDialogResult::No => return discard(session),
         MessageDialogResult::Custom(label) if label == lang.t("Don't Save", "Non salvare") => {
-            return true;
+            return discard(session);
         }
         _ => return false,
     }
@@ -430,6 +435,13 @@ async fn confirm_discard(app: &AppHandle, session: Option<&Session>, lang: Lang)
     }
 }
 
+/// The operator chose to throw the unsaved changes away: the autosave of
+/// them goes too, or it would bring them back next time.
+fn discard(session: &Session) -> bool {
+    mazzalab_project::discard_autosave(&session.show);
+    true
+}
+
 /// Stops the current server, starts one for `show` and points the window
 /// at it.
 async fn switch_to(
@@ -437,13 +449,14 @@ async fn switch_to(
     session: &mut Option<Session>,
     show: PathBuf,
     workspace: Workspace,
+    recovered: bool,
 ) {
     let desktop = app.state::<Desktop>();
     if let Some(previous) = session.take() {
         // Waits for the ports to be released so the new server gets them.
         previous.server.stop().await;
     }
-    let server = match start_server(&show, workspace, desktop.ui_dir.clone()).await {
+    let server = match start_server(&show, workspace, recovered, desktop.ui_dir.clone()).await {
         Ok(server) => server,
         Err(error) => {
             return report(
@@ -561,17 +574,29 @@ fn base_dir(show: &Path) -> PathBuf {
 
 /// Reads a show (an empty one when the file does not exist yet) and fills in
 /// the lengths of its audio files.
-fn load(show: &Path) -> Result<Workspace, String> {
-    let mut workspace = mazzalab_server::load_or_create(show)?;
+/// Loads a show, and says whether what it loaded are the unsaved changes an
+/// earlier session left behind (a crash, a power cut) rather than the file
+/// as it was last saved. The window says so, and closing without saving
+/// goes back to the saved file.
+fn load(show: &Path) -> Result<(Workspace, bool), String> {
+    let saved = mazzalab_server::load_or_create(show);
+    let (mut workspace, recovered) = match mazzalab_server::recoverable(show) {
+        Some(autosaved) => {
+            tracing::warn!(show = %show.display(), "recovered unsaved changes from an autosave");
+            (autosaved, true)
+        }
+        None => (saved?, false),
+    };
     for (cue, problem) in mazzalab_audio::probe_workspace(&mut workspace, &base_dir(show)) {
         tracing::warn!(%cue, %problem, "audio file unavailable");
     }
-    Ok(workspace)
+    Ok((workspace, recovered))
 }
 
 async fn start_server(
     show: &Path,
     workspace: Workspace,
+    recovered: bool,
     ui_dir: Option<PathBuf>,
 ) -> Result<RunningServer, Box<dyn Error>> {
     let base_dir = base_dir(show);
@@ -586,6 +611,7 @@ async fn start_server(
     let config = ServerConfig {
         show_path: Some(show.to_path_buf()),
         ui_dir,
+        recovered,
         ..ServerConfig::default()
     };
 

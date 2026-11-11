@@ -39,6 +39,10 @@ struct Args {
     /// Run without audio output.
     #[arg(long)]
     no_audio: bool,
+    /// Start from the unsaved changes an earlier session left behind, if
+    /// there are any, instead of the show file as it was last saved.
+    #[arg(long)]
+    recover: bool,
 }
 
 #[tokio::main]
@@ -57,6 +61,18 @@ async fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+    let mut recovered = false;
+    if let Some(autosaved) = mazzalab_server::recoverable(&args.show) {
+        if args.recover {
+            tracing::info!("starting from the unsaved changes of an earlier session");
+            workspace = autosaved;
+            recovered = true;
+        } else {
+            tracing::warn!(
+                "an earlier session left unsaved changes behind; start with --recover to load them"
+            );
+        }
+    }
     // Media paths are relative to the show file's folder.
     let base_dir = args
         .show
@@ -73,6 +89,8 @@ async fn main() -> ExitCode {
         udp_reply_port: Some(args.udp_reply_port),
         http_port: args.http_port,
         ui_dir: args.ui_dir,
+        recovered,
+        ..ServerConfig::default()
     };
     let no_audio = args.no_audio;
     let server = match mazzalab_server::start(config, workspace, move |completion| {

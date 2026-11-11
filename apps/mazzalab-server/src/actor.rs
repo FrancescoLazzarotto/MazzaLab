@@ -242,13 +242,30 @@ impl ShowHandle {
     }
 }
 
+/// How the show's file is looked after while the show runs.
+#[derive(Debug, Clone)]
+pub struct Persistence {
+    /// The show file; without one nothing is written.
+    pub path: Option<PathBuf>,
+    /// Unsaved changes are written next to the show this long after they
+    /// are made; `None` turns autosave off.
+    pub autosave: Option<Duration>,
+    /// How many replaced versions of the show file are kept.
+    pub backups: usize,
+}
+
 /// Starts the actor task. `make_outputs` receives the completion channel the
 /// outputs use to report finished actions.
 pub fn spawn(
     show: Show,
-    path: Option<PathBuf>,
+    persistence: Persistence,
     make_outputs: impl FnOnce(Completion) -> Vec<Box<dyn Output>>,
 ) -> (ShowHandle, tokio::task::JoinHandle<()>) {
+    let Persistence {
+        path,
+        autosave,
+        backups,
+    } = persistence;
     let (requests, receiver) = mpsc::channel(256);
     let (updates, _) = broadcast::channel(1024);
     let (finished_tx, finished_rx) = mpsc::unbounded_channel();
@@ -264,10 +281,16 @@ pub fn spawn(
         workspace_id: show.workspace().id.to_string().into(),
         base_dir: base_dir.clone(),
     };
+    let show_revision = show.revision();
     let actor = Actor {
         show,
         start: Instant::now(),
         path,
+        autosave,
+        backups,
+        // Recovered changes are already in the autosave they came from.
+        autosaved: show_revision,
+        autosave_due: None,
         base_dir,
         outputs,
         updates,
@@ -286,6 +309,12 @@ struct Actor {
     show: Show,
     start: Instant,
     path: Option<PathBuf>,
+    autosave: Option<Duration>,
+    backups: usize,
+    /// The revision last written to the autosave file.
+    autosaved: u64,
+    /// When the changes made since then are written.
+    autosave_due: Option<Instant>,
     base_dir: Option<Arc<Path>>,
     outputs: Vec<Box<dyn Output>>,
     updates: broadcast::Sender<Update>,
@@ -356,9 +385,21 @@ impl Actor {
             Request::Save { reply } => {
                 let result = match &self.path {
                     None => Err("the show has no file to save to".to_owned()),
-                    Some(path) => mazzalab_project::save(path, self.show.workspace())
-                        .map(|()| self.show.mark_saved())
-                        .map_err(|error| error.to_string()),
+                    Some(path) => {
+                        mazzalab_project::save_with_backups(
+                            path,
+                            self.show.workspace(),
+                            self.backups,
+                        )
+                        .map(|()| {
+                            self.show.mark_saved();
+                            // What was autosaved is now in the show file.
+                            mazzalab_project::discard_autosave(path);
+                            self.autosaved = self.show.revision();
+                            self.autosave_due = None;
+                        })
+                        .map_err(|error| error.to_string())
+                    }
                 };
                 let _ = reply.send(result);
             }
@@ -449,9 +490,37 @@ impl Actor {
         }
     }
 
+    /// Writes unsaved changes next to the show file once they have been
+    /// around for the autosave interval.
+    fn autosave(&mut self) {
+        let (Some(path), Some(interval)) = (&self.path, self.autosave) else {
+            return;
+        };
+        if !self.show.is_dirty() || self.autosaved == self.show.revision() {
+            self.autosave_due = None;
+            return;
+        }
+        let due = *self
+            .autosave_due
+            .get_or_insert_with(|| Instant::now() + interval);
+        if Instant::now() < due {
+            return;
+        }
+        self.autosave_due = None;
+        self.autosaved = self.show.revision();
+        if let Err(error) = mazzalab_project::autosave(path, self.show.workspace()) {
+            tracing::warn!(%error, "autosave failed");
+            let _ = self.updates.send(Update::Notice(Arc::new(Notice {
+                level: NoticeLevel::Warning,
+                message: format!("Autosave failed: {error}"),
+            })));
+        }
+    }
+
     /// Advances the show, feeds outputs and broadcasts what changed.
     fn sync(&mut self) {
         self.advance();
+        self.autosave();
         let events = self.show.take_events();
         if !events.is_empty() {
             for output in &mut self.outputs {
@@ -534,6 +603,9 @@ impl Actor {
         };
         if let Some(deadline) = self.show.next_deadline() {
             wake = wake.min(self.start + deadline);
+        }
+        if let Some(due) = self.autosave_due {
+            wake = wake.min(due);
         }
         wake
     }

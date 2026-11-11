@@ -20,6 +20,7 @@ pub mod protocol;
 use std::io;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use mazzalab_core::Workspace;
 use mazzalab_show::Show;
@@ -46,6 +47,14 @@ pub struct ServerConfig {
     pub http_port: u16,
     /// Directory with the built web UI to serve.
     pub ui_dir: Option<PathBuf>,
+    /// Unsaved changes are written next to the show file this long after
+    /// they are made; `None` turns autosave off.
+    pub autosave: Option<Duration>,
+    /// How many replaced versions of the show file are kept on save.
+    pub backups: usize,
+    /// The workspace comes from an autosave ([`recoverable`]): the show
+    /// starts out with unsaved changes.
+    pub recovered: bool,
 }
 
 impl Default for ServerConfig {
@@ -57,6 +66,9 @@ impl Default for ServerConfig {
             udp_reply_port: Some(mazzalab_osc::DEFAULT_REPLY_PORT),
             http_port: DEFAULT_HTTP_PORT,
             ui_dir: None,
+            autosave: Some(Duration::from_secs(15)),
+            backups: 10,
+            recovered: false,
         }
     }
 }
@@ -103,6 +115,12 @@ pub fn load_or_create(path: &Path) -> Result<Workspace, String> {
     }
 }
 
+/// The unsaved changes an earlier session left behind for this show, if
+/// any: start the server on them with [`ServerConfig::recovered`] set.
+pub fn recoverable(path: &Path) -> Option<Workspace> {
+    mazzalab_project::recoverable(path)
+}
+
 /// Binds every socket and starts serving `workspace`.
 pub async fn start(
     config: ServerConfig,
@@ -116,7 +134,17 @@ pub async fn start(
     let http_listener = TcpListener::bind((config.bind, config.http_port)).await?;
     let http = http_listener.local_addr()?;
 
-    let (handle, actor) = actor::spawn(Show::new(workspace), config.show_path, make_outputs);
+    let show = if config.recovered {
+        Show::recovered(workspace)
+    } else {
+        Show::new(workspace)
+    };
+    let persistence = actor::Persistence {
+        path: config.show_path,
+        autosave: config.autosave,
+        backups: config.backups,
+    };
+    let (handle, actor) = actor::spawn(show, persistence, make_outputs);
     let app = router(handle.clone(), config.ui_dir);
     let tasks = vec![
         actor,
