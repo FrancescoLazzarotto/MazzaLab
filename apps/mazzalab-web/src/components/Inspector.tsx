@@ -12,7 +12,7 @@ import type {
   RunningCue,
   WorkspaceSettings,
 } from "../api/types";
-import { displayName, fileName, flatten, needsTarget, problemOf, typeLabel } from "../cues";
+import { displayName, flatten, needsTarget, problemOf, typeLabel } from "../cues";
 import { useI18n } from "../i18n";
 import { CheckField, LevelField, NumberField, SelectField, TextField, TimeField } from "./fields";
 import { CueIcon, Icon } from "./icons";
@@ -80,11 +80,6 @@ export function Inspector({
   return (
     <section className="inspector">
       <header className="inspector-head">
-        <span className="inspector-title">
-          <CueIcon type={cue.type} />
-          <strong>{cue.number ?? "–"}</strong>
-          <span className="inspector-name">{displayName(cue)}</span>
-        </span>
         <nav className="inspector-tabs" role="tablist">
           {tabs.map((name) => (
             <button key={name} role="tab" aria-selected={name === current} className={name === current ? "active" : undefined} onClick={() => setTab(name)}>
@@ -94,9 +89,14 @@ export function Inspector({
         </nav>
         {problem && (
           <span className={problem === "not_supported" ? "problem soft" : "problem"}>
-            <Icon name="warning" size={14} /> {t(`problem.${problem}`)}
+            <Icon name="warning" size={13} /> {t(`problem.${problem}`)}
           </span>
         )}
+        <span className="inspector-title">
+          <CueIcon type={cue.type} size={14} />
+          <span className="inspector-number">{cue.number ?? "–"}</span>
+          <span className="inspector-name">{displayName(cue)}</span>
+        </span>
       </header>
       <fieldset className="inspector-body" disabled={!editable}>
         {current === "basics" && <Basics cue={cue} allCues={allCues} set={set} />}
@@ -217,25 +217,25 @@ function AudioTime({
   };
   return (
     <div className="audio-time">
-      <div className="row file-row">
-        <TextField label={t("inspector.file")} value={cue.file ?? ""} placeholder="media/file.wav" onCommit={(file) => setFile(file || undefined)} />
-        <button onClick={() => picker.current?.click()} disabled={progress !== null}>
-          {progress === null ? t("inspector.chooseFile") : `${Math.round(progress * 100)}%`}
-        </button>
-        <input
-          ref={picker}
-          type="file"
-          accept="audio/*,.wav,.aif,.aiff,.flac,.mp3,.m4a,.ogg,.opus"
-          hidden
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            if (file) importFile(file);
-            event.target.value = "";
-          }}
-        />
-      </div>
       <Waveform connection={connection} cue={cue} run={run} editable={editable} onChange={set} />
       <div className="row wrap">
+        <div className="file-field">
+          <TextField label={t("inspector.file")} value={cue.file ?? ""} placeholder="media/file.wav" onCommit={(file) => setFile(file || undefined)} />
+          <button onClick={() => picker.current?.click()} disabled={progress !== null}>
+            {progress === null ? t("inspector.chooseFile") : `${Math.round(progress * 100)}%`}
+          </button>
+          <input
+            ref={picker}
+            type="file"
+            accept="audio/*,.wav,.aif,.aiff,.flac,.mp3,.m4a,.ogg,.opus"
+            hidden
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) importFile(file);
+              event.target.value = "";
+            }}
+          />
+        </div>
         <TimeField label={t("inspector.startTime")} value={cue.start_time ?? 0} onCommit={(start_time) => set({ start_time })} />
         <TimeField label={t("inspector.endTime")} value={cue.end_time} optional onCommit={(end_time) => set({ end_time })} />
         <TimeField label={t("inspector.fadeIn")} value={cue.fade_in ?? 0} onCommit={(fade_in) => set({ fade_in })} />
@@ -254,7 +254,6 @@ function AudioLevels({ cue, outputs, set }: { cue: AudioCue; outputs: number; se
     <div className="form-columns">
       <div className="form-column">
         <LevelField label={t("inspector.level")} value={cue.level_db ?? 0} onCommit={(level_db) => set({ level_db })} />
-        <p className="hint">{t("inspector.levelHint")}</p>
       </div>
       <div className="form-column grow">
         <span className="field-label">{t("inspector.matrix")}</span>
@@ -324,7 +323,6 @@ function TypeSettings({ cue, settings, set }: { cue: Cue; settings: WorkspaceSet
               ]}
               onChange={(patch) => set({ patch: patch || undefined })}
             />
-            <p className="hint">{t("inspector.networkHint")}</p>
           </div>
           <div className="form-column grow">
             <TextField
@@ -383,10 +381,9 @@ function ManyInspector({ cues, editable, onChangeMany }: { cues: Cue[]; editable
   return (
     <section className="inspector">
       <header className="inspector-head">
-        <span className="inspector-title">
-          <strong>{cues.length}</strong> {t("inspector.selected")}
+        <span className="inspector-many">
+          {cues.length} {t("inspector.selected")}
         </span>
-        <span className="muted inspector-files">{audio.length > 0 ? audio.map((cue) => (cue.file ? fileName(cue.file) : "–")).slice(0, 4).join(", ") : ""}</span>
       </header>
       <fieldset className="inspector-body" disabled={!editable}>
         <div className="form-columns">

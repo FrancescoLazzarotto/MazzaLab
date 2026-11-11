@@ -204,7 +204,7 @@ export function LevelField({
   // sent when the fader is released.
   const [dragging, setDragging] = useState<number | null>(null);
   const shown = dragging ?? value;
-  const [draft, setDraft, revert] = useDraft(String(Math.round(shown * 10) / 10));
+  const [draft, setDraft, revert] = useDraft((Math.round(shown * 10) / 10).toFixed(1));
   const commitText = () => {
     const parsed = Number.parseFloat(draft.replace(",", "."));
     if (Number.isFinite(parsed) && parsed !== value) onCommit(Math.min(max, parsed));
@@ -230,17 +230,20 @@ export function LevelField({
           }}
           onDoubleClick={() => onCommit(0)}
         />
-        <input
-          className="level-number"
-          inputMode="decimal"
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          onBlur={commitText}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") commitText();
-            if (event.key === "Escape") revert();
-          }}
-        />
+        <span className="unit-input">
+          <input
+            inputMode="decimal"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onBlur={commitText}
+            onFocus={(event) => event.target.select()}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") commitText();
+              if (event.key === "Escape") revert();
+            }}
+          />
+          <span>dB</span>
+        </span>
       </div>
     </Field>
   );

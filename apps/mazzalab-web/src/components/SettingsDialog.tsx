@@ -11,7 +11,7 @@ const PROTOCOLS: NetworkProtocol[] = ["osc_udp", "osc_tcp", "plain_udp", "plain_
 type Tab = "general" | "audio" | "network" | "keys";
 
 const SHORTCUTS: [string, string][] = [
-  ["Space", "keys.go"],
+  ["Space", "action.go"],
   ["Esc", "keys.panic"],
   ["↑ ↓", "keys.select"],
   ["Shift + ↑ ↓", "keys.extend"],
@@ -72,8 +72,8 @@ export function SettingsDialog({
               </button>
             ))}
           </nav>
-          <button className="link" onClick={onClose} aria-label={t("action.close")}>
-            <Icon name="close" />
+          <button className="icon-button quiet" onClick={onClose} aria-label={t("action.close")}>
+            <Icon name="close" size={14} />
           </button>
         </header>
         <div className="dialog-body">
@@ -88,7 +88,6 @@ export function SettingsDialog({
                 />
                 <TimeField label={t("settings.panic")} value={settings.panic_duration} onCommit={(value) => set({ panic_duration: value ?? 0 })} />
               </div>
-              <p className="hint">{t("settings.doubleGoHint")}</p>
               <h3>{t("settings.thisDevice")}</h3>
               <CheckField
                 label={t("settings.follow")}
@@ -238,14 +237,15 @@ function NetworkTab({ patches, onChange }: { patches: NetworkPatch[]; onChange: 
             options={PROTOCOLS.map((protocol) => ({ value: protocol, label: t(`protocol.${protocol}`) }))}
             onChange={(protocol) => update(index, { protocol })}
           />
-          <button className="link danger" title={t("action.delete")} onClick={() => onChange(patches.filter((_, position) => position !== index))}>
-            <Icon name="trash" />
+          <button className="icon-button quiet" title={t("action.delete")} onClick={() => onChange(patches.filter((_, position) => position !== index))}>
+            <Icon name="trash" size={14} />
           </button>
         </div>
       ))}
       <div>
         <button onClick={add}>
-          <Icon name="plus" size={14} /> {t("settings.addPatch")}
+          <Icon name="plus" size={12} />
+          {t("settings.addPatch")}
         </button>
       </div>
       <p className="hint">{t("settings.networkHint")}</p>
