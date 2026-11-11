@@ -11,18 +11,16 @@ export function Toolbox({ onAdd }: { onAdd: (type: CueType) => void }) {
     <div className="toolbox" role="toolbar" aria-label={t("action.addCue")}>
       {TOOLBOX.map((group, index) => (
         <Fragment key={group[0]}>
-          {index > 0 && <span className="toolbox-gap" />}
-          {group.map((type) => (
-            <button
-              key={type}
-              className={WORKING_TYPES.has(type) ? "tool" : "tool planned"}
-              title={WORKING_TYPES.has(type) ? typeLabel(type) : `${typeLabel(type)} — ${t("problem.not_supported")}`}
-              onClick={() => onAdd(type)}
-            >
-              <CueIcon type={type} size={18} />
-              <span>{typeLabel(type)}</span>
-            </button>
-          ))}
+          {index > 0 && <span className="divider" />}
+          {group.map((type) => {
+            const works = WORKING_TYPES.has(type);
+            const label = works ? typeLabel(type) : `${typeLabel(type)} — ${t("problem.not_supported")}`;
+            return (
+              <button key={type} className={works ? "tool" : "tool planned"} data-type={type} title={label} aria-label={label} onClick={() => onAdd(type)}>
+                <CueIcon type={type} size={17} />
+              </button>
+            );
+          })}
         </Fragment>
       ))}
     </div>
