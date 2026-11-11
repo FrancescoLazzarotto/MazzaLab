@@ -3,7 +3,8 @@
 //! Audio cue playback:
 //!
 //! * [`probe`] reads a file's length and format (used to fill
-//!   `AudioCue::media_duration` so the engine knows when cues end);
+//!   `AudioCue::media_duration` so the engine knows when cues end) and
+//!   [`waveform`] reduces a file to peaks for display;
 //! * [`output_devices`] lists the machine's outputs, and a show picks one
 //!   with a [`DeviceRequest`];
 //! * a reader thread per playing cue decodes ahead into a lock-free ring
@@ -18,6 +19,7 @@
 mod decode;
 mod device;
 mod mixer;
+mod waveform;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -34,6 +36,7 @@ use thiserror::Error;
 pub use decode::{MediaInfo, probe};
 pub use device::{DeviceInfo, DeviceRequest, OutputDevice, output_devices};
 pub use mixer::Meters;
+pub use waveform::{Waveform, waveform};
 
 use decode::Playback;
 use mixer::{Mixer, MixerCommand, MixerEvent, Routes, Voice, VoiceConfig};

@@ -90,6 +90,40 @@ pub(crate) fn open(path: &Path) -> Result<Source, AudioError> {
     })
 }
 
+impl Source {
+    /// Decodes the whole file from the current position, handing each block
+    /// of interleaved samples to `sink` together with its channel count.
+    pub(crate) fn decode_all(&mut self, mut sink: impl FnMut(&[f32], usize)) {
+        let mut interleaved = Vec::new();
+        loop {
+            let packet = match self.format.next_packet() {
+                Ok(Some(packet)) => packet,
+                Ok(None) => return,
+                Err(SymphoniaError::DecodeError(_)) => continue,
+                Err(error) => {
+                    tracing::warn!(%error, "audio file read error");
+                    return;
+                }
+            };
+            if packet.track_id != self.track_id {
+                continue;
+            }
+            let decoded = match self.decoder.decode(&packet) {
+                Ok(decoded) => decoded,
+                Err(SymphoniaError::DecodeError(_) | SymphoniaError::IoError(_)) => continue,
+                Err(error) => {
+                    tracing::warn!(%error, "audio decode error");
+                    return;
+                }
+            };
+            let channels = decoded.spec().channels().count().max(1);
+            interleaved.resize(decoded.samples_interleaved(), 0.0);
+            decoded.copy_to_slice_interleaved(&mut interleaved[..]);
+            sink(&interleaved, channels);
+        }
+    }
+}
+
 /// Reads a file's format information without decoding it.
 pub fn probe(path: &Path) -> Result<MediaInfo, AudioError> {
     open(path).map(|source| source.info)
