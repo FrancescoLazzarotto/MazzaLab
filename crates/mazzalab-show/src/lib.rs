@@ -109,6 +109,17 @@ pub enum Command {
     UpdateSettings {
         settings: WorkspaceSettings,
     },
+    /// Sets (or clears, with `None`) the numbers of several cues at once, so
+    /// that renumbering never trips over the numbers it is about to replace.
+    SetNumbers {
+        numbers: Vec<(CueId, Option<String>)>,
+    },
+    /// Several edits applied as one: either all of them succeed, as a single
+    /// undo step, or the show is left untouched. Only editing commands are
+    /// allowed inside.
+    Batch {
+        commands: Vec<Command>,
+    },
     Undo,
     Redo,
 }
@@ -135,6 +146,8 @@ pub enum ShowError {
     NothingToUndo,
     #[error("nothing to redo")]
     NothingToRedo,
+    #[error("only editing commands can be batched")]
+    NotAnEdit,
     #[error("{0}")]
     Invalid(String),
 }
@@ -310,51 +323,21 @@ impl Show {
                 }
                 self.current_list = list;
             }
-            Command::UpdateCue { cue } => self.edit(|workspace| update_cue(workspace, cue))?,
-            Command::InsertCue {
-                container,
-                index,
-                cue,
-            } => self.edit(|workspace| insert_cue(workspace, container, index, cue))?,
-            Command::DeleteCue { cue } => self.edit(|workspace| {
-                workspace
-                    .remove_cue(cue)
-                    .map(drop)
-                    .ok_or(ShowError::UnknownCue(cue))
+            Command::Batch { commands } => self.edit(|workspace| {
+                commands
+                    .into_iter()
+                    .try_for_each(|command| apply_edit(workspace, command))
             })?,
-            Command::MoveCue {
-                cue,
-                container,
-                index,
-            } => self.edit(|workspace| move_cue(workspace, cue, container, index))?,
-            Command::AddCueList { name } => self.edit(|workspace| {
-                workspace.cue_lists.push(CueList::new(name));
-                Ok(())
-            })?,
-            Command::RenameCueList { list, name } => self.edit(|workspace| {
-                workspace
-                    .cue_list_mut(list)
-                    .map(|cue_list| cue_list.name = name)
-                    .ok_or(ShowError::UnknownCueList(list))
-            })?,
-            Command::DeleteCueList { list } => self.edit(|workspace| {
-                if workspace.cue_list(list).is_none() {
-                    return Err(ShowError::UnknownCueList(list));
-                }
-                if workspace.cue_lists.len() == 1 {
-                    return Err(ShowError::LastCueList);
-                }
-                workspace.cue_lists.retain(|cue_list| cue_list.id != list);
-                Ok(())
-            })?,
-            Command::RenameWorkspace { name } => self.edit(|workspace| {
-                workspace.name = name;
-                Ok(())
-            })?,
-            Command::UpdateSettings { settings } => self.edit(|workspace| {
-                workspace.settings = settings;
-                Ok(())
-            })?,
+            edit @ (Command::UpdateCue { .. }
+            | Command::InsertCue { .. }
+            | Command::DeleteCue { .. }
+            | Command::MoveCue { .. }
+            | Command::AddCueList { .. }
+            | Command::RenameCueList { .. }
+            | Command::DeleteCueList { .. }
+            | Command::RenameWorkspace { .. }
+            | Command::UpdateSettings { .. }
+            | Command::SetNumbers { .. }) => self.edit(|workspace| apply_edit(workspace, edit))?,
             Command::Undo => {
                 let previous = self.undo.pop().ok_or(ShowError::NothingToUndo)?;
                 let current = self.replace_workspace(previous);
@@ -424,6 +407,32 @@ impl Show {
         }
     }
 
+    /// Records what the media layer found out about an audio cue's file.
+    /// This is not an edit: it leaves undo history and the saved state alone.
+    /// Returns whether anything changed.
+    pub fn set_media_info(
+        &mut self,
+        cue: CueId,
+        duration: Option<Duration>,
+        channels: Option<u8>,
+    ) -> bool {
+        let changed = self.engine.edit_workspace(|workspace| {
+            let Some(CueKind::Audio(audio)) = workspace.find_cue_mut(cue).map(|cue| &mut cue.kind)
+            else {
+                return false;
+            };
+            let duration = duration.or(audio.media_duration);
+            let changed = audio.media_duration != duration || audio.media_channels != channels;
+            audio.media_duration = duration;
+            audio.media_channels = channels;
+            changed
+        });
+        if changed {
+            self.revision += 1;
+        }
+        changed
+    }
+
     fn list_of(&self, cue: CueId) -> Result<CueId, ShowError> {
         self.workspace()
             .list_of(cue)
@@ -477,6 +486,83 @@ impl Show {
             self.selection = None;
         }
     }
+}
+
+/// Applies one editing command to the workspace.
+fn apply_edit(workspace: &mut Workspace, command: Command) -> Result<(), ShowError> {
+    match command {
+        Command::UpdateCue { cue } => update_cue(workspace, cue),
+        Command::InsertCue {
+            container,
+            index,
+            cue,
+        } => insert_cue(workspace, container, index, cue),
+        Command::DeleteCue { cue } => workspace
+            .remove_cue(cue)
+            .map(drop)
+            .ok_or(ShowError::UnknownCue(cue)),
+        Command::MoveCue {
+            cue,
+            container,
+            index,
+        } => move_cue(workspace, cue, container, index),
+        Command::AddCueList { name } => {
+            workspace.cue_lists.push(CueList::new(name));
+            Ok(())
+        }
+        Command::RenameCueList { list, name } => workspace
+            .cue_list_mut(list)
+            .map(|cue_list| cue_list.name = name)
+            .ok_or(ShowError::UnknownCueList(list)),
+        Command::DeleteCueList { list } => {
+            if workspace.cue_list(list).is_none() {
+                return Err(ShowError::UnknownCueList(list));
+            }
+            if workspace.cue_lists.len() == 1 {
+                return Err(ShowError::LastCueList);
+            }
+            workspace.cue_lists.retain(|cue_list| cue_list.id != list);
+            Ok(())
+        }
+        Command::RenameWorkspace { name } => {
+            workspace.name = name;
+            Ok(())
+        }
+        Command::UpdateSettings { settings } => {
+            workspace.settings = settings;
+            Ok(())
+        }
+        Command::SetNumbers { numbers } => set_numbers(workspace, numbers),
+        Command::Batch { commands } => commands
+            .into_iter()
+            .try_for_each(|command| apply_edit(workspace, command)),
+        _ => Err(ShowError::NotAnEdit),
+    }
+}
+
+fn set_numbers(
+    workspace: &mut Workspace,
+    numbers: Vec<(CueId, Option<String>)>,
+) -> Result<(), ShowError> {
+    // Clear first, so a cue can take the number another one is giving up.
+    for (cue, _) in &numbers {
+        workspace
+            .find_cue_mut(*cue)
+            .ok_or(ShowError::UnknownCue(*cue))?
+            .number = None;
+    }
+    for (cue, number) in numbers {
+        let number = number.filter(|number| !number.is_empty());
+        if let Some(number) = &number
+            && workspace.find_by_number(number).is_some()
+        {
+            return Err(ShowError::DuplicateNumber(number.clone()));
+        }
+        if let Some(target) = workspace.find_cue_mut(cue) {
+            target.number = number;
+        }
+    }
+    Ok(())
 }
 
 fn update_cue(workspace: &mut Workspace, mut cue: Cue) -> Result<(), ShowError> {

@@ -314,3 +314,96 @@ fn osc_selection_steps_through_the_list() {
         Some(json!("10"))
     );
 }
+
+#[test]
+fn batch_is_one_undo_step_and_all_or_nothing() {
+    let mut show = show();
+    let before = show.workspace().clone();
+    show.execute(Command::Batch {
+        commands: vec![
+            Command::DeleteCue { cue: id(1) },
+            Command::InsertCue {
+                container: Container::List(LIST),
+                index: Some(0),
+                cue: wait(20, 1),
+            },
+        ],
+    })
+    .unwrap();
+    assert!(show.workspace().find_cue(id(1)).is_none());
+    assert!(show.workspace().find_cue(id(20)).is_some());
+
+    show.execute(Command::Undo).unwrap();
+    assert_eq!(show.workspace(), &before);
+
+    // The second edit fails (duplicate number), so the first is rolled back.
+    let failed = show.execute(Command::Batch {
+        commands: vec![
+            Command::DeleteCue { cue: id(2) },
+            Command::InsertCue {
+                container: Container::List(LIST),
+                index: None,
+                cue: wait(21, 1).with_number("1"),
+            },
+        ],
+    });
+    assert_eq!(failed, Err(ShowError::DuplicateNumber("1".into())));
+    assert_eq!(show.workspace(), &before);
+
+    // Transport commands have no place in a batch.
+    let failed = show.execute(Command::Batch {
+        commands: vec![Command::Panic],
+    });
+    assert_eq!(failed, Err(ShowError::NotAnEdit));
+}
+
+#[test]
+fn set_numbers_can_swap_and_shift_numbers() {
+    let mut show = show();
+    show.execute(Command::SetNumbers {
+        numbers: vec![
+            (id(1), Some("2".into())),
+            (id(2), Some("1".into())),
+            (id(10), None),
+        ],
+    })
+    .unwrap();
+    let number = |show: &Show, cue| show.workspace().find_cue(id(cue)).unwrap().number.clone();
+    assert_eq!(number(&show, 1), Some("2".into()));
+    assert_eq!(number(&show, 2), Some("1".into()));
+    assert_eq!(number(&show, 10), None);
+
+    // Colliding with a cue that keeps its number is refused.
+    let failed = show.execute(Command::SetNumbers {
+        numbers: vec![(id(1), Some("11".into()))],
+    });
+    assert_eq!(failed, Err(ShowError::DuplicateNumber("11".into())));
+    assert_eq!(number(&show, 1), Some("2".into()));
+}
+
+#[test]
+fn media_info_is_not_an_edit() {
+    use mazzalab_core::AudioCue;
+
+    let mut workspace = Workspace::new("Media");
+    let cue = Cue::new(CueKind::Audio(AudioCue {
+        file: Some("a.wav".into()),
+        ..AudioCue::default()
+    }))
+    .with_id(id(1));
+    workspace.cue_lists[0].cues.push(cue);
+    let mut show = Show::new(workspace);
+    let revision = show.revision();
+
+    assert!(show.set_media_info(id(1), Some(Duration::from_secs(3)), Some(2)));
+    assert!(!show.is_dirty());
+    assert!(show.revision() > revision);
+    assert!(show.execute(Command::Undo).is_err());
+    let CueKind::Audio(audio) = &show.workspace().find_cue(id(1)).unwrap().kind else {
+        panic!("not an audio cue");
+    };
+    assert_eq!(audio.media_duration, Some(Duration::from_secs(3)));
+    assert_eq!(audio.media_channels, Some(2));
+    // Telling it the same thing again changes nothing.
+    assert!(!show.set_media_info(id(1), Some(Duration::from_secs(3)), Some(2)));
+}
