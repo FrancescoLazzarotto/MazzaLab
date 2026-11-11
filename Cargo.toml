@@ -17,6 +17,7 @@ publish = false
 mazzalab-audio = { path = "crates/mazzalab-audio" }
 mazzalab-core = { path = "crates/mazzalab-core" }
 mazzalab-engine = { path = "crates/mazzalab-engine" }
+mazzalab-network = { path = "crates/mazzalab-network" }
 mazzalab-osc = { path = "crates/mazzalab-osc" }
 mazzalab-project = { path = "crates/mazzalab-project" }
 mazzalab-show = { path = "crates/mazzalab-show" }
