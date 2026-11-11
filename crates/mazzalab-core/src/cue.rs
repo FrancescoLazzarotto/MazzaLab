@@ -384,6 +384,18 @@ pub struct AudioCue {
     pub level_db: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub output_patch: Option<String>,
+    /// Fade from silence applied when the cue starts.
+    #[serde(default, with = "seconds", skip_serializing_if = "Duration::is_zero")]
+    pub fade_in: Duration,
+    /// Fade to silence applied before the cue's natural end (only when the
+    /// length of the action is known).
+    #[serde(default, with = "seconds", skip_serializing_if = "Duration::is_zero")]
+    pub fade_out: Duration,
+    /// Crosspoint levels in dB, `matrix[file channel][output channel]`;
+    /// `None` entries are silent. Without a matrix the default routing is
+    /// used: mono to outputs 1 and 2, otherwise channel N to output N.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub matrix: Option<Vec<Vec<Option<f64>>>>,
     /// Length of the media file, filled in once the media layer has probed it.
     #[serde(
         default,
@@ -391,6 +403,9 @@ pub struct AudioCue {
         skip_serializing_if = "Option::is_none"
     )]
     pub media_duration: Option<Duration>,
+    /// Channel count of the media file, filled in with `media_duration`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub media_channels: Option<u8>,
 }
 
 impl Default for AudioCue {
@@ -404,7 +419,11 @@ impl Default for AudioCue {
             rate: 1.0,
             level_db: 0.0,
             output_patch: None,
+            fade_in: Duration::ZERO,
+            fade_out: Duration::ZERO,
+            matrix: None,
             media_duration: None,
+            media_channels: None,
         }
     }
 }

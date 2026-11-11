@@ -39,6 +39,49 @@ fn default_panic_duration() -> Duration {
     Duration::from_secs(1)
 }
 
+/// Which audio device the show plays on, and how it is opened.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+pub struct AudioSettings {
+    /// Device identifier as listed by the audio backend; `None` follows the
+    /// system default output.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub device: Option<String>,
+    /// Requested sample rate; `None` uses the device's own.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sample_rate: Option<u32>,
+    /// Requested buffer size in frames; `None` lets the driver choose.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub buffer_size: Option<u32>,
+    /// Master level in dB applied to every output.
+    #[serde(default)]
+    pub master_db: f64,
+}
+
+/// How a network patch talks to its device.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NetworkProtocol {
+    /// OSC messages in UDP datagrams.
+    #[default]
+    OscUdp,
+    /// OSC messages over TCP with SLIP framing (OSC 1.1).
+    OscTcp,
+    /// The message text as it is, in a UDP datagram.
+    PlainUdp,
+    /// The message text as it is, over a TCP connection.
+    PlainTcp,
+}
+
+/// A named network destination that Network cues send to.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NetworkPatch {
+    pub name: String,
+    pub host: String,
+    pub port: u16,
+    #[serde(default)]
+    pub protocol: NetworkProtocol,
+}
+
 /// Workspace-wide behaviour settings.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WorkspaceSettings {
@@ -48,6 +91,11 @@ pub struct WorkspaceSettings {
     /// How long a panic fades everything out before stopping.
     #[serde(default = "default_panic_duration", with = "seconds")]
     pub panic_duration: Duration,
+    #[serde(default)]
+    pub audio: AudioSettings,
+    /// Destinations for Network cues; a cue without a patch uses the first.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub network_patches: Vec<NetworkPatch>,
 }
 
 impl Default for WorkspaceSettings {
@@ -55,6 +103,8 @@ impl Default for WorkspaceSettings {
         Self {
             double_go_protection: Duration::ZERO,
             panic_duration: default_panic_duration(),
+            audio: AudioSettings::default(),
+            network_patches: Vec::new(),
         }
     }
 }
