@@ -1,6 +1,6 @@
 [package]
 name = "mazzalab-lighting"
-description = "Lighting control (DMX, Art-Net, sACN) for MazzaLab (planned)."
+description = "Light cues for MazzaLab: console-style commands, a fading DMX rig, Art-Net and sACN output."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,6 +9,10 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+mazzalab-core.workspace = true
+thiserror.workspace = true
+tracing = "0.1"
+uuid.workspace = true
 
 [lints]
 workspace = true
