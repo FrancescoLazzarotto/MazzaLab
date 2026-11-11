@@ -8,7 +8,7 @@ use std::process::ExitCode;
 
 use clap::Parser;
 use mazzalab_server::{
-    AudioBackend, DEFAULT_HTTP_PORT, LogOutput, NetworkBackend, Output, ServerConfig,
+    AudioBackend, DEFAULT_HTTP_PORT, LogOutput, MidiBackend, NetworkBackend, Output, ServerConfig,
 };
 use tracing_subscriber::EnvFilter;
 
@@ -79,6 +79,7 @@ async fn main() -> ExitCode {
         let mut outputs: Vec<Box<dyn Output>> = vec![
             Box::new(LogOutput),
             Box::new(NetworkBackend::new(completion.clone())),
+            Box::new(MidiBackend::new(completion.clone())),
         ];
         if !no_audio {
             outputs.push(Box::new(AudioBackend::new(&base_dir, completion)));

@@ -313,3 +313,84 @@ async fn network_cues_send_osc_and_report_missing_patches() {
     assert!(notice.message.contains("Projector"), "{}", notice.message);
     server.stop().await;
 }
+
+#[tokio::test]
+async fn midi_cues_report_missing_patches_and_ports() {
+    use mazzalab_core::{MidiCue, MidiMessage, MidiPatch};
+    use mazzalab_server::MidiBackend;
+
+    let program_change = |patch: Option<&str>, number: &str| {
+        Cue::new(CueKind::Midi(MidiCue {
+            patch: patch.map(str::to_owned),
+            message: MidiMessage::ProgramChange {
+                channel: 1,
+                program: 3,
+            },
+        }))
+        .with_number(number)
+    };
+    let mut workspace = empty_workspace();
+    workspace.settings.midi_patches = vec![MidiPatch {
+        name: "Desk".into(),
+        port: "a port that is not there".into(),
+    }];
+    workspace.cue_lists[0].cues = vec![
+        program_change(Some("Keys"), "1"),
+        program_change(Some("Desk"), "2"),
+    ];
+
+    let config = ServerConfig {
+        bind: LOCALHOST,
+        osc_port: 0,
+        udp_reply_port: None,
+        http_port: 0,
+        ..ServerConfig::default()
+    };
+    let server = mazzalab_server::start(config, workspace, |completion| {
+        vec![Box::new(MidiBackend::new(completion)) as Box<dyn Output>]
+    })
+    .await
+    .unwrap();
+    let mut updates = server.handle.subscribe();
+    let mut next_notice = async || {
+        // Listing MIDI devices for the first time can take the system a while.
+        timeout(Duration::from_secs(60), async {
+            loop {
+                if let Update::Notice(notice) = updates.recv().await.unwrap() {
+                    break notice;
+                }
+            }
+        })
+        .await
+        .expect("no notice")
+    };
+
+    // A patch that does not exist is caught before anything is sent.
+    server
+        .handle
+        .execute(Command::Go { list: None })
+        .await
+        .unwrap();
+    let notice = next_notice().await;
+    assert_eq!(notice.level, NoticeLevel::Warning);
+    assert!(notice.message.contains("Keys"), "{}", notice.message);
+
+    // A patch whose port is missing fails on delivery, naming the port.
+    server
+        .handle
+        .execute(Command::Go { list: None })
+        .await
+        .unwrap();
+    let notice = next_notice().await;
+    assert!(
+        notice.message.contains("a port that is not there"),
+        "{}",
+        notice.message
+    );
+
+    let app = mazzalab_server::router(server.handle.clone(), None);
+    let (status, ports) = get(&app, "/api/midi").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(ports["outputs"].is_array() && ports["inputs"].is_array());
+    server.stop().await;
+}

@@ -6,7 +6,8 @@
 //! * an HTTP + WebSocket API for the web UI (default port 53080), which can
 //!   also serve the built UI;
 //! * pluggable [`Output`]s fed with engine events: [`AudioBackend`] plays
-//!   audio cues, [`NetworkBackend`] sends the messages of Network cues.
+//!   audio cues, [`NetworkBackend`] and [`MidiBackend`] send the messages
+//!   of Network and MIDI cues.
 //!
 //! The desktop app embeds this crate; `mazzalab-server` runs it headless.
 
@@ -27,7 +28,7 @@ use tokio::task::JoinHandle;
 
 pub use actor::{AudioStatus, Completion, Notice, NoticeLevel, Output, ShowHandle, Update};
 pub use http::{MEDIA_FOLDER, router};
-pub use outputs::{AudioBackend, LogOutput, NetworkBackend};
+pub use outputs::{AudioBackend, LogOutput, MidiBackend, NetworkBackend};
 
 pub const DEFAULT_HTTP_PORT: u16 = 53080;
 

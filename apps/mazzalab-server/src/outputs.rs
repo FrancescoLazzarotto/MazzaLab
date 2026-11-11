@@ -268,3 +268,63 @@ impl Output for NetworkBackend {
         }
     }
 }
+
+/// Sends the messages of MIDI cues to the show's MIDI patches.
+#[derive(Debug)]
+pub struct MidiBackend {
+    sender: Option<mazzalab_midi::Sender>,
+    completion: Completion,
+}
+
+impl MidiBackend {
+    pub fn new(completion: Completion) -> Self {
+        let on_error = completion.clone();
+        let sender = mazzalab_midi::Sender::new(move |port, error| {
+            on_error.notify(
+                NoticeLevel::Warning,
+                format!("MIDI output \"{port}\": {error}"),
+            );
+        })
+        .map_err(|error| tracing::error!(%error, "MIDI cues are disabled"))
+        .ok();
+        Self { sender, completion }
+    }
+}
+
+impl Output for MidiBackend {
+    fn handle(&mut self, show: &Show, events: &[Event]) {
+        let workspace = show.workspace();
+        for event in events {
+            let EventKind::ActionStarted { cue, armed: true } = event.kind else {
+                continue;
+            };
+            let Some(CueKind::Midi(midi)) = workspace.find_cue(cue).map(|cue| &cue.kind) else {
+                continue;
+            };
+            let patches = &workspace.settings.midi_patches;
+            let patch = match midi.patch.as_deref().filter(|name| !name.is_empty()) {
+                Some(name) => patches.iter().find(|patch| patch.name == name),
+                None => patches.first(),
+            };
+            let problem = match (patch, &self.sender) {
+                (Some(patch), Some(sender)) => sender
+                    .send(&patch.port, &midi.message)
+                    .err()
+                    .map(|error| error.to_string()),
+                (None, _) => Some(match &midi.patch {
+                    Some(name) if !name.is_empty() => {
+                        format!("there is no MIDI patch named \"{name}\"")
+                    }
+                    _ => "the show has no MIDI patch; add one in the settings".to_owned(),
+                }),
+                (_, None) => Some("MIDI cues are disabled".to_owned()),
+            };
+            if let Some(problem) = problem {
+                self.completion.notify(
+                    NoticeLevel::Warning,
+                    format!("Cue {}: {problem}", label(show, cue)),
+                );
+            }
+        }
+    }
+}

@@ -49,6 +49,7 @@ pub fn router(handle: ShowHandle, ui_dir: Option<PathBuf>) -> Router {
         .route("/api/command", post(command))
         .route("/api/save", post(save))
         .route("/api/audio", get(audio))
+        .route("/api/midi", get(midi))
         .route("/api/waveform", get(waveform))
         .route(
             "/api/media",
@@ -136,6 +137,17 @@ async fn audio(State(state): State<AppState>) -> Json<Value> {
         })
         .collect();
     Json(json!({ "status": status, "devices": devices }))
+}
+
+/// The MIDI ports on this machine.
+async fn midi() -> Json<Value> {
+    // Asking the drivers can take a moment: keep it off the async threads.
+    let ports = tokio::task::spawn_blocking(|| {
+        (mazzalab_midi::output_ports(), mazzalab_midi::input_ports())
+    })
+    .await
+    .unwrap_or_default();
+    Json(json!({ "outputs": ports.0, "inputs": ports.1 }))
 }
 
 #[derive(Deserialize)]
