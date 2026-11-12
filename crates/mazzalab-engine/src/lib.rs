@@ -71,6 +71,17 @@ pub enum EventKind {
         list: CueId,
         cue: Option<CueId>,
     },
+    /// The cue was loaded: when it starts, it starts `time` into itself
+    /// (counted from the beginning of its pre-wait).
+    Loaded {
+        cue: CueId,
+        time: Duration,
+    },
+    /// The cue is no longer loaded and will start from its beginning.
+    Unloaded(CueId),
+    /// A looping cue was told to stop looping: it plays the pass it is in
+    /// to the end and then completes.
+    Devamped(CueId),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
@@ -117,6 +128,9 @@ struct Run {
     owner: Option<CueId>,
     /// Start of the current phase; shifted forward by pauses.
     phase_started: Duration,
+    /// How far into the phase the cue was when the phase started, for a cue
+    /// that was loaded to a time.
+    offset: Duration,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -144,6 +158,9 @@ enum Control {
     Goto,
     Arm,
     Disarm,
+    Load(Duration),
+    Reset,
+    Devamp,
 }
 
 impl Control {
@@ -155,6 +172,9 @@ impl Control {
             CueKind::Goto => Self::Goto,
             CueKind::Arm => Self::Arm,
             CueKind::Disarm => Self::Disarm,
+            CueKind::Load(load) => Self::Load(load.time),
+            CueKind::Reset => Self::Reset,
+            CueKind::Devamp => Self::Devamp,
             _ => return None,
         })
     }
@@ -167,6 +187,8 @@ pub struct Engine {
     locations: HashMap<CueId, Location>,
     now: Duration,
     runs: BTreeMap<CueId, Run>,
+    /// Cues loaded to a time, waiting to be started from there.
+    loaded: BTreeMap<CueId, Duration>,
     timers: Vec<Timer>,
     next_seq: u64,
     paused: HashMap<CueId, Duration>,
@@ -198,6 +220,7 @@ impl Engine {
             locations,
             now: Duration::ZERO,
             runs: BTreeMap::new(),
+            loaded: BTreeMap::new(),
             timers: Vec::new(),
             next_seq: 0,
             paused: HashMap::new(),
@@ -268,10 +291,29 @@ impl Engine {
         let now = paused_at.unwrap_or(self.now);
         Some(RunInfo {
             phase: run.phase,
-            elapsed: now.saturating_sub(run.phase_started),
+            elapsed: now.saturating_sub(run.phase_started) + run.offset,
             paused: paused_at.is_some(),
             owner: run.owner,
         })
+    }
+
+    /// Loads a cue to `time`, counted from the start of its pre-wait: the
+    /// next time it starts, it starts from there. A cue that is running is
+    /// left alone.
+    pub fn load(&mut self, cue: CueId, time: Duration) -> Result<(), EngineError> {
+        self.ensure_cue(cue)?;
+        self.load_cue(cue, time);
+        Ok(())
+    }
+
+    /// Where a cue will start from, if it has been loaded.
+    pub fn loaded(&self, cue: CueId) -> Option<Duration> {
+        self.loaded.get(&cue).copied()
+    }
+
+    /// The loaded cues with the time each is loaded to, in id order.
+    pub fn loaded_cues(&self) -> impl Iterator<Item = (CueId, Duration)> + '_ {
+        self.loaded.iter().map(|(cue, time)| (*cue, *time))
     }
 
     /// Whether a panic fade is in progress.
@@ -406,6 +448,9 @@ impl Engine {
     /// Stops everything and returns every playhead to the top of its list.
     pub fn reset(&mut self) {
         self.stop_all();
+        for cue in std::mem::take(&mut self.loaded).into_keys() {
+            self.emit(EventKind::Unloaded(cue));
+        }
         self.panic_until = None;
         self.last_go = None;
         let firsts: Vec<_> = self
@@ -490,6 +535,8 @@ impl Engine {
         for cue in gone {
             self.stop_cue(cue);
         }
+        let locations = &self.locations;
+        self.loaded.retain(|cue, _| locations.contains_key(cue));
 
         let lists: Vec<_> = self
             .workspace
@@ -716,7 +763,7 @@ impl Engine {
 
     fn fire(&mut self, timer: Timer) {
         match timer.kind {
-            TimerKind::PreWaitEnd => self.begin_action(timer.cue),
+            TimerKind::PreWaitEnd => self.begin_action(timer.cue, Duration::ZERO),
             TimerKind::ActionEnd => self.finish_action(timer.cue),
             TimerKind::Continue => {
                 self.continue_after(timer.cue, timer.owner);
@@ -749,6 +796,8 @@ impl Engine {
                 self.continue_after(id, owner);
             }
         } else {
+            // A loaded cue starts as if that much of it had already run.
+            let into = self.loaded.remove(&id).unwrap_or_default();
             self.emit(EventKind::Triggered(id));
             self.runs.insert(
                 id,
@@ -756,23 +805,26 @@ impl Engine {
                     phase: RunPhase::PreWait,
                     owner,
                     phase_started: self.now,
+                    offset: into.min(pre_wait),
                 },
             );
-            if pre_wait.is_zero() {
-                self.begin_action(id);
+            if into >= pre_wait {
+                self.begin_action(id, into - pre_wait);
             } else {
-                self.schedule(pre_wait, id, owner, TimerKind::PreWaitEnd);
+                self.schedule(pre_wait - into, id, owner, TimerKind::PreWaitEnd);
             }
         }
         self.chain_depth -= 1;
     }
 
-    fn begin_action(&mut self, id: CueId) {
+    /// Starts the cue's action, `into` of which is taken as already done.
+    fn begin_action(&mut self, id: CueId, into: Duration) {
         let Some(run) = self.runs.get_mut(&id) else {
             return;
         };
         run.phase = RunPhase::Action;
         run.phase_started = self.now;
+        run.offset = into;
         let owner = run.owner;
         let Some(cue) = self.cue(id) else {
             return;
@@ -788,22 +840,106 @@ impl Engine {
             ActionLength::Instant
         };
         let control = if armed { Control::of(&cue.kind) } else { None };
+        // A Target cue points its own target at another cue.
+        let retarget = match (&cue.kind, armed) {
+            (CueKind::Target(retarget), true) => Some(retarget.assigned_number.clone()),
+            _ => None,
+        };
 
         self.emit(EventKind::ActionStarted { cue: id, armed });
         if continue_mode == ContinueMode::AutoContinue {
-            self.schedule(post_wait, id, owner, TimerKind::Continue);
+            self.schedule(
+                post_wait.saturating_sub(into),
+                id,
+                owner,
+                TimerKind::Continue,
+            );
         }
         if let (Some(control), Some(target)) = (control, target) {
             self.apply_control(control, target);
         }
+        if let (Some(number), Some(target)) = (retarget, target) {
+            let new_target = self.workspace.find_by_number(&number).map(|cue| cue.id);
+            if let (Some(new_target), Some(cue)) = (new_target, self.workspace.find_cue_mut(target))
+            {
+                cue.target = Some(new_target);
+            }
+        }
         match length {
             ActionLength::Instant => self.finish_action(id),
             ActionLength::Fixed(duration) => {
-                self.schedule(duration, id, owner, TimerKind::ActionEnd);
+                self.schedule(
+                    duration.saturating_sub(into),
+                    id,
+                    owner,
+                    TimerKind::ActionEnd,
+                );
             }
             ActionLength::UntilStopped | ActionLength::UntilReported => {}
-            ActionLength::UntilChildrenComplete => self.start_group(id),
+            ActionLength::UntilChildrenComplete => self.start_group(id, into),
         }
+    }
+
+    fn load_cue(&mut self, cue: CueId, time: Duration) {
+        if self.runs.contains_key(&cue) {
+            return;
+        }
+        self.loaded.insert(cue, time);
+        self.emit(EventKind::Loaded { cue, time });
+    }
+
+    /// Puts a cue and everything inside it back to rest: stopped, even when
+    /// started on its own rather than by its group, and no longer loaded.
+    fn reset_cue(&mut self, cue: CueId) {
+        let inside: Vec<CueId> = self
+            .cue(cue)
+            .map(|cue| cue.children().iter().map(|child| child.id).collect())
+            .unwrap_or_default();
+        for child in inside {
+            self.reset_cue(child);
+        }
+        self.stop_cue(cue);
+        if self.loaded.remove(&cue).is_some() {
+            self.emit(EventKind::Unloaded(cue));
+        }
+    }
+
+    /// Tells a looping audio cue to finish the pass it is in and end there.
+    fn devamp(&mut self, target: CueId) {
+        let Some(run) = self.runs.get(&target).copied() else {
+            return;
+        };
+        if run.phase != RunPhase::Action || self.paused.contains_key(&target) {
+            return;
+        }
+        let Some(CueKind::Audio(audio)) = self.cue(target).map(|cue| &cue.kind) else {
+            return;
+        };
+        if !audio.infinite_loop && audio.play_count <= 1 {
+            return;
+        }
+        let pass = audio
+            .end_time
+            .or(audio.media_duration)
+            .map(|end| end.saturating_sub(audio.start_time))
+            .filter(|pass| !pass.is_zero() && audio.rate.is_finite() && audio.rate > 0.0)
+            .map(|pass| pass.div_f64(audio.rate));
+        self.emit(EventKind::Devamped(target));
+        // With a known length the end of the pass can be timed; otherwise
+        // the backend reports it.
+        let Some(pass) = pass else {
+            return;
+        };
+        let elapsed = self.now.saturating_sub(run.phase_started) + run.offset;
+        let into_pass = Duration::from_secs_f64(elapsed.as_secs_f64() % pass.as_secs_f64());
+        self.timers
+            .retain(|timer| !(timer.cue == target && timer.kind == TimerKind::ActionEnd));
+        self.schedule(
+            pass.saturating_sub(into_pass),
+            target,
+            run.owner,
+            TimerKind::ActionEnd,
+        );
     }
 
     fn apply_control(&mut self, control: Control, target: CueId) {
@@ -821,10 +957,15 @@ impl Engine {
                     cue.armed = matches!(control, Control::Arm);
                 }
             }
+            Control::Load(time) => self.load_cue(target, time),
+            Control::Reset => self.reset_cue(target),
+            Control::Devamp => self.devamp(target),
         }
     }
 
-    fn start_group(&mut self, id: CueId) {
+    /// Starts a group's children; `into` is how far into itself the group
+    /// was loaded.
+    fn start_group(&mut self, id: CueId, into: Duration) {
         let Some(CueKind::Group(group)) = self.cue(id).map(|cue| &cue.kind) else {
             return;
         };
@@ -839,6 +980,10 @@ impl Engine {
         match mode {
             GroupMode::Timeline => {
                 for child in &children {
+                    // On a timeline every child shares the group's clock.
+                    if !into.is_zero() {
+                        self.load_cue(*child, into);
+                    }
                     self.trigger(*child, Some(id));
                 }
             }
