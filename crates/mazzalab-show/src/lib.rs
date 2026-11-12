@@ -44,6 +44,13 @@ pub enum Command {
     Resume {
         cue: CueId,
     },
+    /// Loads a cue to a time in seconds, counted from the start of its
+    /// pre-wait: its next start picks up from there.
+    Load {
+        cue: CueId,
+        #[serde(default)]
+        time: f64,
+    },
     StopAll,
     PauseAll,
     ResumeAll,
@@ -175,6 +182,15 @@ pub struct Status {
     pub panicking: bool,
     pub playheads: Vec<Playhead>,
     pub running: Vec<RunningCue>,
+    /// Cues loaded to a time, which they will start from.
+    pub loaded: Vec<LoadedCue>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct LoadedCue {
+    pub cue: CueId,
+    /// Seconds from the start of the cue's pre-wait.
+    pub time: f64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -305,6 +321,11 @@ impl Show {
             Command::Stop { cue } => self.engine.stop(cue)?,
             Command::Pause { cue } => self.engine.pause(cue)?,
             Command::Resume { cue } => self.engine.resume(cue)?,
+            Command::Load { cue, time } => {
+                let time = Duration::try_from_secs_f64(time)
+                    .map_err(|_| ShowError::Invalid(format!("{time} is not a time")))?;
+                self.engine.load(cue, time)?;
+            }
             Command::StopAll => self.engine.stop_all(),
             Command::PauseAll => self.engine.pause_all(),
             Command::ResumeAll => self.engine.resume_all(),
@@ -420,6 +441,14 @@ impl Show {
             panicking: self.engine.is_panicking(),
             playheads,
             running,
+            loaded: self
+                .engine
+                .loaded_cues()
+                .map(|(cue, time)| LoadedCue {
+                    cue,
+                    time: time.as_secs_f64(),
+                })
+                .collect(),
         }
     }
 

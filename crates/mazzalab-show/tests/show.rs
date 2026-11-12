@@ -407,3 +407,37 @@ fn media_info_is_not_an_edit() {
     // Telling it the same thing again changes nothing.
     assert!(!show.set_media_info(id(1), Some(Duration::from_secs(3)), Some(2)));
 }
+
+#[test]
+fn load_command_shows_in_the_status_until_the_cue_starts() {
+    let mut show = show();
+    show.execute(Command::Load {
+        cue: id(1),
+        time: 2.5,
+    })
+    .unwrap();
+    let status = show.status();
+    assert_eq!(status.loaded.len(), 1);
+    assert_eq!((status.loaded[0].cue, status.loaded[0].time), (id(1), 2.5));
+
+    show.execute(Command::Start { cue: id(1) }).unwrap();
+    let status = show.status();
+    assert!(status.loaded.is_empty());
+    assert_eq!(status.running[0].elapsed, 2.5);
+
+    // Times that make no sense are refused, unknown cues too.
+    assert!(
+        show.execute(Command::Load {
+            cue: id(2),
+            time: -1.0
+        })
+        .is_err()
+    );
+    assert!(
+        show.execute(Command::Load {
+            cue: id(99),
+            time: 1.0
+        })
+        .is_err()
+    );
+}
