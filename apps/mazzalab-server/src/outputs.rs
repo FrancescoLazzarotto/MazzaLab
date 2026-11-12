@@ -55,6 +55,14 @@ fn playheads(show: &Show) -> Vec<CueId> {
         .collect()
 }
 
+/// The cues worth decoding ahead: those standing by at a playhead, and
+/// those loaded to a time, which someone is about to start.
+fn preload_targets(show: &Show) -> Vec<CueId> {
+    let mut cues = playheads(show);
+    cues.extend(show.engine().loaded_cues().map(|(cue, _)| cue));
+    cues
+}
+
 /// Plays audio cues on the device chosen in the show's audio settings, and
 /// follows those settings while the show runs.
 #[derive(Debug)]
@@ -146,11 +154,14 @@ impl Output for AudioBackend {
         let moved = events.iter().any(|event| {
             matches!(
                 event.kind,
-                EventKind::PlayheadMoved { .. } | EventKind::ActionStarted { .. }
+                EventKind::PlayheadMoved { .. }
+                    | EventKind::ActionStarted { .. }
+                    | EventKind::Loaded { .. }
+                    | EventKind::Unloaded(_)
             )
         });
         if moved {
-            output.preload(workspace, &playheads(show));
+            output.preload(workspace, &preload_targets(show));
         }
     }
 
@@ -174,7 +185,7 @@ impl Output for AudioBackend {
         self.applied = Some(settings.clone());
         if let Some(output) = &mut self.output {
             output.sync(show.workspace());
-            output.preload(show.workspace(), &playheads(show));
+            output.preload(show.workspace(), &preload_targets(show));
         }
     }
 

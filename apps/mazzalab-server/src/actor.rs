@@ -608,6 +608,7 @@ impl Actor {
                     || !events.is_empty()
                     || structure_changed
                     || status.playheads != previous.playheads
+                    || status.loaded != previous.loaded
             }
         };
         let recheck = self.dmx_recheck.is_some_and(|at| Instant::now() >= at);
@@ -679,6 +680,9 @@ impl Actor {
                 | EventKind::Stopped(cue)
                 | EventKind::Paused(cue)
                 | EventKind::Resumed(cue)
+                | EventKind::Loaded { cue, .. }
+                | EventKind::Unloaded(cue)
+                | EventKind::Devamped(cue)
                 | EventKind::Panicking { cue, .. } => cue,
                 EventKind::PlayheadMoved { list, cue } => {
                     messages.push(message(

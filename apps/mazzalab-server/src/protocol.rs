@@ -63,6 +63,9 @@ pub enum EventKindDto {
     Resumed { cue: CueId },
     Panicking { cue: CueId, fade: f64 },
     PlayheadMoved { list: CueId, cue: Option<CueId> },
+    Loaded { cue: CueId, time: f64 },
+    Unloaded { cue: CueId },
+    Devamped { cue: CueId },
 }
 
 impl From<&Event> for EventDto {
@@ -80,6 +83,12 @@ impl From<&Event> for EventDto {
                 fade: fade.as_secs_f64(),
             },
             EventKind::PlayheadMoved { list, cue } => EventKindDto::PlayheadMoved { list, cue },
+            EventKind::Loaded { cue, time } => EventKindDto::Loaded {
+                cue,
+                time: time.as_secs_f64(),
+            },
+            EventKind::Unloaded(cue) => EventKindDto::Unloaded { cue },
+            EventKind::Devamped(cue) => EventKindDto::Devamped { cue },
         };
         Self {
             at: event.at.as_secs_f64(),

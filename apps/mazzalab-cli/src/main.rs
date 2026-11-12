@@ -209,6 +209,13 @@ fn simulate(workspace: Workspace, list: CueId, gos: u32, interval: Duration, unt
                     "playhead {}",
                     cue.map_or_else(|| "(end)".to_owned(), |c| label(engine.workspace(), c))
                 ),
+                EventKind::Loaded { cue, time } => format!(
+                    "load     {} (to {:.2}s)",
+                    label(engine.workspace(), cue),
+                    time.as_secs_f64()
+                ),
+                EventKind::Unloaded(cue) => format!("unload   {}", label(engine.workspace(), cue)),
+                EventKind::Devamped(cue) => format!("devamp   {}", label(engine.workspace(), cue)),
             };
             println!("{:>9.3}s  {text}", event.at.as_secs_f64());
         }
