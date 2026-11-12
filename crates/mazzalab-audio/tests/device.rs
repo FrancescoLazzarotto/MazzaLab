@@ -111,3 +111,71 @@ fn opens_a_listed_device_by_id_with_a_buffer_size() {
     assert_eq!(audio.info().id, device.id);
     assert!(!audio.info().fallback);
 }
+
+#[test]
+#[ignore = "needs an audio output device"]
+fn a_loaded_cue_plays_only_what_is_left_and_a_loop_can_be_devamped() {
+    let dir = std::env::temp_dir().join(format!("mazzalab-device-load-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    write_tone(&dir.join("tone.wav"), 44_100, 1.0);
+
+    let mut workspace = Workspace::new("device test");
+    let once = Cue::new(CueKind::Audio(AudioCue {
+        file: Some("tone.wav".into()),
+        level_db: -6.0,
+        ..AudioCue::default()
+    }));
+    let looped = Cue::new(CueKind::Audio(AudioCue {
+        file: Some("tone.wav".into()),
+        level_db: -6.0,
+        infinite_loop: true,
+        ..AudioCue::default()
+    }));
+    let devamp = Cue::new(CueKind::Devamp).with_target(looped.id);
+    let (once_id, looped_id, devamp_id) = (once.id, looped.id, devamp.id);
+    workspace.cue_lists[0].cues = vec![once, looped, devamp];
+    assert!(probe_workspace(&mut workspace, &dir).is_empty());
+
+    let (finished_tx, finished) = mpsc::channel();
+    let mut audio = AudioOutput::start(&dir, DeviceRequest::default(), move |cue| {
+        let _ = finished_tx.send(cue);
+    })
+    .unwrap();
+    let mut engine = Engine::new(workspace);
+    let run = |engine: &mut Engine, audio: &mut AudioOutput| {
+        let events = engine.take_events();
+        audio.handle_events(engine.workspace(), &events);
+    };
+
+    // Loaded 0.8 s into a one second file: a fifth of a second is left.
+    engine.load(once_id, Duration::from_millis(800)).unwrap();
+    engine.start(once_id).unwrap();
+    let started = std::time::Instant::now();
+    run(&mut engine, &mut audio);
+    assert_eq!(
+        finished.recv_timeout(Duration::from_secs(5)).unwrap(),
+        once_id
+    );
+    let took = started.elapsed();
+    println!("loaded cue took {took:?}");
+    assert!(took < Duration::from_millis(600), "{took:?}");
+
+    // A loop devamped 1.3 s in ends with its second pass, at about 2 s.
+    engine.start(looped_id).unwrap();
+    let started = std::time::Instant::now();
+    run(&mut engine, &mut audio);
+    std::thread::sleep(Duration::from_millis(1300));
+    engine.advance_to(Duration::from_millis(1300));
+    engine.start(devamp_id).unwrap();
+    run(&mut engine, &mut audio);
+    assert_eq!(
+        finished.recv_timeout(Duration::from_secs(5)).unwrap(),
+        looped_id
+    );
+    let took = started.elapsed();
+    println!("devamped loop took {took:?}");
+    assert!(
+        (Duration::from_millis(1800)..Duration::from_millis(2600)).contains(&took),
+        "{took:?}"
+    );
+}

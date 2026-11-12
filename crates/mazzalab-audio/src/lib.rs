@@ -103,6 +103,8 @@ struct Playing {
 /// A voice decoded ahead of GO.
 struct Preloaded {
     definition: AudioCue,
+    /// How far into the cue's action the voice starts.
+    into: Duration,
     voice: Box<Voice>,
     channels: usize,
 }
@@ -118,6 +120,8 @@ pub struct AudioOutput {
     on_finished: FinishedCallback,
     playing: PlayingMap,
     preloaded: HashMap<CueId, Preloaded>,
+    /// Cues loaded to a time, counted from the start of their pre-wait.
+    loaded: HashMap<CueId, Duration>,
     next_serial: u64,
     _device: device::DeviceThread,
     _housekeeping: JoinHandle<()>,
@@ -205,6 +209,7 @@ impl AudioOutput {
             on_finished,
             playing,
             preloaded: HashMap::new(),
+            loaded: HashMap::new(),
             next_serial: 0,
             _device: device,
             _housekeeping: housekeeping,
@@ -248,7 +253,13 @@ impl AudioOutput {
                         continue;
                     };
                     match &definition.kind {
-                        CueKind::Audio(audio) => self.play(cue, audio),
+                        CueKind::Audio(audio) => {
+                            // A loaded cue's time includes its pre-wait.
+                            let into = self.loaded.remove(&cue).map_or(Duration::ZERO, |time| {
+                                time.saturating_sub(definition.pre_wait)
+                            });
+                            self.play(cue, audio, into);
+                        }
                         CueKind::Fade(fade) => {
                             if let (Some(target), Some(level)) = (definition.target, fade.level_db)
                             {
@@ -263,6 +274,13 @@ impl AudioOutput {
                         _ => {}
                     }
                 }
+                EventKind::Loaded { cue, time } => {
+                    self.loaded.insert(cue, time);
+                }
+                EventKind::Unloaded(cue) => {
+                    self.loaded.remove(&cue);
+                }
+                EventKind::Devamped(cue) => self.send(MixerCommand::Devamp(cue)),
                 EventKind::Stopped(cue) => self.send(MixerCommand::Stop(cue)),
                 EventKind::Paused(cue) => self.send(MixerCommand::Pause(cue)),
                 EventKind::Resumed(cue) => self.send(MixerCommand::Resume(cue)),
@@ -286,19 +304,31 @@ impl AudioOutput {
         }
         wanted.truncate(MAX_PRELOADED);
 
+        // A loaded cue is decoded from where it will start.
+        let wanted: Vec<(CueId, &AudioCue, Duration)> = wanted
+            .into_iter()
+            .map(|(cue, audio, pre_wait)| {
+                let into = self
+                    .loaded
+                    .get(&cue)
+                    .map_or(Duration::ZERO, |time| time.saturating_sub(pre_wait));
+                (cue, audio, into)
+            })
+            .collect();
         self.preloaded.retain(|id, preloaded| {
-            wanted
-                .iter()
-                .any(|(cue, audio)| cue == id && **audio == preloaded.definition)
+            wanted.iter().any(|(cue, audio, into)| {
+                cue == id && **audio == preloaded.definition && *into == preloaded.into
+            })
         });
-        for (cue, audio) in wanted {
+        for (cue, audio, into) in wanted {
             if !self.preloaded.contains_key(&cue)
-                && let Ok((voice, channels)) = self.build_voice(cue, audio)
+                && let Ok((voice, channels)) = self.build_voice(cue, audio, into)
             {
                 self.preloaded.insert(
                     cue,
                     Preloaded {
                         definition: audio.clone(),
+                        into,
                         voice,
                         channels,
                     },
@@ -363,8 +393,14 @@ impl AudioOutput {
     }
 
     /// Opens the cue's file and builds a voice whose reader is already
-    /// decoding. Returns the voice and its channel count.
-    fn build_voice(&mut self, cue: CueId, audio: &AudioCue) -> Result<(Box<Voice>, usize), ()> {
+    /// decoding, starting `into` the cue's action. Returns the voice and its
+    /// channel count.
+    fn build_voice(
+        &mut self,
+        cue: CueId,
+        audio: &AudioCue,
+        into: Duration,
+    ) -> Result<(Box<Voice>, usize), ()> {
         let file = audio.file.as_ref().ok_or(())?;
         let path = self.base_dir.join(file);
         let source = decode::open(&path).map_err(|error| {
@@ -375,10 +411,47 @@ impl AudioOutput {
         let (producer, consumer) = RingBuffer::new(capacity.max(1024));
         let ended = Arc::new(AtomicBool::new(false));
 
+        // Where in the file `into` lands: whole passes are skipped and the
+        // first one played starts partway through.
+        let rate = if audio.rate.is_finite() && audio.rate > 0.0 {
+            audio.rate
+        } else {
+            1.0
+        };
+        let pass = audio
+            .end_time
+            .or(info.duration)
+            .map(|end| end.saturating_sub(audio.start_time))
+            .filter(|pass| !pass.is_zero());
+        let travelled = into.mul_f64(rate);
+        let (skipped, within) = match pass {
+            Some(pass) => (
+                (travelled.as_secs_f64() / pass.as_secs_f64()) as u32,
+                Duration::from_secs_f64(travelled.as_secs_f64() % pass.as_secs_f64()),
+            ),
+            None => (0, travelled),
+        };
+        let passes = if audio.infinite_loop {
+            None
+        } else {
+            match audio.play_count.max(1).checked_sub(skipped) {
+                Some(left) if left > 0 => Some(left),
+                // Loaded past its end: there is nothing left to play.
+                _ => return Err(()),
+            }
+        };
+        let source_frames =
+            |time: Duration| (time.as_secs_f64() * f64::from(info.sample_rate)).round() as u64;
+        let pass_frames = pass.map(|pass| {
+            let whole = source_frames(pass);
+            (whole.saturating_sub(source_frames(within)), whole)
+        });
+
         let fade_out_frames = self.frames(audio.fade_out);
         // The fade out needs to know where the end is.
         let fade_out = match CueKind::Audio(audio.clone()).action_length() {
             ActionLength::Fixed(length) if fade_out_frames > 0 => {
+                let length = length.saturating_sub(into);
                 let total =
                     (length.as_secs_f64() * f64::from(self.info.sample_rate)).round() as u64;
                 let frames = u64::from(fade_out_frames).min(total) as u32;
@@ -397,16 +470,23 @@ impl AudioOutput {
                 rate: audio.rate,
                 level_db: audio.level_db as f32,
                 routes: self.routes(audio, info.channels),
-                fade_in_frames: self.frames(audio.fade_in),
+                // Started partway through, the fade in is already behind.
+                fade_in_frames: if into.is_zero() {
+                    self.frames(audio.fade_in)
+                } else {
+                    0
+                },
                 fade_out,
+                passes: pass_frames,
             },
             consumer,
             ended.clone(),
         );
         let playback = Playback {
             start: audio.start_time,
+            first_start: audio.start_time + within,
             end: audio.end_time,
-            passes: (!audio.infinite_loop).then_some(audio.play_count.max(1)),
+            passes,
         };
         decode::spawn_reader(source, playback, producer, ended).map_err(|error| {
             tracing::warn!(%error, "cannot start audio reader");
@@ -414,12 +494,12 @@ impl AudioOutput {
         Ok((Box::new(voice), info.channels))
     }
 
-    fn play(&mut self, cue: CueId, audio: &AudioCue) {
+    fn play(&mut self, cue: CueId, audio: &AudioCue, into: Duration) {
         let ready = match self.preloaded.remove(&cue) {
-            Some(preloaded) if preloaded.definition == *audio => {
+            Some(preloaded) if preloaded.definition == *audio && preloaded.into == into => {
                 Ok((preloaded.voice, preloaded.channels))
             }
-            _ => self.build_voice(cue, audio),
+            _ => self.build_voice(cue, audio, into),
         };
         let Ok((voice, channels)) = ready else {
             // Do not leave an open-ended cue hanging.
@@ -442,12 +522,13 @@ fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-/// The audio cues with a file in `cue` and everything inside it.
-fn collect_audio<'a>(cue: &'a Cue, out: &mut Vec<(CueId, &'a AudioCue)>) {
+/// The audio cues with a file in `cue` and everything inside it, each with
+/// its pre-wait.
+fn collect_audio<'a>(cue: &'a Cue, out: &mut Vec<(CueId, &'a AudioCue, Duration)>) {
     if let CueKind::Audio(audio) = &cue.kind
         && audio.file.is_some()
     {
-        out.push((cue.id, audio));
+        out.push((cue.id, audio, cue.pre_wait));
     }
     for child in cue.children() {
         collect_audio(child, out);

@@ -133,6 +133,9 @@ pub fn probe(path: &Path) -> Result<MediaInfo, AudioError> {
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Playback {
     pub start: Duration,
+    /// Where the first pass starts; later passes start at `start`. A cue
+    /// loaded to a time begins partway through.
+    pub first_start: Duration,
     pub end: Option<Duration>,
     /// Number of passes; `None` loops forever.
     pub passes: Option<u32>,
@@ -175,15 +178,20 @@ enum Flow {
 impl Reader {
     fn run(&mut self, playback: Playback) {
         let rate = f64::from(self.source.info.sample_rate);
-        let limit = playback
-            .end
-            .map(|end| (end.saturating_sub(playback.start).as_secs_f64() * rate).round() as u64);
         let mut pass = 0_u32;
         loop {
-            let skip = if pass == 0 && playback.start.is_zero() {
+            let from = if pass == 0 {
+                playback.first_start
+            } else {
+                playback.start
+            };
+            let limit = playback
+                .end
+                .map(|end| (end.saturating_sub(from).as_secs_f64() * rate).round() as u64);
+            let skip = if pass == 0 && from.is_zero() {
                 Some(0)
             } else {
-                self.seek(playback.start)
+                self.seek(from)
             };
             let Some(skip) = skip else {
                 tracing::warn!("cannot seek; stopping playback");
@@ -373,6 +381,7 @@ pub(crate) mod tests {
             &path,
             Playback {
                 start: Duration::ZERO,
+                first_start: Duration::ZERO,
                 end: None,
                 passes: Some(1),
             },
@@ -389,6 +398,7 @@ pub(crate) mod tests {
             &path,
             Playback {
                 start: Duration::from_millis(50),
+                first_start: Duration::from_millis(50),
                 end: Some(Duration::from_millis(100)),
                 passes: Some(2),
             },
@@ -399,5 +409,23 @@ pub(crate) mod tests {
         assert_eq!(frames[399], 799);
         assert_eq!(frames[400], 400);
         assert_eq!(frames[799], 799);
+    }
+
+    #[test]
+    fn the_first_pass_can_start_partway_through() {
+        let path = temp_wav("first-pass.wav", 8000, 1, 2000);
+        let frames = read(
+            &path,
+            Playback {
+                start: Duration::from_millis(50),
+                first_start: Duration::from_millis(75),
+                end: Some(Duration::from_millis(100)),
+                passes: Some(2),
+            },
+        );
+        // A short first pass over frames 600..800, then the whole loop.
+        assert_eq!(frames.len(), 600);
+        assert_eq!((frames[0], frames[199]), (600, 799));
+        assert_eq!((frames[200], frames[599]), (400, 799));
     }
 }

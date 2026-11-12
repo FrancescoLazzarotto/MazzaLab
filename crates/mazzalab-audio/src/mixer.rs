@@ -297,6 +297,12 @@ pub struct Voice {
     /// Output frame at which the built-in fade out starts.
     fade_out_at: Option<u64>,
     fade_out_frames: u32,
+    /// Source frames read so far.
+    pulled: u64,
+    /// Source frames in the first pass and in each pass after it.
+    passes: Option<(u64, u64)>,
+    /// Source frame at which the voice ends, once devamped.
+    stop_at: Option<u64>,
     paused: bool,
     stopping: bool,
     output_rate: u32,
@@ -320,6 +326,9 @@ pub(crate) struct VoiceConfig {
     /// Where the fade to silence starts and how long it lasts, in output
     /// frames.
     pub fade_out: Option<(u64, u32)>,
+    /// Source frames in the first pass and in each pass after it, when the
+    /// source loops and its length is known; needed to devamp.
+    pub passes: Option<(u64, u64)>,
 }
 
 impl std::fmt::Debug for Voice {
@@ -361,6 +370,9 @@ impl Voice {
             played: 0,
             fade_out_at: config.fade_out.map(|(at, _)| at),
             fade_out_frames: config.fade_out.map_or(0, |(_, frames)| frames),
+            pulled: 0,
+            passes: config.passes,
+            stop_at: None,
             paused: false,
             stopping: false,
             output_rate: config.output_rate,
@@ -377,18 +389,40 @@ impl Voice {
         }
     }
 
+    /// Stops looping: the voice plays the pass it is in to the end and
+    /// finishes there, as if the source had ended.
+    fn devamp(&mut self) {
+        let Some((first, pass)) = self.passes else {
+            return;
+        };
+        if pass == 0 || self.stop_at.is_some() {
+            return;
+        }
+        self.stop_at = Some(if self.pulled < first {
+            first
+        } else {
+            first + ((self.pulled - first) / pass + 1) * pass
+        });
+    }
+
     fn shift(&mut self, frame: [f32; MAX_CHANNELS]) {
         self.history.rotate_left(1);
         self.history[3] = frame;
     }
 
     fn pull(&mut self) -> Pull {
+        if self.stop_at.is_some_and(|at| self.pulled >= at) {
+            self.shift([0.0; MAX_CHANNELS]);
+            self.drained = self.drained.saturating_add(1);
+            return Pull::Drained;
+        }
         if self.samples.slots() >= self.channels {
             let mut frame = [0.0; MAX_CHANNELS];
             for sample in frame.iter_mut().take(self.channels) {
                 *sample = self.samples.pop().unwrap_or(0.0);
             }
             self.shift(frame);
+            self.pulled += 1;
             return Pull::Frame;
         }
         // The decoder pushes its last samples before raising `ended`, so
@@ -473,6 +507,8 @@ pub(crate) enum MixerCommand {
     },
     Pause(CueId),
     Resume(CueId),
+    /// Ends a looping cue at the end of the pass it is in.
+    Devamp(CueId),
     /// Replaces the crosspoints of a playing cue.
     Route {
         cue: CueId,
@@ -559,6 +595,11 @@ impl Mixer {
             MixerCommand::Resume(cue) => {
                 for voice in find(&mut self.voices, cue) {
                     voice.paused = false;
+                }
+            }
+            MixerCommand::Devamp(cue) => {
+                for voice in find(&mut self.voices, cue) {
+                    voice.devamp();
                 }
             }
             MixerCommand::Route { cue, routes } => {
@@ -655,6 +696,7 @@ mod tests {
             routes: Routes::default_for(channels, outputs),
             fade_in_frames: 0,
             fade_out: None,
+            passes: None,
         }
     }
 
@@ -934,5 +976,61 @@ mod tests {
         render(&mut rig, 20, channels);
         assert_eq!(rig.meters.take(), vec![0.5, 0.25]);
         assert_eq!(rig.meters.take(), vec![0.0, 0.0]);
+    }
+
+    #[test]
+    fn devamp_ends_the_voice_at_the_end_of_the_current_pass() {
+        let mut rig = rig(1);
+        // A source that would loop five times over ten frames, the first
+        // pass starting four frames in (a cue loaded to a time).
+        let source: Vec<f32> = (0..46).map(|i| (i + 1) as f32).collect();
+        let mut config = config(1, 1, RATE, 0.0, 1);
+        config.passes = Some((6, 10));
+        rig.commands
+            .push(MixerCommand::Add(voice_with(config, &source)))
+            .unwrap();
+        // Eight frames out: two into the second pass.
+        assert_eq!(render(&mut rig, 8, 1)[7], 8.0);
+        rig.commands
+            .push(MixerCommand::Devamp(CueId::from_u128(1)))
+            .unwrap();
+        let out = render(&mut rig, 40, 1);
+        // The second pass ends after sixteen frames in all: eight more.
+        assert_eq!(out[7], 16.0);
+        assert!(
+            out[8..].iter().all(|sample| *sample == 0.0),
+            "{:?}",
+            &out[..12]
+        );
+        // It ended on its own account, so the cue completes.
+        assert_eq!(done(&mut rig), vec![(CueId::from_u128(1), true)]);
+    }
+
+    #[test]
+    fn devamp_in_the_first_pass_and_without_known_passes() {
+        let mut rig = rig(1);
+        let source: Vec<f32> = (0..30).map(|i| (i + 1) as f32).collect();
+        let mut first = config(1, 1, RATE, 0.0, 1);
+        first.passes = Some((6, 10));
+        rig.commands
+            .push(MixerCommand::Add(voice_with(first, &source)))
+            .unwrap();
+        // A voice that does not know its passes plays on.
+        rig.commands
+            .push(MixerCommand::Add(voice_with(
+                config(2, 1, RATE, 0.0, 1),
+                &[0.0; 20],
+            )))
+            .unwrap();
+        render(&mut rig, 2, 1);
+        for cue in [1, 2] {
+            rig.commands
+                .push(MixerCommand::Devamp(CueId::from_u128(cue)))
+                .unwrap();
+        }
+        let out = render(&mut rig, 10, 1);
+        assert_eq!(out[3], 6.0);
+        assert!(out[4..].iter().all(|sample| *sample == 0.0));
+        assert_eq!(done(&mut rig), vec![(CueId::from_u128(1), true)]);
     }
 }
