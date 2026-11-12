@@ -33,6 +33,7 @@ import {
   Plus,
   Repeat,
   SpeakerHigh,
+  SquaresFour,
   Stop,
   TextT,
   Timer,
@@ -120,6 +121,7 @@ const ICONS = {
   reset: [ArrowCounterClockwise, "bold"],
   playhead: [CaretRight, "fill"],
   loaded: [CaretDoubleRight, "bold"],
+  cart: [SquaresFour, "regular"],
   auto_continue: [ArrowDown, "bold"],
   auto_follow: [ArrowLineDown, "bold"],
 } satisfies Record<string, [PhosphorIcon, IconWeight]>;

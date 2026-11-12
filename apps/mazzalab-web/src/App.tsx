@@ -3,6 +3,7 @@ import { useShow, type ShowConnection } from "./api/connection";
 import type { Command, Cue, CueType, Id, WorkspaceSettings } from "./api/types";
 import { ActiveCues } from "./components/ActiveCues";
 import { AudioPanel } from "./components/AudioPanel";
+import { CueCart } from "./components/CueCart";
 import { CueList, type SelectMode } from "./components/CueList";
 import { DmxPanel } from "./components/DmxPanel";
 import { Icon } from "./components/icons";
@@ -48,6 +49,7 @@ export function App({ connection }: { connection: ShowConnection }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [renumbering, setRenumbering] = useState(false);
   const [renamingList, setRenamingList] = useState<Id | null>(null);
+  const [pendingList, setPendingList] = useState<string | null>(null);
   const clipboard = useRef<Cue[]>([]);
 
   const setPreferences = useCallback((next: Preferences) => {
@@ -252,10 +254,30 @@ export function App({ connection }: { connection: ShowConnection }) {
     [allCues, batch, connection, list, t],
   );
 
-  const addList = useCallback(() => {
-    const name = `${t("list.newName")} ${(workspace?.cue_lists.length ?? 0) + 1}`;
-    run({ command: "add_cue_list", name });
-  }, [run, t, workspace]);
+  const addList = useCallback(
+    (cart: boolean) => {
+      const lists = workspace?.cue_lists ?? [];
+      const count = lists.filter((existing) => Boolean(existing.cart) === cart).length;
+      const name = `${t(cart ? "list.newCart" : "list.newName")} ${count + 1}`;
+      // Show the new list once the server has added it.
+      connection
+        .send({ command: "add_cue_list", name, cart })
+        .then(() => setListId(null))
+        .then(() => setPendingList(name))
+        .catch(() => {});
+    },
+    [connection, t, workspace],
+  );
+  // A list just added by this client is the one to look at.
+  useEffect(() => {
+    if (!pendingList || !workspace) return;
+    const added = [...workspace.cue_lists].reverse().find((candidate) => candidate.name === pendingList);
+    if (added) {
+      setListId(added.id);
+      setPendingList(null);
+    }
+  }, [pendingList, workspace]);
+  const toggleCue = useCallback((cue: Id) => run({ command: running.has(cue) ? "stop" : "start", cue }), [run, running]);
 
   const modal = settingsOpen || renumbering;
   useEffect(() => {
@@ -439,14 +461,20 @@ export function App({ connection }: { connection: ShowConnection }) {
                       onDoubleClick={() => editable && setRenamingList(candidate.id)}
                       title={editable ? t("list.renameHint") : undefined}
                     >
+                      {candidate.cart && <Icon name="cart" size={13} />}
                       {candidate.name}
                     </button>
                   ),
                 )}
                 {editable && (
-                  <button className="icon-button quiet" onClick={addList} title={t("list.add")}>
-                    <Icon name="plus" size={13} />
-                  </button>
+                  <>
+                    <button className="icon-button quiet" onClick={() => addList(false)} title={t("list.add")}>
+                      <Icon name="plus" size={13} />
+                    </button>
+                    <button className="icon-button quiet" onClick={() => addList(true)} title={t("list.addCart")}>
+                      <Icon name="cart" size={13} />
+                    </button>
+                  </>
                 )}
                 {editable && workspace.cue_lists.length > 1 && list && (
                   <button className="icon-button quiet" onClick={() => run({ command: "delete_cue_list", list: list.id })} title={t("list.delete")}>
@@ -455,20 +483,35 @@ export function App({ connection }: { connection: ShowConnection }) {
                 )}
               </nav>
             )}
-            <CueList
-              cues={list?.cues ?? []}
-              allCues={allCues}
-              playhead={playhead}
-              selection={selection}
-              running={running}
-              loaded={loaded}
-              editable={editable}
-              onSelect={select}
-              onSetPlayhead={(cue) => run({ command: "set_playhead", cue })}
-              onMove={moveCues}
-              onDropFiles={(files, drop) => void dropFiles(files, drop)}
-              onEdit={(cue) => run({ command: "update_cue", cue })}
-            />
+            {list?.cart ? (
+              <CueCart
+                cues={list.cues}
+                allCues={allCues}
+                selection={selection}
+                running={running}
+                loaded={loaded}
+                editable={editable}
+                onSelect={select}
+                onToggle={toggleCue}
+                onMove={moveCues}
+                onDropFiles={(files, drop) => void dropFiles(files, drop)}
+              />
+            ) : (
+              <CueList
+                cues={list?.cues ?? []}
+                allCues={allCues}
+                playhead={playhead}
+                selection={selection}
+                running={running}
+                loaded={loaded}
+                editable={editable}
+                onSelect={select}
+                onSetPlayhead={(cue) => run({ command: "set_playhead", cue })}
+                onMove={moveCues}
+                onDropFiles={(files, drop) => void dropFiles(files, drop)}
+                onEdit={(cue) => run({ command: "update_cue", cue })}
+              />
+            )}
             {editable && (
               <Inspector
                 connection={connection}

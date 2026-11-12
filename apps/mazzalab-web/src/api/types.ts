@@ -89,6 +89,8 @@ export type GroupCue = Extract<Cue, { type: "group" }>;
 export interface CueList {
   id: Id;
   name: string;
+  /** Shown as a grid of buttons instead of a list to GO through. */
+  cart?: boolean;
   cues: Cue[];
 }
 
@@ -235,7 +237,7 @@ export type Command =
   | { command: "insert_cue"; container: Container; index?: number; cue: Cue }
   | { command: "delete_cue"; cue: Id }
   | { command: "move_cue"; cue: Id; container: Container; index?: number }
-  | { command: "add_cue_list"; name: string }
+  | { command: "add_cue_list"; name: string; cart?: boolean }
   | { command: "rename_cue_list"; list: Id; name: string }
   | { command: "delete_cue_list"; list: Id }
   | { command: "rename_workspace"; name: string }
