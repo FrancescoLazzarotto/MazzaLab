@@ -441,3 +441,30 @@ fn load_command_shows_in_the_status_until_the_cue_starts() {
         .is_err()
     );
 }
+
+#[test]
+fn carts_are_cue_lists_marked_as_such() {
+    let mut show = show();
+    show.execute(Command::AddCueList {
+        name: "Spot effects".into(),
+        cart: true,
+    })
+    .unwrap();
+    // Older clients leave the flag out and get a plain list.
+    let plain: Command =
+        serde_json::from_value(json!({ "command": "add_cue_list", "name": "Act 2" })).unwrap();
+    show.execute(plain).unwrap();
+
+    let lists = &show.workspace().cue_lists;
+    assert_eq!(
+        lists
+            .iter()
+            .map(|list| (list.name.as_str(), list.cart))
+            .collect::<Vec<_>>(),
+        [("Main", false), ("Spot effects", true), ("Act 2", false)]
+    );
+    // The flag is only written when set.
+    let saved = serde_json::to_value(show.workspace()).unwrap();
+    assert!(saved["cue_lists"][0].get("cart").is_none());
+    assert_eq!(saved["cue_lists"][1]["cart"], true);
+}

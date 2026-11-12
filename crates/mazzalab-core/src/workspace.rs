@@ -11,6 +11,10 @@ use crate::time::seconds;
 pub struct CueList {
     pub id: CueId,
     pub name: String,
+    /// A cart: cues called up in no particular order, shown as a grid of
+    /// buttons rather than as a list to GO through.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub cart: bool,
     #[serde(default)]
     pub cues: Vec<Cue>,
 }
@@ -20,8 +24,14 @@ impl CueList {
         Self {
             id: CueId::new(),
             name: name.into(),
+            cart: false,
             cues: Vec::new(),
         }
+    }
+
+    pub fn with_cart(mut self, cart: bool) -> Self {
+        self.cart = cart;
+        self
     }
 
     pub fn with_id(mut self, id: CueId) -> Self {

@@ -102,6 +102,9 @@ pub enum Command {
     },
     AddCueList {
         name: String,
+        /// Whether the new list is a cart.
+        #[serde(default)]
+        cart: bool,
     },
     RenameCueList {
         list: CueId,
@@ -551,8 +554,8 @@ fn apply_edit(workspace: &mut Workspace, command: Command) -> Result<(), ShowErr
             container,
             index,
         } => move_cue(workspace, cue, container, index),
-        Command::AddCueList { name } => {
-            workspace.cue_lists.push(CueList::new(name));
+        Command::AddCueList { name, cart } => {
+            workspace.cue_lists.push(CueList::new(name).with_cart(cart));
             Ok(())
         }
         Command::RenameCueList { list, name } => workspace
