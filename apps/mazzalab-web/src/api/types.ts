@@ -171,6 +171,8 @@ export interface Status {
   panicking: boolean;
   playheads: { list: Id; cue: Id | null }[];
   running: RunningCue[];
+  /** Cues loaded to a time (seconds from the start of their pre-wait). */
+  loaded?: { cue: Id; time: number }[];
 }
 
 /** The audio output the server is playing on. */
@@ -225,6 +227,7 @@ export type Container = { kind: "list"; id: Id } | { kind: "group"; id: Id };
 export type Command =
   | { command: "go"; list?: Id }
   | { command: "start" | "stop" | "pause" | "resume"; cue: Id }
+  | { command: "load"; cue: Id; time?: number }
   | { command: "stop_all" | "pause_all" | "resume_all" | "panic" | "reset" | "undo" | "redo" }
   | { command: "set_playhead"; list?: Id; cue: Id | null }
   | { command: "playhead_next" | "playhead_previous"; list?: Id }
@@ -241,7 +244,8 @@ export type Command =
   | { command: "batch"; commands: Command[] };
 
 export type EngineEvent = { at: number } & (
-  | { kind: "triggered" | "skipped" | "action_completed" | "stopped" | "paused" | "resumed"; cue: Id }
+  | { kind: "triggered" | "skipped" | "action_completed" | "stopped" | "paused" | "resumed" | "unloaded" | "devamped"; cue: Id }
+  | { kind: "loaded"; cue: Id; time: number }
   | { kind: "action_started"; cue: Id; armed: boolean }
   | { kind: "panicking"; cue: Id; fade: number }
   | { kind: "playhead_moved"; list: Id; cue: Id | null }

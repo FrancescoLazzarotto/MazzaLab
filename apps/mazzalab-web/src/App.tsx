@@ -62,6 +62,7 @@ export function App({ connection }: { connection: ShowConnection }) {
   const rows = useMemo(() => (list ? flatten(list.cues) : []), [list]);
   const playhead = status?.playheads.find((entry) => entry.list === list?.id)?.cue ?? null;
   const running = useMemo(() => new Map((status?.running ?? []).map((run) => [run.cue, run])), [status]);
+  const loaded = useMemo(() => new Map((status?.loaded ?? []).map((entry) => [entry.cue, entry.time])), [status]);
   const standby = playhead ? findCue(allCues, playhead) : undefined;
 
   // Cues can disappear under the selection (deleted here or by someone else).
@@ -460,6 +461,7 @@ export function App({ connection }: { connection: ShowConnection }) {
               playhead={playhead}
               selection={selection}
               running={running}
+              loaded={loaded}
               editable={editable}
               onSelect={select}
               onSetPlayhead={(cue) => run({ command: "set_playhead", cue })}
@@ -475,7 +477,9 @@ export function App({ connection }: { connection: ShowConnection }) {
                 settings={workspace.settings}
                 audio={audio}
                 running={running}
+                loaded={loaded}
                 editable={editable}
+                onLoad={(cue, time) => run({ command: "load", cue, time })}
                 onChange={(cue) => run({ command: "update_cue", cue })}
                 onChangeMany={(cues) => void batch(cues.map((cue) => ({ command: "update_cue", cue }))).catch(() => {})}
               />

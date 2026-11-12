@@ -5,6 +5,7 @@ import {
   ArrowLineDown,
   ArrowUUpLeft,
   ArrowUUpRight,
+  CaretDoubleRight,
   CaretRight,
   CheckCircle,
   Code,
@@ -118,6 +119,7 @@ const ICONS = {
   stop: [Stop, "fill"],
   reset: [ArrowCounterClockwise, "bold"],
   playhead: [CaretRight, "fill"],
+  loaded: [CaretDoubleRight, "bold"],
   auto_continue: [ArrowDown, "bold"],
   auto_follow: [ArrowLineDown, "bold"],
 } satisfies Record<string, [PhosphorIcon, IconWeight]>;

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Command, Cue } from "./api/types";
 import { meterFraction } from "./components/Meters";
-import { playbackPosition, rulerStep } from "./components/Waveform";
+import { cueTime, filePosition, playbackPosition, rulerStep } from "./components/Waveform";
 import {
   cloneCues,
   defaultMatrix,
@@ -200,6 +200,16 @@ describe("audio routing and display", () => {
     expect(meterFraction(0)).toBe(1);
     expect(meterFraction(6)).toBe(1);
     expect(meterFraction(-120)).toBe(0);
+  });
+
+  it("converts between a click in the file and the time a cue is loaded to", () => {
+    const cue = { id: "a", type: "audio" as const, start_time: 2, end_time: 6, pre_wait: 1.5, rate: 2 };
+    // Position 4 is two seconds of file past the start: one second of cue at double rate.
+    expect(cueTime(cue, 4)).toBe(2.5);
+    expect(filePosition(cue, 2.5, 10)).toBe(4);
+    // Still in the pre-wait: nothing of the file has played.
+    expect(filePosition(cue, 1, 10)).toBe(2);
+    expect(cueTime({ id: "a", type: "audio" as const }, 3.25)).toBe(3.25);
   });
 
   it("spaces ruler labels so they stay readable", () => {

@@ -31,7 +31,7 @@ type Patch = Record<string, unknown>;
 
 function tabsFor(cue: Cue): Tab[] {
   if (cue.type === "audio") return ["basics", "time", "levels"];
-  const plain = ["start", "stop", "pause", "reset", "devamp", "goto", "arm", "disarm", "memo", "mic", "camera", "midi_file", "timecode", "target", "load", "script"];
+  const plain = ["start", "stop", "pause", "reset", "devamp", "goto", "arm", "disarm", "memo", "mic", "camera", "midi_file", "timecode", "script"];
   return plain.includes(cue.type) ? ["basics"] : ["basics", "settings"];
 }
 
@@ -42,9 +42,11 @@ export function Inspector({
   settings,
   audio,
   running,
+  loaded,
   editable,
   onChange,
   onChangeMany,
+  onLoad,
 }: {
   connection: ShowConnection;
   /** The selected cues. */
@@ -53,9 +55,12 @@ export function Inspector({
   settings: WorkspaceSettings;
   audio: AudioStatus | null;
   running: Map<Id, RunningCue>;
+  /** Cues loaded to a time, in seconds from the start of their pre-wait. */
+  loaded: Map<Id, number>;
   editable: boolean;
   onChange: (cue: Cue) => void;
   onChangeMany: (cues: Cue[]) => void;
+  onLoad: (cue: Id, time: number) => void;
 }) {
   const { t } = useI18n();
   const [tab, setTab] = useState<Tab>("basics");
@@ -103,10 +108,18 @@ export function Inspector({
       <fieldset className="inspector-body" disabled={!editable}>
         {current === "basics" && <Basics cue={cue} allCues={allCues} set={set} />}
         {current === "time" && cue.type === "audio" && (
-          <AudioTime connection={connection} cue={cue} run={running.get(cue.id)} editable={editable} set={set} />
+          <AudioTime
+            connection={connection}
+            cue={cue}
+            run={running.get(cue.id)}
+            loadedAt={loaded.get(cue.id)}
+            editable={editable}
+            set={set}
+            onLoad={(time) => onLoad(cue.id, time)}
+          />
         )}
         {current === "levels" && cue.type === "audio" && <AudioLevels cue={cue} outputs={audio?.channels ?? 2} set={set} />}
-        {current === "settings" && <TypeSettings cue={cue} settings={settings} set={set} />}
+        {current === "settings" && <TypeSettings cue={cue} allCues={allCues} settings={settings} set={set} />}
       </fieldset>
     </section>
   );
@@ -203,14 +216,18 @@ function AudioTime({
   connection,
   cue,
   run,
+  loadedAt,
   editable,
   set,
+  onLoad,
 }: {
   connection: ShowConnection;
   cue: AudioCue;
   run: RunningCue | undefined;
+  loadedAt: number | undefined;
   editable: boolean;
   set: (patch: Patch) => void;
+  onLoad: (time: number) => void;
 }) {
   const { t } = useI18n();
   const picker = useRef<HTMLInputElement>(null);
@@ -229,7 +246,7 @@ function AudioTime({
   };
   return (
     <div className="audio-time">
-      <Waveform connection={connection} cue={cue} run={run} editable={editable} onChange={set} />
+      <Waveform connection={connection} cue={cue} run={run} loadedAt={loadedAt} editable={editable} onChange={set} onLoad={onLoad} />
       <div className="row wrap">
         <div className="file-field">
           <TextField label={t("inspector.file")} value={cue.file ?? ""} placeholder="media/file.wav" onCommit={(file) => setFile(file || undefined)} />
@@ -275,8 +292,21 @@ function AudioLevels({ cue, outputs, set }: { cue: AudioCue; outputs: number; se
   );
 }
 
-function TypeSettings({ cue, settings, set }: { cue: Cue; settings: WorkspaceSettings; set: (patch: Patch) => void }) {
+function TypeSettings({
+  cue,
+  allCues,
+  settings,
+  set,
+}: {
+  cue: Cue;
+  allCues: Cue[];
+  settings: WorkspaceSettings;
+  set: (patch: Patch) => void;
+}) {
   const { t } = useI18n();
+  const numbered = flatten(allCues)
+    .map((row) => row.cue)
+    .filter((candidate) => candidate.number);
   switch (cue.type) {
     case "video":
       return (
@@ -349,6 +379,34 @@ function TypeSettings({ cue, settings, set }: { cue: Cue; settings: WorkspaceSet
         </div>
       );
     }
+    case "load":
+      return (
+        <div className="form-columns">
+          <div className="form-column">
+            <TimeField label={t("inspector.loadTime")} value={cue.time ?? 0} onCommit={(time) => set({ time: time ?? 0 })} />
+          </div>
+        </div>
+      );
+    case "target":
+      return (
+        <div className="form-columns">
+          <div className="form-column">
+            <SelectField
+              label={t("inspector.newTarget")}
+              value={cue.assigned_number}
+              options={[
+                { value: "", label: t("inspector.noTarget") },
+                ...numbered.map((candidate) => ({ value: candidate.number!, label: `${candidate.number} · ${displayName(candidate)}` })),
+                // A number that no cue has any more stays visible.
+                ...(cue.assigned_number && !numbered.some((candidate) => candidate.number === cue.assigned_number)
+                  ? [{ value: cue.assigned_number, label: `${cue.assigned_number} (?)` }]
+                  : []),
+              ]}
+              onChange={(assigned_number) => set({ assigned_number })}
+            />
+          </div>
+        </div>
+      );
     case "midi":
       return <MidiFields patch={cue.patch} message={cue.message} patches={settings.midi_patches ?? []} onChange={set} />;
     case "text":

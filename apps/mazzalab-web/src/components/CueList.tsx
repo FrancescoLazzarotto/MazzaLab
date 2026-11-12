@@ -48,6 +48,7 @@ export function CueList({
   playhead,
   selection,
   running,
+  loaded,
   editable,
   onSelect,
   onSetPlayhead,
@@ -61,6 +62,8 @@ export function CueList({
   playhead: Id | null;
   selection: ReadonlySet<Id>;
   running: Map<Id, RunningCue>;
+  /** Cues loaded to a time, in seconds from the start of their pre-wait. */
+  loaded: Map<Id, number>;
   editable: boolean;
   onSelect: (cue: Id, mode: SelectMode) => void;
   onSetPlayhead: (cue: Id) => void;
@@ -206,8 +209,12 @@ export function CueList({
                 onDragOver={(event) => over(event, dropFor(event, cue))}
                 onDrop={(event) => finish(event, dropFor(event, cue))}
               >
-                <td className="col-gutter" onDoubleClick={() => onSetPlayhead(cue.id)} title={t("action.setPlayhead")}>
-                  {cue.id === playhead && <Icon name="playhead" size={11} />}
+                <td
+                  className={loaded.has(cue.id) ? "col-gutter loaded" : "col-gutter"}
+                  onDoubleClick={() => onSetPlayhead(cue.id)}
+                  title={loaded.has(cue.id) ? `${t("list.loaded")} ${formatTime(loaded.get(cue.id))}` : t("action.setPlayhead")}
+                >
+                  {loaded.has(cue.id) ? <Icon name="loaded" size={11} /> : cue.id === playhead && <Icon name="playhead" size={11} />}
                 </td>
                 <td className="col-number" onDoubleClick={() => editable && setEditing({ cue: cue.id, field: "number" })}>
                   {cell("number", cue.number ?? "")}

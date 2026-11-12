@@ -743,6 +743,10 @@ select.status-item {
   color: var(--go);
 }
 
+.cue-list .col-gutter.loaded {
+  color: var(--warn);
+}
+
 .cue-list .col-number {
   width: 58px;
   font-weight: 600;

@@ -26,6 +26,17 @@ export function playbackPosition(cue: AudioCue, elapsed: number, duration: numbe
   return start + (travelled % pass);
 }
 
+/** The position in the file of a time counted from the start of the cue's pre-wait. */
+export function filePosition(cue: AudioCue, time: number, duration: number): number {
+  return playbackPosition(cue, Math.max(0, time - (cue.pre_wait ?? 0)), duration);
+}
+
+/** The cue time (from the start of its pre-wait) at which a position in the file plays first. */
+export function cueTime(cue: AudioCue, position: number): number {
+  const into = Math.max(0, position - (cue.start_time ?? 0)) / (cue.rate ?? 1);
+  return Math.round(((cue.pre_wait ?? 0) + into) * 1000) / 1000;
+}
+
 /** The smallest step that keeps ruler labels at least `minPixels` apart. */
 export function rulerStep(duration: number, width: number, minPixels = 72): number {
   if (duration <= 0 || width <= 0) return RULER_STEPS[RULER_STEPS.length - 1];
@@ -49,14 +60,20 @@ export function Waveform({
   connection,
   cue,
   run,
+  loadedAt,
   editable,
   onChange,
+  onLoad,
 }: {
   connection: ShowConnection;
   cue: AudioCue;
   run: RunningCue | undefined;
+  /** Where the cue is loaded to, in seconds from the start of its pre-wait. */
+  loadedAt: number | undefined;
   editable: boolean;
   onChange: (patch: { start_time?: number; end_time?: number }) => void;
+  /** The waveform was clicked: load the cue to that time. */
+  onLoad: (time: number) => void;
 }) {
   const { t } = useI18n();
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -125,6 +142,7 @@ export function Waveform({
         active: color("--focus", "#5b9dff"),
         fade: color("--text-2", "#a2a4a9"),
         cursor: color("--go", "#2fbf71"),
+        load: color("--warn", "#dba93c"),
       };
 
       const x = (time: number) => (duration > 0 ? (time / duration) * width : 0);
@@ -206,6 +224,17 @@ export function Waveform({
           context.lineTo(position + (direction > 0 ? 1 : 0), 8);
           context.fill();
         }
+        // Where the cue is loaded to: the next start picks up from here.
+        if (loadedAt !== undefined && !runRef.current) {
+          const position = Math.round(x(filePosition(cue, loadedAt, duration)));
+          context.fillStyle = colors.load;
+          context.fillRect(position, top, 1, height - top);
+          context.beginPath();
+          context.moveTo(position - 4, top);
+          context.lineTo(position + 5, top);
+          context.lineTo(position + 0.5, top + 6);
+          context.fill();
+        }
         const current = runRef.current;
         if (current) {
           const ahead = current.run.paused ? 0 : (performance.now() - current.at) / 1000;
@@ -226,7 +255,7 @@ export function Waveform({
       observer.disconnect();
       if (frame) cancelAnimationFrame(frame);
     };
-  }, [data, duration, start, end, cue, draft, hover, playing]);
+  }, [data, duration, start, end, cue, draft, hover, playing, loadedAt]);
 
   const timeAt = (event: { clientX: number }) => {
     const element = canvas.current;
@@ -264,9 +293,14 @@ export function Waveform({
         ref={canvas}
         className={hover || draft ? "trimming" : undefined}
         onPointerDown={(event) => {
-          if (!interactive) return;
-          const handle = handleAt(event);
-          if (!handle) return;
+          if (duration <= 0) return;
+          const handle = interactive ? handleAt(event) : null;
+          if (!handle) {
+            // Anywhere else in the part that plays loads the cue there.
+            const time = timeAt(event);
+            if (time >= start && time <= end) onLoad(cueTime(cue, time));
+            return;
+          }
           event.currentTarget.setPointerCapture(event.pointerId);
           setDraft({ handle, time: handle === "start" ? start : end });
         }}

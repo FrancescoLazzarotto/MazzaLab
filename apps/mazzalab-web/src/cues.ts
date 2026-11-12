@@ -82,6 +82,7 @@ export const CUE_TYPES: CueType[] = [
   "reset",
   "devamp",
   "goto",
+  "target",
   "arm",
   "disarm",
   "wait",
@@ -93,7 +94,7 @@ export const CUE_TYPES: CueType[] = [
 export const TOOLBOX: CueType[][] = [
   ["group", "audio", "mic", "video", "camera", "text"],
   ["light", "fade", "network", "midi", "timecode"],
-  ["start", "stop", "pause", "load", "reset", "devamp", "goto", "arm", "disarm"],
+  ["start", "stop", "pause", "load", "reset", "devamp", "goto", "target", "arm", "disarm"],
   ["wait", "memo", "script"],
 ];
 
@@ -108,7 +109,11 @@ export const WORKING_TYPES: ReadonlySet<CueType> = new Set<CueType>([
   "start",
   "stop",
   "pause",
+  "load",
+  "reset",
+  "devamp",
   "goto",
+  "target",
   "arm",
   "disarm",
   "wait",
