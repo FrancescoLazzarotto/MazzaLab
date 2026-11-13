@@ -3,7 +3,9 @@
 use std::net::{IpAddr, Ipv4Addr};
 use std::time::Duration;
 
-use mazzalab_core::{Cue, CueKind, DmxOutput, DmxProtocol, LightCue, Workspace};
+use mazzalab_core::{
+    Cue, CueKind, DmxOutput, DmxProtocol, Fixture, FixtureGroup, LightCue, Workspace,
+};
 use mazzalab_server::{LightingBackend, NoticeLevel, Output, ServerConfig, Update};
 use mazzalab_show::Command;
 use tokio::net::UdpSocket;
@@ -123,5 +125,72 @@ async fn light_cues_fade_dmx_out_and_report_what_they_cannot_read() {
         server.handle.dmx_levels().await,
         Some(vec![(1, 2, 255), (1, 3, 255), (1, 10, 128)])
     );
+    server.stop().await;
+}
+
+#[tokio::test]
+async fn light_cues_call_fixtures_and_groups_of_the_show_patch() {
+    let node = UdpSocket::bind((LOCALHOST, 0)).await.unwrap();
+    let mut workspace = Workspace::new("Patch");
+    workspace.settings.dmx_outputs = vec![DmxOutput {
+        universe: 1,
+        protocol: DmxProtocol::ArtNet,
+        host: format!("127.0.0.1:{}", node.local_addr().unwrap().port()),
+        net_universe: 0,
+    }];
+    workspace.settings.fixtures = vec![
+        Fixture::dimmer("Front left", 1, 1),
+        Fixture::dimmer("Front right", 1, 2),
+        Fixture::dimmer("Cyc", 1, 20).with_parameters(["intensity", "red", "green", "blue"]),
+    ];
+    workspace.settings.fixture_groups = vec![FixtureGroup {
+        name: "Front wash".into(),
+        members: vec!["Front left".into(), "Front right".into()],
+    }];
+    workspace.cue_lists[0].cues = vec![
+        light(
+            "1",
+            &["front wash @ 75", "cyc @ full", "cyc @ #ff8000"],
+            0.0,
+        ),
+        light("2", &["front wash @ out"], 0.0),
+    ];
+    let config = ServerConfig {
+        bind: LOCALHOST,
+        osc_port: 0,
+        udp_reply_port: None,
+        http_port: 0,
+        ..ServerConfig::default()
+    };
+    let server = mazzalab_server::start(config, workspace, |completion| {
+        vec![Box::new(LightingBackend::new(completion)) as Box<dyn Output>]
+    })
+    .await
+    .unwrap();
+
+    let go = async || {
+        server
+            .handle
+            .execute(Command::Go { list: None })
+            .await
+            .unwrap();
+    };
+    go().await;
+    let look = dmx_until(&node, |data| data[0] == 191 && data[19] == 255).await;
+    assert_eq!(look[..2], [191, 191]);
+    assert_eq!(look[19..23], [255, 255, 128, 0]);
+
+    // The patch is the show's: moved while the show runs, the group follows.
+    let mut settings = server.handle.snapshot().await.unwrap().workspace.settings;
+    settings.fixtures[1].address = 5;
+    server
+        .handle
+        .execute(Command::UpdateSettings { settings })
+        .await
+        .unwrap();
+    go().await;
+    let look = dmx_until(&node, |data| data[0] == 0).await;
+    assert_eq!(look[1], 191, "the old address is no longer the fixture");
+    assert_eq!(look[4], 0);
     server.stop().await;
 }

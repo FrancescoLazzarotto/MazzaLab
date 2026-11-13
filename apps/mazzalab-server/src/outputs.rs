@@ -455,10 +455,11 @@ impl Output for LightingBackend {
                 continue;
             };
             // Lines that can be read are run; the others are pointed out.
+            let patch = mazzalab_lighting::Patch::of(&workspace.settings);
             let mut assignments = Vec::new();
             for line in light.commands.iter().filter(|line| !line.trim().is_empty()) {
-                match mazzalab_lighting::parse_command(line) {
-                    Ok(assignment) => assignments.push(assignment),
+                match patch.parse(line) {
+                    Ok(more) => assignments.extend(more),
                     Err(error) => self.completion.notify(
                         NoticeLevel::Warning,
                         format!("Cue {}: \"{line}\": {error}", label(show, cue)),
