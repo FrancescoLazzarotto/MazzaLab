@@ -172,7 +172,8 @@ describe("numbers, names and files", () => {
     expect(problemOf({ id: "a", type: "fade", target: "gone" }, exists)).toBe("missing_target");
     expect(problemOf({ id: "a", type: "fade", target: "there" }, exists)).toBeNull();
     expect(problemOf({ id: "a", type: "network", message: "  " }, exists)).toBe("no_message");
-    expect(problemOf({ id: "a", type: "video" }, exists)).toBe("not_supported");
+    expect(problemOf({ id: "a", type: "video" }, exists)).toBe("no_file");
+    expect(problemOf({ id: "a", type: "mic" }, exists)).toBe("not_supported");
   });
 });
 

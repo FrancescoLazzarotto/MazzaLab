@@ -6,6 +6,7 @@ import { AudioPanel } from "./components/AudioPanel";
 import { CueCart } from "./components/CueCart";
 import { CueList, type SelectMode } from "./components/CueList";
 import { DmxPanel } from "./components/DmxPanel";
+import { StageMonitor } from "./components/StageMonitor";
 import { slotLabels } from "./fixtures";
 import { Icon } from "./components/icons";
 import { Inspector } from "./components/Inspector";
@@ -539,6 +540,9 @@ export function App({ connection }: { connection: ShowConnection }) {
               onOpenSettings={() => setSettingsOpen(true)}
             />
             {dmx !== null && ((workspace.settings.dmx_outputs ?? []).length > 0 || dmx.length > 0) && <DmxPanel levels={dmx} labels={slotLabels(workspace.settings.fixtures ?? [])} />}
+            {flatten(workspace.cue_lists.flatMap((list) => list.cues)).some((row) => row.cue.type === "video" || row.cue.type === "text") && (
+              <StageMonitor settings={workspace.settings} />
+            )}
             <ActiveCues
               running={status?.running ?? []}
               cues={allCues}

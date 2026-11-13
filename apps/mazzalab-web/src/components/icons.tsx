@@ -1,6 +1,7 @@
 import {
   ArrowBendDownRight,
   ArrowCounterClockwise,
+  ArrowSquareOut,
   ArrowDown,
   ArrowLineDown,
   ArrowUUpLeft,
@@ -105,6 +106,7 @@ const ICONS = {
   undo: [ArrowUUpLeft, "regular"],
   redo: [ArrowUUpRight, "regular"],
   save: [FloppyDisk, "regular"],
+  external: [ArrowSquareOut, "regular"],
   settings: [GearSix, "regular"],
   warning: [Warning, "fill"],
   flag: [Flag, "fill"],

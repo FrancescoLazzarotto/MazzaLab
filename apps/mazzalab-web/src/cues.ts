@@ -101,6 +101,8 @@ export const TOOLBOX: CueType[][] = [
 /** Cue types whose action this build really performs. */
 export const WORKING_TYPES: ReadonlySet<CueType> = new Set<CueType>([
   "audio",
+  "video",
+  "text",
   "light",
   "timecode",
   "fade",
@@ -240,7 +242,7 @@ export function problemOf(cue: Cue, exists: (id: Id) => boolean): Problem | null
     if (!cue.target) return "no_target";
     if (!exists(cue.target)) return "missing_target";
   }
-  if (cue.type === "audio" && !cue.file) return "no_file";
+  if ((cue.type === "audio" || cue.type === "video") && !cue.file) return "no_file";
   if (cue.type === "network" && cue.message.trim() === "") return "no_message";
   if (cue.type === "light" && (cue.commands ?? []).length === 0) return "no_commands";
   if (cue.type === "timecode" && normalizeTimecode(cue.start) === null) return "bad_timecode";

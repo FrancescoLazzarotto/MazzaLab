@@ -24,6 +24,7 @@ import { SliceList } from "./SliceList";
 import { MatrixEditor } from "./MatrixEditor";
 import { MidiFields } from "./MidiFields";
 import { MidiTriggerField } from "./MidiTriggerField";
+import { StageField, VideoFields } from "./VideoFields";
 import { filePosition, Waveform } from "./Waveform";
 
 const COLORS: CueColor[] = ["red", "orange", "yellow", "green", "blue", "purple", "grey"];
@@ -125,7 +126,7 @@ export function Inspector({
           />
         )}
         {current === "levels" && cue.type === "audio" && <AudioLevels cue={cue} outputs={audio?.channels ?? 2} set={set} />}
-        {current === "settings" && <TypeSettings cue={cue} allCues={allCues} settings={settings} set={set} />}
+        {current === "settings" && <TypeSettings connection={connection} cue={cue} allCues={allCues} settings={settings} set={set} />}
       </fieldset>
     </section>
   );
@@ -351,11 +352,13 @@ function AudioLevels({ cue, outputs, set }: { cue: AudioCue; outputs: number; se
 }
 
 function TypeSettings({
+  connection,
   cue,
   allCues,
   settings,
   set,
 }: {
+  connection: ShowConnection;
   cue: Cue;
   allCues: Cue[];
   settings: WorkspaceSettings;
@@ -367,14 +370,7 @@ function TypeSettings({
     .filter((candidate) => candidate.number);
   switch (cue.type) {
     case "video":
-      return (
-        <div className="form-columns">
-          <div className="form-column">
-            <TextField label={t("inspector.file")} value={cue.file ?? ""} onCommit={(file) => set({ file: file || undefined })} />
-            <NumberField label={t("inspector.opacity")} value={cue.opacity ?? 1} step={0.05} min={0} onCommit={(opacity) => set({ opacity: Math.min(1, opacity) })} />
-          </div>
-        </div>
-      );
+      return <VideoFields connection={connection} cue={cue} settings={settings} set={set} />;
     case "wait":
       return (
         <div className="form-columns">
@@ -527,6 +523,10 @@ function TypeSettings({
         <div className="form-columns">
           <div className="form-column grow">
             <TextField label={t("inspector.text")} value={cue.text} multiline onCommit={(text) => set({ text })} />
+          </div>
+          <div className="form-column">
+            <StageField settings={settings} value={cue.stage} onChange={(stage) => set({ stage })} />
+            <NumberField label={t("inspector.layer")} value={cue.layer ?? 0} onCommit={(layer) => set({ layer: Math.round(layer) })} />
           </div>
         </div>
       );

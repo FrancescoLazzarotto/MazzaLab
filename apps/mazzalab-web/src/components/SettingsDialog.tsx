@@ -9,19 +9,21 @@ import type {
   MidiPatch,
   NetworkPatch,
   NetworkProtocol,
+  Stage,
   Workspace,
   WorkspaceSettings,
 } from "../api/types";
 import { useI18n } from "../i18n";
 import type { Preferences } from "../preferences";
 import { CheckField, LevelField, NumberField, SelectField, TextField, TimeField } from "./fields";
+import { stageUrl } from "../stage";
 import { FixturesTab } from "./FixturesTab";
 import { Icon } from "./icons";
 import { MidiTriggerField } from "./MidiTriggerField";
 
 const BUFFER_SIZES = [64, 128, 256, 512, 1024, 2048];
 const PROTOCOLS: NetworkProtocol[] = ["osc_udp", "osc_tcp", "plain_udp", "plain_tcp"];
-type Tab = "general" | "audio" | "network" | "midi" | "lights" | "fixtures" | "keys";
+type Tab = "general" | "audio" | "network" | "midi" | "lights" | "fixtures" | "video" | "keys";
 
 const SHORTCUTS: [string, string][] = [
   ["Space", "action.go"],
@@ -79,7 +81,7 @@ export function SettingsDialog({
         <header>
           <h1>{t("settings.title")}</h1>
           <nav className="inspector-tabs">
-            {(["general", "audio", "network", "midi", "lights", "fixtures", "keys"] as const).map((name) => (
+            {(["general", "audio", "network", "midi", "lights", "fixtures", "video", "keys"] as const).map((name) => (
               <button key={name} className={name === tab ? "active" : undefined} onClick={() => setTab(name)}>
                 {t(`settings.${name}`)}
               </button>
@@ -122,6 +124,7 @@ export function SettingsDialog({
             />
           )}
           {tab === "lights" && <LightsTab outputs={settings.dmx_outputs ?? []} onChange={(dmx_outputs) => set({ dmx_outputs })} />}
+          {tab === "video" && <StagesTab stages={settings.stages ?? []} onChange={(stages) => set({ stages })} />}
           {tab === "fixtures" && (
             <FixturesTab
               fixtures={settings.fixtures ?? []}
@@ -376,6 +379,47 @@ function MidiTab({
           />
         ))}
       </div>
+    </div>
+  );
+}
+
+/** The screens the show puts video and text on. */
+function StagesTab({ stages, onChange }: { stages: Stage[]; onChange: (stages: Stage[]) => void }) {
+  const { t } = useI18n();
+  // Without stages the show has one called Main: list it, so that it can be renamed.
+  const shown = stages.length > 0 ? stages : [{ name: "Main" }];
+  const update = (index: number, name: string) => onChange(shown.map((stage, position) => (position === index ? { name } : stage)));
+  const add = () => {
+    let n = shown.length + 1;
+    while (shown.some((stage) => stage.name === `${t("settings.stageName")} ${n}`)) n++;
+    onChange([...shown, { name: `${t("settings.stageName")} ${n}` }]);
+  };
+  return (
+    <div className="form-column">
+      {shown.map((stage, index) => (
+        <div className="row patch-row stage-row" key={index}>
+          <TextField label={t("settings.patchName")} value={stage.name} onCommit={(name) => name.trim() && update(index, name.trim())} />
+          <button onClick={() => window.open(stageUrl(stage.name), `stage-${stage.name}`, "popup,width=960,height=540")}>
+            <Icon name="external" size={13} />
+            {t("stage.open")}
+          </button>
+          <button
+            className="icon-button quiet"
+            title={t("action.delete")}
+            disabled={shown.length === 1}
+            onClick={() => onChange(shown.filter((_, position) => position !== index))}
+          >
+            <Icon name="trash" size={14} />
+          </button>
+        </div>
+      ))}
+      <div>
+        <button onClick={add}>
+          <Icon name="plus" size={12} />
+          {t("settings.addStage")}
+        </button>
+      </div>
+      <p className="hint">{t("settings.stagesHint")}</p>
     </div>
   );
 }
