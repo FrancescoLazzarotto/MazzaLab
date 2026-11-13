@@ -3,8 +3,8 @@
 use std::time::Duration;
 
 use mazzalab_core::{
-    AudioCue, ContinueMode, Cue, CueId, CueKind, CueList, FadeCue, GroupCue, GroupMode, LoadCue,
-    TargetCue, WaitCue, Workspace,
+    ActionLength, AudioCue, ContinueMode, Cue, CueId, CueKind, CueList, FadeCue, GroupCue,
+    GroupMode, LoadCue, SliceMarker, TargetCue, WaitCue, Workspace,
 };
 use mazzalab_engine::{Engine, EventKind, RunPhase};
 
@@ -244,6 +244,63 @@ fn devamp_cuts_the_passes_left_of_a_counted_loop_and_follows_on() {
     engine.advance_to(secs(8.0));
     assert!(!engine.is_active(id(1)));
     assert!(engine.is_active(id(3)), "auto-follow still follows");
+}
+
+/// Ten seconds of file: an intro to 2 s, a vamp from 2 to 6 s that loops
+/// until devamped, then an ending played once.
+fn sliced(n: u128) -> Cue {
+    Cue::new(CueKind::Audio(AudioCue {
+        file: Some("a.wav".into()),
+        media_duration: Some(secs(10.0)),
+        slices: vec![
+            SliceMarker {
+                time: secs(2.0),
+                play_count: 1,
+            },
+            SliceMarker {
+                time: secs(6.0),
+                play_count: 0,
+            },
+        ],
+        ..AudioCue::default()
+    }))
+    .with_id(id(n))
+}
+
+#[test]
+fn devamp_moves_a_sliced_cue_from_its_vamp_to_the_ending() {
+    assert_eq!(sliced(1).kind.action_length(), ActionLength::UntilStopped);
+    let devamp = Cue::new(CueKind::Devamp).with_id(id(2)).with_target(id(1));
+    let mut engine = engine_with(vec![sliced(1), devamp]);
+    engine.start(id(1)).unwrap();
+    // The vamp goes round for as long as it takes.
+    engine.advance_to(secs(60.0));
+    assert!(engine.is_active(id(1)));
+    // 61 s in: 59 s into the vamp, three into its fifteenth pass. It
+    // finishes that pass (1 s), then plays the four-second ending.
+    engine.advance_to(secs(61.0));
+    engine.start(id(2)).unwrap();
+    engine.advance_to(secs(65.9));
+    assert!(engine.is_active(id(1)));
+    engine.advance_to(secs(66.0));
+    assert!(!engine.is_active(id(1)));
+}
+
+#[test]
+fn devamp_in_a_slice_before_a_vamp_leaves_the_end_open() {
+    let devamp = Cue::new(CueKind::Devamp).with_id(id(2)).with_target(id(1));
+    let mut engine = engine_with(vec![sliced(1), devamp]);
+    engine.start(id(1)).unwrap();
+    engine.advance_to(secs(1.0));
+    engine.start(id(2)).unwrap();
+    assert!(
+        kinds(&mut engine)
+            .iter()
+            .any(|(_, kind)| *kind == EventKind::Devamped(id(1)))
+    );
+    // Into the vamp it goes, and there it stays.
+    engine.advance_to(secs(30.0));
+    assert!(engine.is_active(id(1)));
 }
 
 #[test]

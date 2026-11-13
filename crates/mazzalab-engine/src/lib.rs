@@ -904,7 +904,8 @@ impl Engine {
         }
     }
 
-    /// Tells a looping audio cue to finish the pass it is in and end there.
+    /// Tells a looping audio cue to finish the pass it is in and move on:
+    /// to its next slice, or to its end.
     fn devamp(&mut self, target: CueId) {
         let Some(run) = self.runs.get(&target).copied() else {
             return;
@@ -915,31 +916,24 @@ impl Engine {
         let Some(CueKind::Audio(audio)) = self.cue(target).map(|cue| &cue.kind) else {
             return;
         };
-        if !audio.infinite_loop && audio.play_count <= 1 {
+        if !audio.devamps() {
             return;
         }
-        let pass = audio
-            .end_time
-            .or(audio.media_duration)
-            .map(|end| end.saturating_sub(audio.start_time))
-            .filter(|pass| !pass.is_zero() && audio.rate.is_finite() && audio.rate > 0.0)
-            .map(|pass| pass.div_f64(audio.rate));
+        let rate = audio.rate;
+        let elapsed = self.now.saturating_sub(run.phase_started) + run.offset;
+        let left = (rate.is_finite() && rate > 0.0)
+            .then(|| audio.left_after_devamp(elapsed.mul_f64(rate)))
+            .flatten()
+            .map(|left| left.div_f64(rate));
         self.emit(EventKind::Devamped(target));
-        // With a known length the end of the pass can be timed; otherwise
-        // the backend reports it.
-        let Some(pass) = pass else {
+        // With known lengths the end can be timed; otherwise the backend
+        // reports it, or a later slice loops until the next devamp.
+        let Some(left) = left else {
             return;
         };
-        let elapsed = self.now.saturating_sub(run.phase_started) + run.offset;
-        let into_pass = Duration::from_secs_f64(elapsed.as_secs_f64() % pass.as_secs_f64());
         self.timers
             .retain(|timer| !(timer.cue == target && timer.kind == TimerKind::ActionEnd));
-        self.schedule(
-            pass.saturating_sub(into_pass),
-            target,
-            run.owner,
-            TimerKind::ActionEnd,
-        );
+        self.schedule(left, target, run.owner, TimerKind::ActionEnd);
     }
 
     fn apply_control(&mut self, control: Control, target: CueId) {
