@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import type { ShowConnection } from "../api/connection";
-import type { AudioCue, RunningCue, Waveform as WaveformData } from "../api/types";
+import type { AudioCue, RunningCue, SliceMarker, Waveform as WaveformData } from "../api/types";
 import { formatTime } from "../format";
 import { useI18n } from "../i18n";
+import { addMarker, firstReach, locate, markers, segments } from "../slices";
 
 const BUCKETS = 1600;
 /** How close, in pixels, the pointer has to be to grab a trim handle. */
@@ -12,18 +13,19 @@ const RULER = 16;
 /** Distances between ruler labels, in seconds, to choose from. */
 const RULER_STEPS = [0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 1800, 3600];
 
-type Handle = "start" | "end";
+/** A trim handle, or a slice marker by its time when the drag began. */
+type Handle = "start" | "end" | { marker: number };
+
+const isMarker = (handle: Handle | undefined | null): handle is { marker: number } => typeof handle === "object" && handle !== null;
+const sameHandle = (a: Handle | null | undefined, b: Handle | null | undefined) =>
+  a === b || (isMarker(a) && isMarker(b) && a.marker === b.marker);
 
 /** Where the playback position is in the file, given how long the cue has run. */
 export function playbackPosition(cue: AudioCue, elapsed: number, duration: number): number {
-  const start = cue.start_time ?? 0;
-  const end = cue.end_time ?? duration;
-  const pass = Math.max(0, end - start);
-  if (pass === 0) return start;
-  const travelled = elapsed * (cue.rate ?? 1);
-  const passes = cue.infinite_loop ? Infinity : Math.max(1, cue.play_count ?? 1);
-  if (travelled >= pass * passes) return end;
-  return start + (travelled % pass);
+  const all = segments(cue, duration);
+  const place = locate(cue, elapsed * (cue.rate ?? 1), duration);
+  if (!place) return all[all.length - 1].to;
+  return all[place.segment].from + place.within;
 }
 
 /** The position in the file of a time counted from the start of the cue's pre-wait. */
@@ -31,10 +33,15 @@ export function filePosition(cue: AudioCue, time: number, duration: number): num
   return playbackPosition(cue, Math.max(0, time - (cue.pre_wait ?? 0)), duration);
 }
 
-/** The cue time (from the start of its pre-wait) at which a position in the file plays first. */
-export function cueTime(cue: AudioCue, position: number): number {
-  const into = Math.max(0, position - (cue.start_time ?? 0)) / (cue.rate ?? 1);
-  return Math.round(((cue.pre_wait ?? 0) + into) * 1000) / 1000;
+/**
+ * The cue time (from the start of its pre-wait) at which a position in the
+ * file plays first; `null` if it never does by itself, behind a slice that
+ * loops until devamped.
+ */
+export function cueTime(cue: AudioCue, position: number, duration = cue.media_duration ?? 0): number | null {
+  const travelled = firstReach(cue, Math.max(cue.start_time ?? 0, position), duration);
+  if (travelled === null) return null;
+  return Math.round(((cue.pre_wait ?? 0) + travelled / (cue.rate ?? 1)) * 1000) / 1000;
 }
 
 /** The smallest step that keeps ruler labels at least `minPixels` apart. */
@@ -71,7 +78,7 @@ export function Waveform({
   /** Where the cue is loaded to, in seconds from the start of its pre-wait. */
   loadedAt: number | undefined;
   editable: boolean;
-  onChange: (patch: { start_time?: number; end_time?: number }) => void;
+  onChange: (patch: { start_time?: number; end_time?: number; slices?: SliceMarker[] }) => void;
   /** The waveform was clicked: load the cue to that time. */
   onLoad: (time: number) => void;
 }) {
@@ -83,6 +90,7 @@ export function Waveform({
   /** A trim being dragged, not yet sent to the server. */
   const [draft, setDraft] = useState<{ handle: Handle; time: number } | null>(null);
   const [hover, setHover] = useState<Handle | null>(null);
+  const grab = useRef<{ handle: Handle; moved: boolean } | null>(null);
 
   const { id, file } = cue;
   useEffect(() => {
@@ -106,6 +114,16 @@ export function Waveform({
   const duration = data?.duration ?? cue.media_duration ?? 0;
   const start = draft?.handle === "start" ? draft.time : (cue.start_time ?? 0);
   const end = draft?.handle === "end" ? draft.time : (cue.end_time ?? duration);
+  // The cue as drawn: with the handle being dragged where it is now.
+  const dragged = draft && isMarker(draft.handle) ? draft.handle.marker : null;
+  const moved = (cue.slices ?? []).map((marker) => (marker.time === dragged && draft ? { ...marker, time: draft.time } : marker));
+  const shown: AudioCue = {
+    ...cue,
+    start_time: start,
+    end_time: draft?.handle === "end" ? draft.time : cue.end_time,
+    slices: moved,
+  };
+  const cuts = markers(shown, duration);
 
   // Remember when the last status arrived, to move the cursor smoothly
   // between updates.
@@ -209,6 +227,32 @@ export function Waveform({
           context.lineTo(x(end), fadeOut > 0 ? floor : ceiling);
           context.stroke();
         }
+        // Slice markers, dashed, with how often each slice plays.
+        if (cuts.length > 0) {
+          context.lineWidth = 1;
+          context.setLineDash([3, 3]);
+          for (const marker of cuts) {
+            const position = Math.round(x(marker.time)) + 0.5;
+            const grabbed = (draft && isMarker(draft.handle) && draft.time === marker.time) || (isMarker(hover) && hover.marker === marker.time);
+            context.strokeStyle = grabbed ? colors.active : colors.fade;
+            context.beginPath();
+            context.moveTo(position, top);
+            context.lineTo(position, height);
+            context.stroke();
+            context.fillStyle = grabbed ? colors.active : colors.fade;
+            context.fillRect(position - 3.5, top - 4, 7, 4);
+          }
+          context.setLineDash([]);
+          context.font = '10px "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif';
+          context.textAlign = "left";
+          context.textBaseline = "bottom";
+          context.fillStyle = colors.fade;
+          for (const segment of segments(shown, duration)) {
+            if (x(segment.to) - x(segment.from) > 24) {
+              context.fillText(segment.passes === null ? "∞" : `×${segment.passes}`, x(segment.from) + 5, height - 3);
+            }
+          }
+        }
         // Trim handles: a line through the peaks with a flag in the ruler.
         for (const [handle, time] of [
           ["start", start],
@@ -238,7 +282,7 @@ export function Waveform({
         const current = runRef.current;
         if (current) {
           const ahead = current.run.paused ? 0 : (performance.now() - current.at) / 1000;
-          const position = Math.round(x(playbackPosition(cue, current.run.elapsed + ahead, duration)));
+          const position = Math.round(x(playbackPosition(shown, current.run.elapsed + ahead, duration)));
           context.fillStyle = colors.cursor;
           context.fillRect(position, top, 1, height - top);
           frame = requestAnimationFrame(draw);
@@ -255,7 +299,7 @@ export function Waveform({
       observer.disconnect();
       if (frame) cancelAnimationFrame(frame);
     };
-  }, [data, duration, start, end, cue, draft, hover, playing, loadedAt]);
+  }, [data, duration, start, end, cue, draft, hover, playing, loadedAt, shown, cuts]);
 
   const timeAt = (event: { clientX: number }) => {
     const element = canvas.current;
@@ -270,11 +314,22 @@ export function Waveform({
     const position = event.clientX - bounds.left;
     const distance = (time: number) => Math.abs((time / duration) * bounds.width - position);
     const [toStart, toEnd] = [distance(start), distance(end)];
+    // Markers sit inside the region, so they win over a trim that is as close.
+    const marker = cuts.reduce<SliceMarker | null>((best, cut) => (distance(cut.time) <= GRAB && (!best || distance(cut.time) < distance(best.time)) ? cut : best), null);
+    if (marker && distance(marker.time) <= Math.min(toStart, toEnd)) return { marker: marker.time };
     if (Math.min(toStart, toEnd) > GRAB) return null;
     // When both handles are within reach, take the one the pointer is
     // outside of, so that neither gets stuck behind the other.
     if (toStart <= GRAB && toEnd <= GRAB) return position <= (start / duration) * bounds.width ? "start" : "end";
     return toStart < toEnd ? "start" : "end";
+  };
+
+  // Keep at least a hundredth of a second between the handles.
+  const dragTime = (handle: Handle, time: number) => {
+    const fixedStart = cue.start_time ?? 0;
+    const fixedEnd = cue.end_time ?? duration;
+    if (isMarker(handle)) return Math.min(fixedEnd - 0.01, Math.max(fixedStart + 0.01, time));
+    return handle === "start" ? Math.min(time, fixedEnd - 0.01) : Math.max(time, fixedStart + 0.01);
   };
 
   const interactive = editable && duration > 0;
@@ -294,36 +349,56 @@ export function Waveform({
         className={hover || draft ? "trimming" : undefined}
         onPointerDown={(event) => {
           if (duration <= 0) return;
+          const time = timeAt(event);
+          // Alt-click cuts a slice there.
+          if (event.altKey) {
+            if (interactive && time > start + 0.01 && time < end - 0.01) onChange({ slices: addMarker(cue, time) });
+            return;
+          }
           const handle = interactive ? handleAt(event) : null;
           if (!handle) {
             // Anywhere else in the part that plays loads the cue there.
-            const time = timeAt(event);
-            if (time >= start && time <= end) onLoad(cueTime(cue, time));
+            const at = time >= start && time <= end ? cueTime(cue, time, duration) : null;
+            if (at !== null) onLoad(at);
             return;
           }
           event.currentTarget.setPointerCapture(event.pointerId);
-          setDraft({ handle, time: handle === "start" ? start : end });
+          grab.current = { handle, moved: false };
+          setDraft({ handle, time: isMarker(handle) ? handle.marker : handle === "start" ? start : end });
         }}
         onPointerMove={(event) => {
           if (!interactive) return;
-          if (!draft) {
-            setHover(handleAt(event));
+          // The grab is kept outside React state, so that a move right after
+          // the press is not lost before the next render.
+          const held = grab.current;
+          if (!held) {
+            const next = handleAt(event);
+            if (!sameHandle(next, hover)) setHover(next);
             return;
           }
-          // Keep at least a hundredth of a second between the handles.
-          const time = timeAt(event);
-          setDraft({
-            handle: draft.handle,
-            time: draft.handle === "start" ? Math.min(time, end - 0.01) : Math.max(time, start + 0.01),
-          });
+          held.moved = true;
+          setDraft({ handle: held.handle, time: dragTime(held.handle, timeAt(event)) });
         }}
-        onPointerUp={() => {
-          if (!draft) return;
-          const time = Math.round(draft.time * 1000) / 1000;
-          if (draft.handle === "start") onChange({ start_time: Math.max(0, time) });
+        onPointerUp={(event) => {
+          const held = grab.current;
+          grab.current = null;
+          setDraft(null);
+          // A click on a handle without moving it changes nothing.
+          if (!held?.moved) return;
+          const time = Math.round(dragTime(held.handle, timeAt(event)) * 1000) / 1000;
+          if (isMarker(held.handle)) {
+            const from = held.handle.marker;
+            const others = (cue.slices ?? []).filter((marker) => marker.time !== from);
+            const kept = (cue.slices ?? []).find((marker) => marker.time === from);
+            // Dropped onto another marker, the two become one.
+            if (time !== from && kept) {
+              onChange({
+                slices: [...others.filter((marker) => marker.time !== time), { ...kept, time }].sort((a, b) => a.time - b.time),
+              });
+            }
+          } else if (held.handle === "start") onChange({ start_time: Math.max(0, time) });
           // An end at the very end of the file means "play to the end".
           else onChange({ end_time: time >= duration - 0.005 ? undefined : time });
-          setDraft(null);
         }}
         onPointerLeave={() => setHover(null)}
       />

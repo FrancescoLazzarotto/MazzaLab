@@ -3,6 +3,7 @@ import type { Cue, Id, RunningCue } from "../api/types";
 import { actionLength, displayName, fileName, findCue, flatten, midiSummary, needsTarget, problemOf, typeLabel, type Drop } from "../cues";
 import { formatTime } from "../format";
 import { useI18n } from "../i18n";
+import { loopsUntilDevamped } from "../slices";
 import { CueIcon, Icon } from "./icons";
 
 const DRAG_TYPE = "application/x-mazzalab-cues";
@@ -235,7 +236,7 @@ export function CueList({
                 </td>
                 <td className="col-time">
                   <TimeCell
-                    text={run?.phase === "action" ? formatTime(run.elapsed) : length ? formatTime(length) : cue.type === "audio" && cue.infinite_loop ? "∞" : ""}
+                    text={run?.phase === "action" ? formatTime(run.elapsed) : length ? formatTime(length) : cue.type === "audio" && loopsUntilDevamped(cue, cue.media_duration ?? 0) ? "∞" : ""}
                     progress={actionProgress}
                   />
                 </td>

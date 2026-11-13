@@ -1,4 +1,5 @@
 import type { Command, Container, Cue, CueType, Id, Matrix, MidiMessage } from "./api/types";
+import { fileLength } from "./slices";
 
 /** A cue with its nesting depth, as shown in the cue list. */
 export interface Row {
@@ -34,11 +35,9 @@ export function actionLength(cue: Cue): number | null {
     case "network":
       return cue.duration ?? 0;
     case "audio": {
-      if (cue.infinite_loop) return null;
-      const end = cue.end_time ?? cue.media_duration;
-      if (end === undefined) return null;
-      const rate = cue.rate ?? 1;
-      return (Math.max(0, end - (cue.start_time ?? 0)) * Math.max(1, cue.play_count ?? 1)) / rate;
+      if (cue.end_time === undefined && cue.media_duration === undefined) return null;
+      const length = fileLength(cue, cue.media_duration ?? 0);
+      return length === null ? null : length / (cue.rate ?? 1);
     }
     case "video":
       return cue.hold_at_end ? null : (cue.media_duration ?? null);

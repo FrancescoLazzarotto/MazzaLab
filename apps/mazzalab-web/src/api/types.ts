@@ -70,12 +70,22 @@ export interface Triggers {
 /** Crosspoint levels in dB, `matrix[file channel][output]`; null is silent. */
 export type Matrix = (number | null)[][];
 
+/** A point that cuts an audio cue into slices; the slice ending here plays `play_count` times (0: until devamped). */
+export interface SliceMarker {
+  time: number;
+  play_count?: number;
+}
+
 export interface AudioFields {
   file?: string;
   start_time?: number;
   end_time?: number;
   play_count?: number;
   infinite_loop?: boolean;
+  /** With slices, `play_count` and `infinite_loop` do not apply. */
+  slices?: SliceMarker[];
+  /** How often the slice after the last marker plays; 0 loops it until devamped. */
+  last_slice_play_count?: number;
   rate?: number;
   level_db?: number;
   output_patch?: string;
