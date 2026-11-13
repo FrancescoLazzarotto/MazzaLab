@@ -1,0 +1,16 @@
+[package]
+name = "mazzalab-timecode"
+description = "SMPTE timecode for MazzaLab: values and frame rates with drop frame, MIDI Time Code and LTC, to send and to read."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+mazzalab-core.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true

@@ -2371,6 +2371,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "mazzalab-timecode"
+version = "0.1.0"
+dependencies = [
+ "mazzalab-core",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "mazzalab-timeline"
 version = "0.1.0"
 
