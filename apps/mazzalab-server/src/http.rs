@@ -51,6 +51,7 @@ pub fn router(handle: ShowHandle, ui_dir: Option<PathBuf>) -> Router {
         .route("/api/audio", get(audio))
         .route("/api/midi", get(midi))
         .route("/api/midi/in", post(midi_in))
+        .route("/api/timecode/in", post(timecode_in))
         .route("/api/waveform", get(waveform))
         .route(
             "/api/media",
@@ -159,6 +160,28 @@ async fn midi_in(
 ) -> (StatusCode, Json<Value>) {
     state.handle.midi_in(event).await;
     outcome(Ok(()))
+}
+
+#[derive(Deserialize)]
+struct TimecodeBody {
+    timecode: String,
+    #[serde(default)]
+    format: mazzalab_core::SmpteFormat,
+}
+
+/// Feeds the show timecode as if it had come in, to try timecode triggers
+/// without a source.
+async fn timecode_in(
+    State(state): State<AppState>,
+    Json(body): Json<TimecodeBody>,
+) -> (StatusCode, Json<Value>) {
+    match mazzalab_timecode::Timecode::parse(&body.timecode) {
+        Ok(timecode) => {
+            state.handle.timecode_in(timecode, body.format.into()).await;
+            outcome(Ok(()))
+        }
+        Err(error) => outcome(Err(error.to_string())),
+    }
 }
 
 #[derive(Deserialize)]
@@ -453,6 +476,7 @@ async fn client(socket: WebSocket, handle: ShowHandle) {
                 Ok(Update::Notice(notice)) => send(&ServerMessage::Notice { notice: &notice }),
                 Ok(Update::Dmx(levels)) => send(&ServerMessage::Dmx { levels: &levels }),
                 Ok(Update::MidiIn(event)) => send(&ServerMessage::MidiIn { event }),
+                Ok(Update::Timecode(timecode)) => send(&ServerMessage::Timecode { timecode: &timecode }),
                 Ok(Update::Osc(_)) => continue,
                 // Too slow to keep up: resynchronise with a fresh snapshot.
                 Err(RecvError::Lagged(_)) => match handle.snapshot().await {

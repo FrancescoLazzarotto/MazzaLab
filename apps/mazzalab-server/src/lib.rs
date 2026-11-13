@@ -29,7 +29,7 @@ use tokio::net::{TcpListener, UdpSocket};
 use tokio::task::JoinHandle;
 
 pub use actor::{
-    AudioStatus, Completion, DmxLevel, Notice, NoticeLevel, Output, ShowHandle, Update,
+    AudioStatus, Completion, DmxLevel, Notice, NoticeLevel, Output, ShowHandle, TimecodeIn, Update,
 };
 pub use http::{MEDIA_FOLDER, router};
 pub use outputs::{AudioBackend, LightingBackend, LogOutput, MidiBackend, NetworkBackend};

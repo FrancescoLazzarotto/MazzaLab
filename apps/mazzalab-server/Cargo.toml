@@ -25,6 +25,7 @@ mazzalab-network.workspace = true
 mazzalab-osc.workspace = true
 mazzalab-project.workspace = true
 mazzalab-show.workspace = true
+mazzalab-timecode.workspace = true
 rosc.workspace = true
 serde.workspace = true
 serde_json.workspace = true

@@ -2287,6 +2287,7 @@ name = "mazzalab-midi"
 version = "0.1.0"
 dependencies = [
  "mazzalab-core",
+ "mazzalab-timecode",
  "midir",
  "serde",
  "thiserror 2.0.21",
@@ -2348,6 +2349,7 @@ dependencies = [
  "mazzalab-osc",
  "mazzalab-project",
  "mazzalab-show",
+ "mazzalab-timecode",
  "rosc",
  "serde",
  "serde_json",

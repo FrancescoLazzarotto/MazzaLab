@@ -6,7 +6,7 @@ use mazzalab_midi::MidiEvent;
 use mazzalab_show::{Command, Snapshot, Status};
 use serde::{Deserialize, Serialize};
 
-use crate::actor::{AudioStatus, DmxLevel, Notice};
+use crate::actor::{AudioStatus, DmxLevel, Notice, TimecodeIn};
 
 /// Server to client.
 #[derive(Debug, Clone, Serialize)]
@@ -31,6 +31,11 @@ pub enum ServerMessage<'a> {
     /// A MIDI message arrived on an input: `kind`, `channel`, `number` and
     /// `value`. Lets a client learn a trigger from the controller itself.
     MidiIn { event: MidiEvent },
+    /// Timecode came in: `timecode` as `HH:MM:SS:FF` and its `format`.
+    Timecode {
+        #[serde(flatten)]
+        timecode: &'a TimecodeIn,
+    },
     /// Answer to a client request carrying the same `id`.
     Result {
         id: u64,

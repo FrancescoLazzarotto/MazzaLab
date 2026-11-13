@@ -7,10 +7,11 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use mazzalab_core::{AudioCue, CueId, CueKind};
+use mazzalab_core::{AudioCue, CueId, CueKind, SmpteFormat};
 use mazzalab_engine::{Event, EventKind};
 use mazzalab_midi::MidiEvent;
 use mazzalab_show::{Command, OscOutcome, Show, Snapshot, Status};
+use mazzalab_timecode::{Rate, Timecode};
 use rosc::{OscMessage, OscType};
 use serde::Serialize;
 use tokio::sync::{broadcast, mpsc, oneshot};
@@ -112,6 +113,7 @@ pub struct Completion {
     finished: mpsc::UnboundedSender<CueId>,
     notices: mpsc::UnboundedSender<Notice>,
     midi: mpsc::UnboundedSender<MidiEvent>,
+    timecode: mpsc::UnboundedSender<(Timecode, Rate)>,
 }
 
 impl Completion {
@@ -133,6 +135,31 @@ impl Completion {
     pub fn midi_received(&self, event: MidiEvent) {
         let _ = self.midi.send(event);
     }
+
+    /// Hands the show the timecode that came in: it starts the cues whose
+    /// timecode trigger it passes.
+    pub fn timecode_received(&self, timecode: Timecode, rate: Rate) {
+        let _ = self.timecode.send((timecode, rate));
+    }
+}
+
+/// Timecode coming into the show, as shown to operators.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct TimecodeIn {
+    /// `HH:MM:SS:FF`.
+    pub timecode: String,
+    /// The rate it runs at, as far as MTC tells.
+    pub format: SmpteFormat,
+}
+
+/// The show format a rate read off MTC stands for.
+fn format_of(rate: Rate) -> SmpteFormat {
+    match (rate.base, rate.drop_frame) {
+        (24, _) => SmpteFormat::Fps24,
+        (25, _) => SmpteFormat::Fps25,
+        (30, true) => SmpteFormat::Fps29_97Drop,
+        _ => SmpteFormat::Fps30NonDrop,
+    }
 }
 
 /// Broadcast to every connected client.
@@ -151,6 +178,8 @@ pub enum Update {
     Dmx(Arc<Vec<DmxLevel>>),
     /// A MIDI message arrived on an input.
     MidiIn(MidiEvent),
+    /// Timecode came in.
+    Timecode(Arc<TimecodeIn>),
 }
 
 enum Request {
@@ -187,6 +216,11 @@ enum Request {
     },
     MidiIn {
         event: MidiEvent,
+        reply: oneshot::Sender<()>,
+    },
+    TimecodeIn {
+        timecode: Timecode,
+        rate: Rate,
         reply: oneshot::Sender<()>,
     },
     Audition {
@@ -232,6 +266,16 @@ impl ShowHandle {
     /// Feeds the show a MIDI message as if it had arrived on an input.
     pub async fn midi_in(&self, event: MidiEvent) {
         self.ask(|reply| Request::MidiIn { event, reply }).await;
+    }
+
+    /// Feeds the show timecode as if it had come in.
+    pub async fn timecode_in(&self, timecode: Timecode, rate: Rate) {
+        self.ask(|reply| Request::TimecodeIn {
+            timecode,
+            rate,
+            reply,
+        })
+        .await;
     }
 
     /// The DMX slots that are lit, if the show drives lights.
@@ -333,10 +377,12 @@ pub fn spawn(
     let (finished_tx, finished_rx) = mpsc::unbounded_channel();
     let (notices_tx, notices_rx) = mpsc::unbounded_channel();
     let (midi_tx, midi_rx) = mpsc::unbounded_channel();
+    let (timecode_tx, timecode_rx) = mpsc::unbounded_channel();
     let outputs = make_outputs(Completion {
         finished: finished_tx,
         notices: notices_tx,
         midi: midi_tx,
+        timecode: timecode_tx,
     });
     let base_dir: Option<Arc<Path>> = path.as_deref().and_then(folder).map(Arc::from);
     let handle = ShowHandle {
@@ -363,10 +409,11 @@ pub fn spawn(
         last_audio: None,
         dmx_recheck: None,
         meters_live: false,
+        last_timecode: None,
         unreadable: HashSet::new(),
         workspace_id: handle.workspace_id.clone(),
     };
-    let task = tokio::spawn(actor.run(receiver, finished_rx, notices_rx, midi_rx));
+    let task = tokio::spawn(actor.run(receiver, finished_rx, notices_rx, midi_rx, timecode_rx));
     (handle, task)
 }
 
@@ -390,6 +437,8 @@ struct Actor {
     dmx_recheck: Option<Instant>,
     /// Whether the last meters sent showed any signal.
     meters_live: bool,
+    /// The last timecode that came in, as a frame count, and its rate.
+    last_timecode: Option<(u64, Rate)>,
     /// Media files that could not be probed, so they are not tried again on
     /// every edit.
     unreadable: HashSet<(CueId, PathBuf)>,
@@ -403,6 +452,7 @@ impl Actor {
         mut finished: mpsc::UnboundedReceiver<CueId>,
         mut notices: mpsc::UnboundedReceiver<Notice>,
         mut midi: mpsc::UnboundedReceiver<MidiEvent>,
+        mut timecode: mpsc::UnboundedReceiver<(Timecode, Rate)>,
     ) {
         loop {
             self.sync();
@@ -426,6 +476,10 @@ impl Actor {
                 Some(event) = midi.recv() => {
                     self.advance();
                     self.midi_in(event);
+                }
+                Some((value, rate)) = timecode.recv() => {
+                    self.advance();
+                    self.timecode_in(value, rate);
                 }
                 () = tokio::time::sleep_until(wake) => {}
             }
@@ -494,6 +548,14 @@ impl Actor {
             }
             Request::MidiIn { event, reply } => {
                 self.midi_in(event);
+                let _ = reply.send(());
+            }
+            Request::TimecodeIn {
+                timecode,
+                rate,
+                reply,
+            } => {
+                self.timecode_in(timecode, rate);
                 let _ = reply.send(());
             }
             Request::Audition { cue, reply } => {
@@ -569,6 +631,43 @@ impl Actor {
         for command in commands {
             if let Err(error) = self.show.execute(command) {
                 tracing::warn!(%error, "a MIDI trigger could not be carried out");
+            }
+        }
+    }
+
+    /// Follows incoming timecode: clients see it, and while it runs forward
+    /// the cues whose trigger it passes start. A jump (a locate, a loop of
+    /// the source) starts nothing.
+    fn timecode_in(&mut self, timecode: Timecode, rate: Rate) {
+        let _ = self.updates.send(Update::Timecode(Arc::new(TimecodeIn {
+            timecode: timecode.to_string(),
+            format: format_of(rate),
+        })));
+        let now = rate.to_frames(timecode);
+        let Some((before, before_rate)) = self.last_timecode.replace((now, rate)) else {
+            return;
+        };
+        let forward =
+            before_rate == rate && now > before && now - before <= rate.fps().ceil() as u64;
+        if !forward {
+            return;
+        }
+        let starts: Vec<Command> = self
+            .show
+            .workspace()
+            .cues()
+            .filter(|cue| {
+                cue.triggers
+                    .timecode
+                    .as_deref()
+                    .and_then(|text| Timecode::parse(text).ok())
+                    .is_some_and(|trigger| (before + 1..=now).contains(&rate.to_frames(trigger)))
+            })
+            .map(|cue| Command::Start { cue: cue.id })
+            .collect();
+        for command in starts {
+            if let Err(error) = self.show.execute(command) {
+                tracing::warn!(%error, "a timecode trigger could not be carried out");
             }
         }
     }

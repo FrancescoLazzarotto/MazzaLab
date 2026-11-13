@@ -1,9 +1,12 @@
 //! The backends that turn engine events into sound and network messages.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use mazzalab_audio::{AudioOutput, DeviceRequest};
-use mazzalab_core::{ActionLength, AudioSettings, CueId, CueKind, DmxOutput};
+use mazzalab_core::{
+    ActionLength, AudioSettings, CueId, CueKind, DmxOutput, TimecodeCue, TimecodeSignal,
+};
 use mazzalab_engine::{Event, EventKind};
 use mazzalab_show::Show;
 
@@ -338,13 +341,34 @@ impl Output for NetworkBackend {
     }
 }
 
-/// Sends the messages of MIDI cues to the show's MIDI patches, and listens
-/// on every MIDI input for the messages that trigger cues.
+/// Sends the messages of MIDI cues and the MTC of Timecode cues to the
+/// show's MIDI patches, and listens on every MIDI input for the messages
+/// and the timecode that trigger cues.
 #[derive(Debug)]
 pub struct MidiBackend {
     sender: Option<mazzalab_midi::Sender>,
     completion: Completion,
+    /// MTC being sent, by Timecode cue.
+    timecode: HashMap<CueId, mazzalab_midi::MtcGenerator>,
     _listener: Option<mazzalab_midi::Listener>,
+}
+
+/// The port of the patch a cue names, or of the first patch.
+fn midi_port<'a>(
+    patches: &'a [mazzalab_core::MidiPatch],
+    name: Option<&str>,
+) -> Result<&'a str, String> {
+    let name = name.filter(|name| !name.is_empty());
+    let patch = match name {
+        Some(name) => patches.iter().find(|patch| patch.name == name),
+        None => patches.first(),
+    };
+    patch
+        .map(|patch| patch.port.as_str())
+        .ok_or_else(|| match name {
+            Some(name) => format!("there is no MIDI patch named \"{name}\""),
+            None => "the show has no MIDI patch; add one in the settings".to_owned(),
+        })
 }
 
 impl MidiBackend {
@@ -359,14 +383,64 @@ impl MidiBackend {
         .map_err(|error| tracing::error!(%error, "MIDI cues are disabled"))
         .ok();
         let incoming = completion.clone();
-        let listener =
-            mazzalab_midi::Listener::start(move |_, event| incoming.midi_received(event))
-                .map_err(|error| tracing::error!(%error, "MIDI triggers are disabled"))
-                .ok();
+        let clock = completion.clone();
+        // One decoder for every input: a show follows one timecode source.
+        let decoder = std::sync::Mutex::new(mazzalab_timecode::mtc::Decoder::new());
+        let listener = mazzalab_midi::Listener::start_with_timecode(
+            move |_, event| incoming.midi_received(event),
+            move |_, bytes| {
+                let decoded = decoder
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .feed(bytes);
+                if let Some((timecode, rate)) = decoded {
+                    clock.timecode_received(timecode, rate);
+                }
+            },
+        )
+        .map_err(|error| tracing::error!(%error, "MIDI triggers are disabled"))
+        .ok();
         Self {
             sender,
             completion,
+            timecode: HashMap::new(),
             _listener: listener,
+        }
+    }
+}
+
+impl MidiBackend {
+    /// Starts sending a Timecode cue's MTC; says what is wrong if it cannot.
+    fn start_mtc(&mut self, show: &Show, cue: CueId, timecode: &TimecodeCue) -> Option<String> {
+        let port = match midi_port(
+            &show.workspace().settings.midi_patches,
+            timecode.patch.as_deref(),
+        ) {
+            Ok(port) => port.to_owned(),
+            Err(problem) => return Some(problem),
+        };
+        let Some(sender) = &self.sender else {
+            return Some("MIDI cues are disabled".to_owned());
+        };
+        let rate = mazzalab_timecode::Rate::from(timecode.format);
+        let start = match mazzalab_timecode::Timecode::parse(&timecode.start) {
+            Ok(start) => start,
+            Err(error) => return Some(error.to_string()),
+        };
+        // A cue loaded to a time is that much further on already.
+        let into = show
+            .status()
+            .running
+            .iter()
+            .find(|run| run.cue == cue)
+            .map_or(0.0, |run| run.elapsed);
+        let start = rate.add(start, (into * rate.fps()).floor() as i64);
+        match mazzalab_midi::MtcGenerator::start(sender.clone(), port, start, rate) {
+            Ok(generator) => {
+                self.timecode.insert(cue, generator);
+                None
+            }
+            Err(error) => Some(error.to_string()),
         }
     }
 }
@@ -375,29 +449,44 @@ impl Output for MidiBackend {
     fn handle(&mut self, show: &Show, events: &[Event]) {
         let workspace = show.workspace();
         for event in events {
+            match event.kind {
+                EventKind::Stopped(cue) | EventKind::ActionCompleted(cue) => {
+                    self.timecode.remove(&cue);
+                    continue;
+                }
+                EventKind::Paused(cue) => {
+                    if let Some(generator) = self.timecode.get(&cue) {
+                        generator.pause();
+                    }
+                    continue;
+                }
+                EventKind::Resumed(cue) => {
+                    if let Some(generator) = self.timecode.get(&cue) {
+                        generator.resume();
+                    }
+                    continue;
+                }
+                _ => {}
+            }
             let EventKind::ActionStarted { cue, armed: true } = event.kind else {
                 continue;
             };
-            let Some(CueKind::Midi(midi)) = workspace.find_cue(cue).map(|cue| &cue.kind) else {
-                continue;
-            };
             let patches = &workspace.settings.midi_patches;
-            let patch = match midi.patch.as_deref().filter(|name| !name.is_empty()) {
-                Some(name) => patches.iter().find(|patch| patch.name == name),
-                None => patches.first(),
-            };
-            let problem = match (patch, &self.sender) {
-                (Some(patch), Some(sender)) => sender
-                    .send(&patch.port, &midi.message)
-                    .err()
-                    .map(|error| error.to_string()),
-                (None, _) => Some(match &midi.patch {
-                    Some(name) if !name.is_empty() => {
-                        format!("there is no MIDI patch named \"{name}\"")
+            let problem = match workspace.find_cue(cue).map(|cue| &cue.kind) {
+                Some(CueKind::Midi(midi)) => {
+                    match (midi_port(patches, midi.patch.as_deref()), &self.sender) {
+                        (Ok(port), Some(sender)) => sender
+                            .send(port, &midi.message)
+                            .err()
+                            .map(|error| error.to_string()),
+                        (Err(problem), _) => Some(problem),
+                        (_, None) => Some("MIDI cues are disabled".to_owned()),
                     }
-                    _ => "the show has no MIDI patch; add one in the settings".to_owned(),
-                }),
-                (_, None) => Some("MIDI cues are disabled".to_owned()),
+                }
+                Some(CueKind::Timecode(timecode)) if timecode.signal == TimecodeSignal::Mtc => {
+                    self.start_mtc(show, cue, timecode)
+                }
+                _ => continue,
             };
             if let Some(problem) = problem {
                 self.completion.notify(
