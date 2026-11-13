@@ -151,6 +151,64 @@ pub struct DmxOutput {
     pub net_universe: u16,
 }
 
+/// A light in the rig, which Light cues call by its name.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Fixture {
+    pub name: String,
+    /// The show's universe, counted from 1.
+    #[serde(default = "first_universe")]
+    pub universe: u16,
+    /// Its first DMX address, from 1 to 512.
+    pub address: u16,
+    /// What each of its channels does, in order from the first address:
+    /// `intensity`, `red`, `green`, `blue`, `pan`... A dimmer has just
+    /// `intensity`.
+    #[serde(default = "dimmer", skip_serializing_if = "is_dimmer")]
+    pub parameters: Vec<String>,
+}
+
+impl Fixture {
+    /// A plain dimmer at an address.
+    pub fn dimmer(name: impl Into<String>, universe: u16, address: u16) -> Self {
+        Self {
+            name: name.into(),
+            universe,
+            address,
+            parameters: dimmer(),
+        }
+    }
+
+    pub fn with_parameters<S: Into<String>>(
+        mut self,
+        parameters: impl IntoIterator<Item = S>,
+    ) -> Self {
+        self.parameters = parameters.into_iter().map(Into::into).collect();
+        self
+    }
+}
+
+fn first_universe() -> u16 {
+    1
+}
+
+fn dimmer() -> Vec<String> {
+    vec!["intensity".to_owned()]
+}
+
+fn is_dimmer(parameters: &Vec<String>) -> bool {
+    *parameters == dimmer()
+}
+
+/// Fixtures that Light cues set together, by one name. A group may also
+/// hold other groups.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FixtureGroup {
+    pub name: String,
+    /// Names of fixtures or other groups.
+    #[serde(default)]
+    pub members: Vec<String>,
+}
+
 /// Workspace-wide behaviour settings.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WorkspaceSettings {
@@ -171,6 +229,11 @@ pub struct WorkspaceSettings {
     /// Where the universes that Light cues set are sent.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub dmx_outputs: Vec<DmxOutput>,
+    /// The lights of the rig, for Light cues to call by name.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fixtures: Vec<Fixture>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fixture_groups: Vec<FixtureGroup>,
     /// Incoming MIDI messages that GO, stop or panic the show.
     #[serde(default, skip_serializing_if = "MidiControls::is_empty")]
     pub midi_controls: MidiControls,
@@ -185,6 +248,8 @@ impl Default for WorkspaceSettings {
             network_patches: Vec::new(),
             midi_patches: Vec::new(),
             dmx_outputs: Vec::new(),
+            fixtures: Vec::new(),
+            fixture_groups: Vec::new(),
             midi_controls: MidiControls::default(),
         }
     }

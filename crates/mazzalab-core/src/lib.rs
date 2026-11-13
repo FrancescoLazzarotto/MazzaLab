@@ -23,6 +23,6 @@ pub use cue::{
 pub use id::{CueId, WorkspaceId};
 pub use validate::{Issue, validate};
 pub use workspace::{
-    AudioSettings, Container, CueList, DmxOutput, DmxProtocol, MidiControls, MidiPatch,
-    NetworkPatch, NetworkProtocol, Workspace, WorkspaceSettings,
+    AudioSettings, Container, CueList, DmxOutput, DmxProtocol, Fixture, FixtureGroup, MidiControls,
+    MidiPatch, NetworkPatch, NetworkProtocol, Workspace, WorkspaceSettings,
 };
