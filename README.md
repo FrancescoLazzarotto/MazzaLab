@@ -6,10 +6,12 @@ Cross-platform show control for theatre, live events and installations:
 cue-based playback of audio, video and lighting, and control of the devices
 around them, from one GO button. MazzaLab runs on Windows, macOS and Linux.
 
-> **Status:** early development. Working and tested today: the show model,
-> the playback engine, `.mazzalab` show files, audio playback, OSC remote
-> control, the show server, the web UI (desktop, browser, tablet) and the
-> desktop app. Video, lighting and devices are next. See the
+> **Status:** in development. Working and tested today: the show model,
+> the playback engine, `.mazzalab` show files, audio playback with slices,
+> video and text on stages that any browser can show, lights (Art-Net and
+> sACN, fixtures and groups), MIDI and MIDI Show Control, MTC and LTC
+> timecode, network cues, OSC remote control, the show server, the web UI
+> (desktop, browser, tablet) and the desktop app. See the
 > [roadmap](docs/architecture/overview.md#roadmap).
 
 ## Highlights
@@ -85,6 +87,7 @@ the web UI.
 | `crates/mazzalab-network` | Network cues: message text to OSC or raw bytes, sent over UDP and TCP |
 | `crates/mazzalab-midi` | MIDI cues: voice messages, SysEx and MIDI Show Control sent to output ports; MTC out; MIDI and MTC in |
 | `crates/mazzalab-timecode` | SMPTE timecode with drop frame, MIDI Time Code and LTC, to send and to read |
+| `crates/mazzalab-video` | What each stage shows: Video and Text cues by stage and layer, followed from the engine, rendered by any browser at `/?stage=Name` |
 | `crates/mazzalab-lighting` | Light cues: console-style commands on addresses, fixtures and groups, a fading DMX rig, Art-Net and sACN output |
 | `crates/mazzalab-{video,timeline,ui,plugin}` | Planned subsystems |
 | `apps/mazzalab-server` | Real-time show server: OSC, HTTP/WebSocket API, outputs |

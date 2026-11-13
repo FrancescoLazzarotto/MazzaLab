@@ -7,11 +7,13 @@ riproduzione a cue di audio, video e luci, più il controllo dei dispositivi
 intorno, tutto da un unico pulsante GO. MazzaLab gira su Windows, macOS e
 Linux.
 
-> **Stato:** sviluppo iniziale. Già funzionanti e testati: il modello dello
-> show, il motore di riproduzione, i file `.mazzalab`, la riproduzione
-> audio, il controllo remoto via OSC, il server dello show, l'interfaccia web
-> (desktop, browser, tablet) e l'app desktop. Video, luci e dispositivi sono
-> i prossimi passi. Vedi la [roadmap](docs/architecture/overview.md#roadmap).
+> **Stato:** in sviluppo. Già funzionanti e testati: il modello dello show,
+> il motore di riproduzione, i file `.mazzalab`, l'audio con le slice, video
+> e testo su stage che qualsiasi browser può mostrare, le luci (Art-Net e
+> sACN, fixture e gruppi), MIDI e MIDI Show Control, timecode MTC e LTC, i
+> cue di rete, il controllo remoto via OSC, il server dello show,
+> l'interfaccia web (desktop, browser, tablet) e l'app desktop. Vedi la
+> [roadmap](docs/architecture/overview.md#roadmap).
 
 ## Punti di forza
 
@@ -90,6 +92,7 @@ compilato l'interfaccia web.
 | `crates/mazzalab-network` | Network cue: dal testo del messaggio a OSC o byte, inviati su UDP e TCP |
 | `crates/mazzalab-midi` | Cue MIDI: messaggi di canale, SysEx e MIDI Show Control inviati alle uscite; MTC in uscita; MIDI e MTC in ingresso |
 | `crates/mazzalab-timecode` | Timecode SMPTE con drop frame, MIDI Time Code e LTC, da inviare e da leggere |
+| `crates/mazzalab-video` | Cosa mostra ogni stage: cue Video e Testo per stage e layer, seguiti dal motore, resi da qualsiasi browser a `/?stage=Nome` |
 | `crates/mazzalab-lighting` | Cue Light: comandi in stile console su indirizzi, fixture e gruppi, rig DMX con fade, uscita Art-Net e sACN |
 | `crates/mazzalab-{video,timeline,ui,plugin}` | Sottosistemi previsti |
 | `apps/mazzalab-server` | Server dello show in tempo reale: OSC, API HTTP/WebSocket, uscite |

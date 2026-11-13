@@ -65,7 +65,7 @@ pannello uscita audio, impostazioni (generale, audio, rete, scorciatoie),
 modalità Show, segnalazione dei cue rotti, avvisi all'operatore, tasti
 rapidi per cue.
 
-Stima della copertura rispetto a QLab: 40–45% delle funzioni. Le
+Stima della copertura rispetto a QLab: 45–50% delle funzioni. Le
 fondamenta (motore, protocollo, server) non vanno riscritte.
 
 ## Ordine delle fasi
@@ -282,7 +282,9 @@ Parità con QLab e poi oltre.
       keystone e simili).
 
 ### Cue
-- [ ] Video cue, Text cue (font, stili, fade), Camera cue a bassa latenza.
+- [x] Video cue e Text cue su stage, con layer, opacità, fade di opacità,
+      trim, velocità, loop e fermo sull'ultimo fotogramma. Mancano font e
+      stili del testo, la geometria e il Camera cue.
 
 ### Proiezione
 - [ ] Edge blending con gamma, warping (prospettiva, lineare, Bézier,
@@ -295,7 +297,14 @@ Parità con QLab e poi oltre.
 ### Oltre QLab
 - [ ] **Render node remoti**: macchine senza interfaccia che fanno solo
       uscita video e ricevono ordini dal server principale, in sincronia.
-- [ ] Anteprima delle uscite video nell'interfaccia web e sui tablet.
+- [x] Anteprima delle uscite video nell'interfaccia web e sui tablet: il
+      monitor dello stage nel pannello laterale.
+- [x] **Stage nel browser**: qualsiasi finestra a `/?stage=Nome` è
+      un'uscita video, anche su un altro computer della rete, in sincronia
+      con l'orologio del server e con la decodifica hardware del browser.
+      Restano da fare il renderer nativo (`wgpu`) per edge blending,
+      warping e HAP, e l'apertura degli stage a schermo intero sui monitor
+      dall'app desktop.
 
 ## Fase 7 — Collaborazione e ridondanza (L)
 
@@ -401,6 +410,12 @@ Voci ancora aperte qui sopra di cui esiste già un pezzo:
   ripetizioni o in loop fino al devamp; il Devamp chiude il passaggio in
   corso e passa alla slice successiva senza buchi, al campione (verificato
   sulla scheda audio), o chiude il cue nell'ultima.
+- **Video**: cue Video e Testo su stage nominati, a layer, con opacità e
+  fade di opacità, pausa, ripresa, carico a un punto e fine segnalata
+  dallo stage; ogni browser che apre `/?stage=Nome` è un proiettore, e il
+  pannello laterale mostra lo stage dal vivo. L'audio dei video esce dal
+  browser dello stage. Mancano il renderer nativo, edge blending e
+  warping, la geometria, NDI/Spout/Syphon e il Camera cue.
 - **Avvisi**: file illeggibili, patch mancanti e dispositivi assenti
   arrivano all'operatore come notifiche; manca il controllo pre-show unico.
 

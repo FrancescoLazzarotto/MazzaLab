@@ -20,6 +20,7 @@ JSON text frames in both directions.
 | `audio` | `audio`: `running`, `device_id`, `device_name`, `sample_rate`, `channels`, `buffer_size`, `fallback`, `error` | on connect and when the audio output changes |
 | `notice` | `notice`: `level` (`info`, `warning`, `error`) and `message` | when the operator should know something: unreadable file, missing network patch, device lost |
 | `dmx` | `levels`: the DMX slots that are lit, each as `[universe, address, value]` with values from 1 to 255 | on connect and whenever they change, when the server drives lights |
+| `stage` | what the stages show: `now` (the server's clock, seconds), `stages` (the names the show has), `items` (the Video and Text cues that are up, lowest layer first) | on connect and whenever it changes |
 | `timecode` | `timecode` (`HH:MM:SS:FF`) and `format` of the timecode coming in | as it arrives, every two frames for MTC |
 | `midi_in` | `event`: a channel message that arrived on a MIDI input, as `kind` (`note_on`, `note_off`, `control_change`, `program_change`), `channel`, `number`, `value` | as it arrives; lets a client learn a trigger from the controller |
 | `result` | `id` of the request, `error` when it failed | in answer to each client message |
@@ -30,6 +31,7 @@ JSON text frames in both directions.
 { "type": "command", "id": 7, "command": { "command": "go" } }
 { "type": "save", "id": 8 }
 { "type": "audition", "id": 9, "cue": "…" }
+{ "type": "stage_ended", "id": 10, "cue": "…" }
 ```
 
 `audition` plays an audio cue by itself on the audition output, without
@@ -78,6 +80,7 @@ the target container once the cue has been taken out of its old place.
 | `GET /api/status` | the current status |
 | `POST /api/command` | run a command (JSON body) |
 | `POST /api/save` | save the show to its file |
+| `GET /api/cue-media?cue=` | the media file of a cue, with range requests, for stages to play |
 | `POST /api/timecode/in` | feeds the show `timecode` (`HH:MM:SS:FF`) at a `format` (`fps25`...) as if it had come in, to try timecode triggers without a source |
 | `POST /api/midi/in` | feeds the show a MIDI message (`kind`, `channel`, `number`, `value`) as if it had arrived on an input, to try triggers without the controller |
 | `GET /api/audio` | `status` (as in the `audio` message, or `null` without an audio backend) and `devices`: every output device with `id`, `name`, `host`, `is_default`, `max_channels`, `sample_rates`, `default_sample_rate` |
@@ -143,6 +146,25 @@ the `channel` (1–16) and the `value` it must carry. A note on with
 velocity 0 counts as a note off. `workspace.settings.midi_controls` ties
 `go`, `stop_all`, `panic`, `playhead_next` and `playhead_previous` to
 messages in the same form.
+
+## Stages
+
+Video and Text cues go up on stages. `workspace.settings.stages` names
+them (`name`); without any there is one called `Main`, and a cue that
+names no `stage` goes to the first. A stage is any client that renders
+the `stage` message: the web UI does so at `/?stage=Name` (add `&monitor`
+for a silent copy), so a projector can be a browser on any machine of
+the network.
+
+Each item has the `cue`, its `stage`, `layer` and `opacity` (the value it
+is fading to, with `fade`: `from`, `started`, `duration` while it fades),
+`started` and `offset` (it was `offset` seconds into its action at
+`started`, on the server's clock), `paused`, and its `kind`: `video`
+(`start_time`, `end_time`, `looped`, `hold`, `rate`) or `text` (`text`).
+A stage lines its clock up with `now`, plays the cue's file from
+`/api/cue-media`, and sends `stage_ended` when a file it plays reaches its
+end: a cue whose length the show did not know then completes. A Fade cue
+with an `opacity` fades the Video cue it targets.
 
 ## Timecode
 
