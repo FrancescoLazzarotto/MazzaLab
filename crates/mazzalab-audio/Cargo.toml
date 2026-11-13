@@ -12,6 +12,7 @@ publish.workspace = true
 cpal = "0.18"
 mazzalab-core.workspace = true
 mazzalab-engine.workspace = true
+mazzalab-timecode.workspace = true
 rtrb = "0.4"
 symphonia = { version = "0.6", features = ["all"] }
 thiserror.workspace = true

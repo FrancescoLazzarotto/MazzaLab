@@ -6,7 +6,10 @@ use std::sync::mpsc;
 use std::time::Duration;
 
 use mazzalab_audio::{AudioOutput, DeviceRequest, output_devices, probe_workspace};
-use mazzalab_core::{ActionLength, AudioCue, Cue, CueKind, SliceMarker, Workspace};
+use mazzalab_core::{
+    ActionLength, AudioCue, Cue, CueKind, SliceMarker, SmpteFormat, TimecodeCue, TimecodeSignal,
+    Workspace,
+};
 use mazzalab_engine::Engine;
 
 fn write_tone(path: &std::path::Path, rate: u32, seconds: f32) {
@@ -238,6 +241,44 @@ fn a_sliced_cue_vamps_until_devamped_then_plays_its_ending() {
     println!("sliced cue took {took:?}");
     assert!(
         (Duration::from_millis(1800)..Duration::from_millis(2400)).contains(&took),
+        "{took:?}"
+    );
+}
+
+#[test]
+#[ignore = "needs an audio output device"]
+fn a_timecode_cue_sends_ltc_for_its_duration() {
+    let dir = std::env::temp_dir().join(format!("mazzalab-device-ltc-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut workspace = Workspace::new("device test");
+    let ltc = Cue::new(CueKind::Timecode(TimecodeCue {
+        signal: TimecodeSignal::Ltc,
+        format: SmpteFormat::Fps25,
+        duration: Some(Duration::from_millis(500)),
+        level_db: -30.0,
+        ..TimecodeCue::default()
+    }));
+    let ltc_id = ltc.id;
+    workspace.cue_lists[0].cues = vec![ltc];
+    let (finished_tx, finished) = mpsc::channel();
+    let mut audio = AudioOutput::start(&dir, DeviceRequest::default(), move |cue| {
+        let _ = finished_tx.send(cue);
+    })
+    .unwrap();
+    let mut engine = Engine::new(workspace);
+    engine.start(ltc_id).unwrap();
+    let started = std::time::Instant::now();
+    let events = engine.take_events();
+    audio.handle_events(engine.workspace(), &events);
+    assert!(audio.playing_cues().contains(&ltc_id));
+    assert_eq!(
+        finished.recv_timeout(Duration::from_secs(5)).unwrap(),
+        ltc_id
+    );
+    let took = started.elapsed();
+    println!("LTC cue took {took:?}");
+    assert!(
+        (Duration::from_millis(400)..Duration::from_millis(900)).contains(&took),
         "{took:?}"
     );
 }

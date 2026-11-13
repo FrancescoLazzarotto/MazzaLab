@@ -18,6 +18,7 @@
 
 mod decode;
 mod device;
+mod ltc;
 mod mixer;
 mod waveform;
 
@@ -28,7 +29,9 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use mazzalab_core::{ActionLength, AudioCue, Cue, CueId, CueKind, FadeCurve, Workspace};
+use mazzalab_core::{
+    ActionLength, AudioCue, Cue, CueId, CueKind, FadeCurve, TimecodeCue, TimecodeSignal, Workspace,
+};
 use mazzalab_engine::{Event, EventKind};
 use rtrb::{Producer, RingBuffer};
 use thiserror::Error;
@@ -260,6 +263,12 @@ impl AudioOutput {
                             });
                             self.play(cue, audio, into);
                         }
+                        CueKind::Timecode(timecode) if timecode.signal == TimecodeSignal::Ltc => {
+                            let into = self.loaded.remove(&cue).map_or(Duration::ZERO, |time| {
+                                time.saturating_sub(definition.pre_wait)
+                            });
+                            self.play_ltc(cue, timecode, into);
+                        }
                         CueKind::Fade(fade) => {
                             if let (Some(target), Some(level)) = (definition.target, fade.level_db)
                             {
@@ -481,6 +490,53 @@ impl AudioOutput {
             tracing::warn!(%error, "cannot start audio reader");
         })?;
         Ok((Box::new(voice), info.channels))
+    }
+
+    /// Sends a Timecode cue's LTC out of one output of the device, starting
+    /// `into` its action.
+    fn play_ltc(&mut self, cue: CueId, timecode: &TimecodeCue, into: Duration) {
+        let Some((consumer, ended)) = ltc::start(timecode, into, self.info.sample_rate) else {
+            (self.on_finished)(cue);
+            return;
+        };
+        let output = usize::from(timecode.output.max(1)) - 1;
+        if output >= self.info.channels {
+            tracing::warn!(
+                output = output + 1,
+                channels = self.info.channels,
+                "the device has no such output for LTC"
+            );
+        }
+        let mut row = vec![None; self.info.channels.max(output + 1)];
+        row[output] = Some(0.0);
+        self.next_serial += 1;
+        let voice = Voice::new(
+            VoiceConfig {
+                cue,
+                serial: self.next_serial,
+                channels: 1,
+                source_rate: self.info.sample_rate,
+                output_rate: self.info.sample_rate,
+                rate: 1.0,
+                level_db: timecode.level_db as f32,
+                routes: Routes::from_matrix(&[row], 1, self.info.channels),
+                fade_in_frames: 0,
+                fade_out: None,
+            },
+            consumer,
+            ended,
+            Arc::default(),
+        );
+        lock(&self.playing).insert(
+            cue,
+            Playing {
+                serial: voice.serial,
+                // Not an audio cue: live edits leave it alone.
+                definition: AudioCue::default(),
+                channels: 1,
+            },
+        );
+        self.send(MixerCommand::Add(Box::new(voice)));
     }
 
     fn play(&mut self, cue: CueId, audio: &AudioCue, into: Duration) {

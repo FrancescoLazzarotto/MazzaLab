@@ -2220,6 +2220,7 @@ dependencies = [
  "cpal",
  "mazzalab-core",
  "mazzalab-engine",
+ "mazzalab-timecode",
  "rtrb",
  "symphonia",
  "thiserror 2.0.21",
