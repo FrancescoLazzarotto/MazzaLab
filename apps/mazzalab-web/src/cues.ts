@@ -1,5 +1,6 @@
 import type { Command, Container, Cue, CueType, Id, Matrix, MidiMessage } from "./api/types";
 import { fileLength } from "./slices";
+import { normalizeTimecode } from "./timecode";
 
 /** A cue with its nesting depth, as shown in the cue list. */
 export interface Row {
@@ -101,6 +102,7 @@ export const TOOLBOX: CueType[][] = [
 export const WORKING_TYPES: ReadonlySet<CueType> = new Set<CueType>([
   "audio",
   "light",
+  "timecode",
   "fade",
   "network",
   "midi",
@@ -208,7 +210,7 @@ export function newCue(type: CueType, number: string | undefined, id: Id = crypt
     case "midi":
       return { ...base, type, message: { kind: "program_change", channel: 1, program: 0 } };
     case "timecode":
-      return { ...base, type, start: "00:00:00:00" };
+      return { ...base, type, signal: "mtc", format: "fps25", start: "01:00:00:00" };
     case "group":
       return { ...base, type, mode: "timeline", children: [] };
     case "load":
@@ -231,7 +233,7 @@ export function isAudioFile(name: string): boolean {
 }
 
 /** What stops a cue from doing anything when it runs, if something does. */
-export type Problem = "no_file" | "no_target" | "missing_target" | "no_message" | "no_commands" | "not_supported";
+export type Problem = "no_file" | "no_target" | "missing_target" | "no_message" | "no_commands" | "bad_timecode" | "not_supported";
 
 export function problemOf(cue: Cue, exists: (id: Id) => boolean): Problem | null {
   if (needsTarget(cue.type)) {
@@ -241,6 +243,7 @@ export function problemOf(cue: Cue, exists: (id: Id) => boolean): Problem | null
   if (cue.type === "audio" && !cue.file) return "no_file";
   if (cue.type === "network" && cue.message.trim() === "") return "no_message";
   if (cue.type === "light" && (cue.commands ?? []).length === 0) return "no_commands";
+  if (cue.type === "timecode" && normalizeTimecode(cue.start) === null) return "bad_timecode";
   if (!WORKING_TYPES.has(cue.type)) return "not_supported";
   return null;
 }

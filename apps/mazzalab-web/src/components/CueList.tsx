@@ -4,6 +4,7 @@ import { actionLength, displayName, fileName, findCue, flatten, midiSummary, nee
 import { formatTime } from "../format";
 import { useI18n } from "../i18n";
 import { loopsUntilDevamped } from "../slices";
+import { FORMAT_LABELS } from "../timecode";
 import { CueIcon, Icon } from "./icons";
 
 const DRAG_TYPE = "application/x-mazzalab-cues";
@@ -118,6 +119,7 @@ export function CueList({
   const targetLabel = (cue: Cue): string => {
     if (cue.type === "audio" || cue.type === "video") return cue.file ? fileName(cue.file) : "";
     if (cue.type === "midi") return midiSummary(cue.message);
+    if (cue.type === "timecode") return `${(cue.signal ?? "mtc").toUpperCase()} ${cue.start} · ${FORMAT_LABELS[cue.format ?? "fps30_non_drop"]}`;
     if (cue.type === "network") return cue.message.split(/\r?\n/)[0];
     if (cue.type === "light") {
       const lines = cue.commands ?? [];

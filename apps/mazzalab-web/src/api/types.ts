@@ -59,12 +59,23 @@ export interface MidiControls {
   playhead_previous?: MidiTrigger;
 }
 
+export type SmpteFormat = "fps24" | "fps25" | "fps30_non_drop" | "fps30_drop" | "fps23_976" | "fps29_97_non_drop" | "fps29_97_drop";
+export type TimecodeSignal = "mtc" | "ltc";
+
+/** Timecode coming into the show. */
+export interface TimecodeIn {
+  timecode: string;
+  format: SmpteFormat;
+}
+
 /** Ways of starting a cue other than GO and other cues. */
 export interface Triggers {
   /** A key or combination such as `F5`, `Q` or `Ctrl+Shift+1`. */
   hotkey?: string;
   /** A MIDI message that starts the cue when it arrives on any input. */
   midi?: MidiTrigger;
+  /** `HH:MM:SS:FF`: incoming timecode running forward past it starts the cue. */
+  timecode?: string;
 }
 
 /** Crosspoint levels in dB, `matrix[file channel][output]`; null is silent. */
@@ -115,7 +126,20 @@ export type Cue = CueBase &
     | { type: "network"; patch?: string; message: string; duration?: number }
     | { type: "midi"; patch?: string; message: MidiMessage }
     | { type: "midi_file"; file?: string; rate?: number }
-    | { type: "timecode"; start: string; duration?: number }
+    | {
+        type: "timecode";
+        signal?: TimecodeSignal;
+        format?: SmpteFormat;
+        /** First timecode sent, `HH:MM:SS:FF`. */
+        start: string;
+        /** Absent runs until stopped. */
+        duration?: number;
+        /** MIDI patch for MTC; absent is the first. */
+        patch?: string;
+        /** Device output for LTC, from 1. */
+        output?: number;
+        level_db?: number;
+      }
     | { type: "group"; mode?: GroupMode; children?: Cue[] }
     | { type: "start" | "stop" | "pause" | "reset" | "devamp" | "goto" | "arm" | "disarm" | "memo" }
     | { type: "load"; time?: number }
@@ -328,4 +352,5 @@ export type ServerMessage =
   | { type: "notice"; notice: Notice }
   | { type: "dmx"; levels: DmxLevel[] }
   | { type: "midi_in"; event: MidiEvent }
+  | ({ type: "timecode" } & TimecodeIn)
   | { type: "result"; id: number; error?: string };

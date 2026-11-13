@@ -16,6 +16,7 @@ import { displayName, flatten, needsTarget, problemOf, typeLabel } from "../cues
 import { useI18n } from "../i18n";
 import { hotkeyOf, isReserved } from "../hotkeys";
 import { markers } from "../slices";
+import { FORMAT_LABELS, normalizeTimecode, SMPTE_FORMATS } from "../timecode";
 import { CheckField, HotkeyField, LevelField, NumberField, SelectField, TextField, TimeField } from "./fields";
 import { CueIcon, Icon } from "./icons";
 import { LightCommands } from "./LightCommands";
@@ -35,7 +36,7 @@ type Patch = Record<string, unknown>;
 
 function tabsFor(cue: Cue): Tab[] {
   if (cue.type === "audio") return ["basics", "time", "levels"];
-  const plain = ["start", "stop", "pause", "reset", "devamp", "goto", "arm", "disarm", "memo", "mic", "camera", "midi_file", "timecode", "script"];
+  const plain = ["start", "stop", "pause", "reset", "devamp", "goto", "arm", "disarm", "memo", "mic", "camera", "midi_file", "script"];
   return plain.includes(cue.type) ? ["basics"] : ["basics", "settings"];
 }
 
@@ -144,7 +145,7 @@ function Basics({
   /** Triggers with a change applied, or nothing at all when none is left. */
   const triggers = (change: Partial<NonNullable<Cue["triggers"]>>) => {
     const next = { ...cue.triggers, ...change };
-    return next.hotkey || next.midi ? next : undefined;
+    return next.hotkey || next.midi || next.timecode ? next : undefined;
   };
   const { t } = useI18n();
   const targets = flatten(allCues).filter((row) => row.cue.id !== cue.id);
@@ -198,6 +199,16 @@ function Basics({
           />
         </div>
         <MidiTriggerField connection={connection} label={t("inspector.midiTrigger")} value={cue.triggers?.midi} onChange={(midi) => set({ triggers: triggers({ midi }) })} />
+        <TextField
+          label={t("inspector.timecodeTrigger")}
+          value={cue.triggers?.timecode ?? ""}
+          placeholder={t("inspector.timecodeNone")}
+          onCommit={(text) => {
+            const timecode = text.trim() === "" ? undefined : normalizeTimecode(text);
+            if (timecode === null) connection.toast("error", t("inspector.badTimecode"));
+            else set({ triggers: triggers({ timecode }) });
+          }}
+        />
         <div className="row checks">
           <CheckField label={t("inspector.armed")} checked={cue.armed ?? true} onChange={(armed) => set({ armed })} />
           <CheckField label={t("inspector.flagged")} checked={cue.flagged ?? false} onChange={(flagged) => set({ flagged })} />
@@ -421,6 +432,62 @@ function TypeSettings({
               multiline
               onCommit={(message) => set({ message })}
             />
+          </div>
+        </div>
+      );
+    }
+    case "timecode": {
+      const signal = cue.signal ?? "mtc";
+      const patches = settings.midi_patches ?? [];
+      return (
+        <div className="form-columns">
+          <div className="form-column">
+            <div className="row">
+              <SelectField
+                label={t("inspector.signal")}
+                value={signal}
+                options={[
+                  { value: "mtc", label: "MTC" },
+                  { value: "ltc", label: "LTC" },
+                ]}
+                onChange={(next) => set({ signal: next })}
+              />
+              <SelectField
+                label={t("inspector.format")}
+                value={cue.format ?? "fps30_non_drop"}
+                options={SMPTE_FORMATS.map((format) => ({ value: format, label: `${FORMAT_LABELS[format]} fps` }))}
+                onChange={(format) => set({ format })}
+              />
+            </div>
+            <div className="row">
+              <TextField
+                label={t("inspector.timecodeStart")}
+                value={cue.start}
+                placeholder="01:00:00:00"
+                // Kept even when it does not read: the cue is flagged until it does.
+                onCommit={(text) => set({ start: normalizeTimecode(text) ?? text.trim() })}
+              />
+              <TimeField label={t("inspector.duration")} value={cue.duration} optional onCommit={(duration) => set({ duration })} />
+            </div>
+          </div>
+          <div className="form-column">
+            {signal === "mtc" ? (
+              <SelectField
+                label={t("inspector.patch")}
+                value={cue.patch ?? ""}
+                options={[
+                  { value: "", label: patches.length > 0 ? `${t("inspector.firstPatch")} (${patches[0].name})` : t("inspector.noPatches") },
+                  ...patches.map((patch) => ({ value: patch.name, label: `${patch.name} — ${patch.port}` })),
+                  ...(cue.patch && !patches.some((patch) => patch.name === cue.patch) ? [{ value: cue.patch, label: `${cue.patch} (?)` }] : []),
+                ]}
+                onChange={(patch) => set({ patch: patch || undefined })}
+              />
+            ) : (
+              <>
+                <NumberField label={t("inspector.ltcOutput")} value={cue.output ?? 1} min={1} onCommit={(output) => set({ output: Math.round(output) })} />
+                <LevelField label={t("inspector.level")} value={cue.level_db ?? -18} onCommit={(level_db) => set({ level_db })} />
+              </>
+            )}
           </div>
         </div>
       );
