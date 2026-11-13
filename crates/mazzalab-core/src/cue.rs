@@ -703,7 +703,7 @@ pub enum TimecodeSignal {
     Ltc,
 }
 
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TimecodeCue {
     #[serde(default)]
     pub signal: TimecodeSignal,
@@ -718,8 +718,41 @@ pub struct TimecodeCue {
         skip_serializing_if = "Option::is_none"
     )]
     pub duration: Option<Duration>,
+    /// The MIDI patch MTC goes to; `None` is the first.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub patch: Option<String>,
+    /// The output of the audio device LTC comes out of, counted from 1.
+    #[serde(default = "first_output", skip_serializing_if = "is_first_output")]
+    pub output: u16,
+    /// LTC level in dB below full scale.
+    #[serde(default = "default_ltc_level")]
+    pub level_db: f64,
+}
+
+impl Default for TimecodeCue {
+    fn default() -> Self {
+        Self {
+            signal: TimecodeSignal::default(),
+            format: SmpteFormat::default(),
+            start: "01:00:00:00".to_owned(),
+            duration: None,
+            patch: None,
+            output: first_output(),
+            level_db: default_ltc_level(),
+        }
+    }
+}
+
+fn first_output() -> u16 {
+    1
+}
+
+fn is_first_output(output: &u16) -> bool {
+    *output == 1
+}
+
+fn default_ltc_level() -> f64 {
+    -18.0
 }
 
 /// How a group starts its children.
