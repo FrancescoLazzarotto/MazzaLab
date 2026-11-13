@@ -7,6 +7,7 @@ use mazzalab_show::{Command, Snapshot, Status};
 use serde::{Deserialize, Serialize};
 
 use crate::actor::{AudioStatus, DmxLevel, Notice, TimecodeIn};
+use mazzalab_video::StageState;
 
 /// Server to client.
 #[derive(Debug, Clone, Serialize)]
@@ -31,6 +32,12 @@ pub enum ServerMessage<'a> {
     /// A MIDI message arrived on an input: `kind`, `channel`, `number` and
     /// `value`. Lets a client learn a trigger from the controller itself.
     MidiIn { event: MidiEvent },
+    /// What the stages show: `now` on the server's clock, the `stages`
+    /// the show names, and the `items` that are up.
+    Stage {
+        #[serde(flatten)]
+        stage: &'a StageState,
+    },
     /// Timecode came in: `timecode` as `HH:MM:SS:FF` and its `format`.
     Timecode {
         #[serde(flatten)]
@@ -61,6 +68,11 @@ pub enum ClientMessage {
         id: u64,
         #[serde(default)]
         cue: Option<CueId>,
+    },
+    /// From a stage: it played the file of `cue` to its end.
+    StageEnded {
+        id: u64,
+        cue: CueId,
     },
 }
 

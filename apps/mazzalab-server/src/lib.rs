@@ -32,7 +32,9 @@ pub use actor::{
     AudioStatus, Completion, DmxLevel, Notice, NoticeLevel, Output, ShowHandle, TimecodeIn, Update,
 };
 pub use http::{MEDIA_FOLDER, router};
-pub use outputs::{AudioBackend, LightingBackend, LogOutput, MidiBackend, NetworkBackend};
+pub use outputs::{
+    AudioBackend, LightingBackend, LogOutput, MidiBackend, NetworkBackend, StageBackend,
+};
 
 pub const DEFAULT_HTTP_PORT: u16 = 53080;
 

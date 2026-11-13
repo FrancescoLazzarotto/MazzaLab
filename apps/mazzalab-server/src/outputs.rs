@@ -498,6 +498,77 @@ impl Output for MidiBackend {
     }
 }
 
+/// Keeps what the stages show, for the browsers that render them.
+#[derive(Debug)]
+pub struct StageBackend {
+    stages: mazzalab_video::Stages,
+    epoch: std::time::Instant,
+    /// What was last worked out, and whether clients have seen it.
+    state: Option<mazzalab_video::StageState>,
+    fresh: bool,
+}
+
+impl Default for StageBackend {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl StageBackend {
+    pub fn new() -> Self {
+        Self {
+            stages: mazzalab_video::Stages::new(),
+            epoch: std::time::Instant::now(),
+            state: None,
+            fresh: false,
+        }
+    }
+
+    fn now(&self) -> f64 {
+        self.epoch.elapsed().as_secs_f64()
+    }
+
+    fn refresh(&mut self, show: &Show) {
+        let state = self.stages.state(show.workspace(), self.now());
+        let same = self
+            .state
+            .as_ref()
+            .is_some_and(|last| last.items == state.items && last.stages == state.stages);
+        if !same {
+            self.state = Some(state);
+            self.fresh = true;
+        }
+    }
+}
+
+impl Output for StageBackend {
+    fn handle(&mut self, show: &Show, events: &[Event]) {
+        let now = self.now();
+        if self.stages.handle(show.workspace(), events, now) {
+            self.refresh(show);
+        }
+    }
+
+    fn sync(&mut self, show: &Show) {
+        self.stages.sync(show.workspace());
+        // The stage names may have changed too.
+        self.refresh(show);
+    }
+
+    fn stage(&mut self, force: bool) -> Option<mazzalab_video::StageState> {
+        if !(force || self.fresh) {
+            return None;
+        }
+        self.fresh = false;
+        let now = self.now();
+        self.state.clone().map(|mut state| {
+            // Stages line their clock up with this.
+            state.now = now;
+            state
+        })
+    }
+}
+
 /// Drives the lights: runs Light cues on a DMX rig and sends its universes
 /// to the show's DMX outputs.
 #[derive(Debug)]

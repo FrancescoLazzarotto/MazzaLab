@@ -2350,6 +2350,7 @@ dependencies = [
  "mazzalab-project",
  "mazzalab-show",
  "mazzalab-timecode",
+ "mazzalab-video",
  "rosc",
  "serde",
  "serde_json",

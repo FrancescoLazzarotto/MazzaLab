@@ -12,6 +12,7 @@ use mazzalab_engine::{Event, EventKind};
 use mazzalab_midi::MidiEvent;
 use mazzalab_show::{Command, OscOutcome, Show, Snapshot, Status};
 use mazzalab_timecode::{Rate, Timecode};
+use mazzalab_video::StageState;
 use rosc::{OscMessage, OscType};
 use serde::Serialize;
 use tokio::sync::{broadcast, mpsc, oneshot};
@@ -55,6 +56,12 @@ pub trait Output: Send {
     /// backend that drives lights. Unless `force` is set, `None` means
     /// nothing changed since the last call.
     fn dmx_levels(&mut self, _force: bool) -> Option<Vec<DmxLevel>> {
+        None
+    }
+
+    /// What the stages show, for the backend that keeps it. Unless `force`
+    /// is set, `None` means nothing changed since the last call.
+    fn stage(&mut self, _force: bool) -> Option<StageState> {
         None
     }
 }
@@ -180,6 +187,8 @@ pub enum Update {
     MidiIn(MidiEvent),
     /// Timecode came in.
     Timecode(Arc<TimecodeIn>),
+    /// What the stages show changed.
+    Stage(Arc<StageState>),
 }
 
 enum Request {
@@ -221,6 +230,13 @@ enum Request {
     TimecodeIn {
         timecode: Timecode,
         rate: Rate,
+        reply: oneshot::Sender<()>,
+    },
+    Stage {
+        reply: oneshot::Sender<Option<StageState>>,
+    },
+    MediaEnded {
+        cue: CueId,
         reply: oneshot::Sender<()>,
     },
     Audition {
@@ -266,6 +282,17 @@ impl ShowHandle {
     /// Feeds the show a MIDI message as if it had arrived on an input.
     pub async fn midi_in(&self, event: MidiEvent) {
         self.ask(|reply| Request::MidiIn { event, reply }).await;
+    }
+
+    /// What the stages show now, if the show has stages.
+    pub async fn stage(&self) -> Option<StageState> {
+        self.ask(|reply| Request::Stage { reply }).await.flatten()
+    }
+
+    /// A stage played a cue's file to its end: the cue completes, as an
+    /// audio cue does when its sound ends.
+    pub async fn media_ended(&self, cue: CueId) {
+        self.ask(|reply| Request::MediaEnded { cue, reply }).await;
     }
 
     /// Feeds the show timecode as if it had come in.
@@ -558,6 +585,18 @@ impl Actor {
                 self.timecode_in(timecode, rate);
                 let _ = reply.send(());
             }
+            Request::Stage { reply } => {
+                let stage = self
+                    .outputs
+                    .iter_mut()
+                    .find_map(|output| output.stage(true));
+                let _ = reply.send(stage);
+            }
+            Request::MediaEnded { cue, reply } => {
+                // Several stages may say so, and the engine may know already.
+                let _ = self.show.action_finished(cue);
+                let _ = reply.send(());
+            }
             Request::Audition { cue, reply } => {
                 let known = cue.is_none_or(|cue| self.show.workspace().find_cue(cue).is_some());
                 if known {
@@ -821,6 +860,7 @@ impl Actor {
         if due || recheck {
             self.send_dmx();
         }
+        self.send_stage();
         // The engine knows nothing of an audition: its end is found by
         // looking, each time the actor wakes for it.
         if self
@@ -840,6 +880,17 @@ impl Actor {
                 let _ = self.updates.send(Update::Audio(Arc::new(audio.clone())));
             }
             self.last_audio = audio;
+        }
+    }
+
+    /// Broadcasts what the stages show when it has changed.
+    fn send_stage(&mut self) {
+        if let Some(stage) = self
+            .outputs
+            .iter_mut()
+            .find_map(|output| output.stage(false))
+        {
+            let _ = self.updates.send(Update::Stage(Arc::new(stage)));
         }
     }
 

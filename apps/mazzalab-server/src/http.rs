@@ -53,6 +53,7 @@ pub fn router(handle: ShowHandle, ui_dir: Option<PathBuf>) -> Router {
         .route("/api/midi/in", post(midi_in))
         .route("/api/timecode/in", post(timecode_in))
         .route("/api/waveform", get(waveform))
+        .route("/api/cue-media", get(cue_media))
         .route(
             "/api/media",
             get(list_media)
@@ -181,6 +182,29 @@ async fn timecode_in(
             outcome(Ok(()))
         }
         Err(error) => outcome(Err(error.to_string())),
+    }
+}
+
+#[derive(Deserialize)]
+struct CueQuery {
+    cue: CueId,
+}
+
+/// The media file of a cue, with range requests, for stages to play.
+async fn cue_media(
+    State(state): State<AppState>,
+    Query(query): Query<CueQuery>,
+    request: axum::extract::Request,
+) -> Response {
+    let Some(path) = state.handle.cue_file(query.cue).await else {
+        return failure(StatusCode::NOT_FOUND, "the cue has no media file").into_response();
+    };
+    match tower_http::services::ServeFile::new(path)
+        .try_call(request)
+        .await
+    {
+        Ok(response) => response.into_response(),
+        Err(error) => failure(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()).into_response(),
     }
 }
 
@@ -446,7 +470,17 @@ async fn client(socket: WebSocket, handle: ShowHandle) {
     let dmx = dmx
         .as_ref()
         .map(|levels| send(&ServerMessage::Dmx { levels }));
-    for message in initial.into_iter().chain(audio).chain(dmx).flatten() {
+    let stage = handle.stage().await;
+    let stage = stage
+        .as_ref()
+        .map(|stage| send(&ServerMessage::Stage { stage }));
+    for message in initial
+        .into_iter()
+        .chain(audio)
+        .chain(dmx)
+        .chain(stage)
+        .flatten()
+    {
         if sink.send(message).await.is_err() {
             return;
         }
@@ -460,6 +494,10 @@ async fn client(socket: WebSocket, handle: ShowHandle) {
                         Ok(ClientMessage::Command { id, command }) => (id, handle.execute(*command).await),
                         Ok(ClientMessage::Save { id }) => (id, handle.save().await),
                         Ok(ClientMessage::Audition { id, cue }) => (id, handle.audition(cue).await),
+                        Ok(ClientMessage::StageEnded { id, cue }) => {
+                            handle.media_ended(cue).await;
+                            (id, Ok(()))
+                        }
                         Err(error) => (0, Err(format!("invalid message: {error}"))),
                     };
                     send(&ServerMessage::Result { id, error: result.err() })
@@ -477,6 +515,7 @@ async fn client(socket: WebSocket, handle: ShowHandle) {
                 Ok(Update::Dmx(levels)) => send(&ServerMessage::Dmx { levels: &levels }),
                 Ok(Update::MidiIn(event)) => send(&ServerMessage::MidiIn { event }),
                 Ok(Update::Timecode(timecode)) => send(&ServerMessage::Timecode { timecode: &timecode }),
+                Ok(Update::Stage(stage)) => send(&ServerMessage::Stage { stage: &stage }),
                 Ok(Update::Osc(_)) => continue,
                 // Too slow to keep up: resynchronise with a fresh snapshot.
                 Err(RecvError::Lagged(_)) => match handle.snapshot().await {
