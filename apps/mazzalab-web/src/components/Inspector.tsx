@@ -19,6 +19,7 @@ import { CheckField, HotkeyField, LevelField, NumberField, SelectField, TextFiel
 import { CueIcon, Icon } from "./icons";
 import { MatrixEditor } from "./MatrixEditor";
 import { MidiFields } from "./MidiFields";
+import { MidiTriggerField } from "./MidiTriggerField";
 import { Waveform } from "./Waveform";
 
 const COLORS: CueColor[] = ["red", "orange", "yellow", "green", "blue", "purple", "grey"];
@@ -106,7 +107,7 @@ export function Inspector({
         </span>
       </header>
       <fieldset className="inspector-body" disabled={!editable}>
-        {current === "basics" && <Basics cue={cue} allCues={allCues} set={set} />}
+        {current === "basics" && <Basics connection={connection} cue={cue} allCues={allCues} set={set} />}
         {current === "time" && cue.type === "audio" && (
           <AudioTime
             connection={connection}
@@ -125,7 +126,22 @@ export function Inspector({
   );
 }
 
-function Basics({ cue, allCues, set }: { cue: Cue; allCues: Cue[]; set: (patch: Patch) => void }) {
+function Basics({
+  connection,
+  cue,
+  allCues,
+  set,
+}: {
+  connection: ShowConnection;
+  cue: Cue;
+  allCues: Cue[];
+  set: (patch: Patch) => void;
+}) {
+  /** Triggers with a change applied, or nothing at all when none is left. */
+  const triggers = (change: Partial<NonNullable<Cue["triggers"]>>) => {
+    const next = { ...cue.triggers, ...change };
+    return next.hotkey || next.midi ? next : undefined;
+  };
   const { t } = useI18n();
   const targets = flatten(allCues).filter((row) => row.cue.id !== cue.id);
   return (
@@ -174,9 +190,10 @@ function Basics({ cue, allCues, set }: { cue: Cue; allCues: Cue[]; set: (patch: 
             placeholder={t("inspector.hotkeyNone")}
             nameOf={hotkeyOf}
             refuse={(hotkey) => (isReserved(hotkey) ? t("inspector.hotkeyReserved") : null)}
-            onCommit={(hotkey) => set({ triggers: hotkey ? { ...cue.triggers, hotkey } : undefined })}
+            onCommit={(hotkey) => set({ triggers: triggers({ hotkey }) })}
           />
         </div>
+        <MidiTriggerField connection={connection} label={t("inspector.midiTrigger")} value={cue.triggers?.midi} onChange={(midi) => set({ triggers: triggers({ midi }) })} />
         <div className="row checks">
           <CheckField label={t("inspector.armed")} checked={cue.armed ?? true} onChange={(armed) => set({ armed })} />
           <CheckField label={t("inspector.flagged")} checked={cue.flagged ?? false} onChange={(flagged) => set({ flagged })} />

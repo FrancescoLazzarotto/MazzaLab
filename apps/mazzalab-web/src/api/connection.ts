@@ -6,6 +6,7 @@ import type {
   DmxLevel,
   EngineEvent,
   Id,
+  MidiEvent,
   MidiPorts,
   Notice,
   ServerMessage,
@@ -34,6 +35,7 @@ export interface ShowState {
 type Pending = { resolve: () => void; reject: (error: Error) => void };
 type EventListener = (events: EngineEvent[]) => void;
 type MeterListener = (peaks: number[]) => void;
+type MidiListener = (event: MidiEvent) => void;
 
 const MAX_TOASTS = 5;
 
@@ -49,6 +51,7 @@ export class ShowConnection {
   private listeners = new Set<() => void>();
   private eventListeners = new Set<EventListener>();
   private meterListeners = new Set<MeterListener>();
+  private midiListeners = new Set<MidiListener>();
   private retries = 0;
   private stopped = false;
   private state: ShowState = { connection: "connecting", snapshot: null, status: null, audio: null, dmx: null, toasts: [] };
@@ -79,6 +82,12 @@ export class ShowConnection {
   onMeters(listener: MeterListener): () => void {
     this.meterListeners.add(listener);
     return () => this.meterListeners.delete(listener);
+  }
+
+  /** MIDI arriving on the server's inputs, to learn triggers from. */
+  onMidi(listener: MidiListener): () => void {
+    this.midiListeners.add(listener);
+    return () => this.midiListeners.delete(listener);
   }
 
   getState = (): ShowState => this.state;
@@ -204,6 +213,9 @@ export class ShowConnection {
         break;
       case "dmx":
         this.update({ dmx: message.levels });
+        break;
+      case "midi_in":
+        for (const listener of this.midiListeners) listener(message.event);
         break;
       case "result": {
         const pending = this.pending.get(message.id);

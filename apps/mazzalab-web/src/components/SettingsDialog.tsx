@@ -5,6 +5,7 @@ import type {
   AudioSettings,
   DmxOutput,
   DmxProtocol,
+  MidiControls,
   MidiPatch,
   NetworkPatch,
   NetworkProtocol,
@@ -15,6 +16,7 @@ import { useI18n } from "../i18n";
 import type { Preferences } from "../preferences";
 import { CheckField, LevelField, NumberField, SelectField, TextField, TimeField } from "./fields";
 import { Icon } from "./icons";
+import { MidiTriggerField } from "./MidiTriggerField";
 
 const BUFFER_SIZES = [64, 128, 256, 512, 1024, 2048];
 const PROTOCOLS: NetworkProtocol[] = ["osc_udp", "osc_tcp", "plain_udp", "plain_tcp"];
@@ -109,7 +111,15 @@ export function SettingsDialog({
           )}
           {tab === "audio" && <AudioTab connection={connection} audio={settings.audio ?? {}} onChange={(audio) => set({ audio })} />}
           {tab === "network" && <NetworkTab patches={settings.network_patches ?? []} onChange={(network_patches) => set({ network_patches })} />}
-          {tab === "midi" && <MidiTab connection={connection} patches={settings.midi_patches ?? []} onChange={(midi_patches) => set({ midi_patches })} />}
+          {tab === "midi" && (
+            <MidiTab
+              connection={connection}
+              patches={settings.midi_patches ?? []}
+              controls={settings.midi_controls ?? {}}
+              onChange={(midi_patches) => set({ midi_patches })}
+              onControls={(midi_controls) => set({ midi_controls })}
+            />
+          )}
           {tab === "lights" && <LightsTab outputs={settings.dmx_outputs ?? []} onChange={(dmx_outputs) => set({ dmx_outputs })} />}
           {tab === "keys" && (
             <table className="shortcuts">
@@ -265,14 +275,20 @@ function NetworkTab({ patches, onChange }: { patches: NetworkPatch[]; onChange: 
   );
 }
 
+const MIDI_CONTROLS: (keyof MidiControls)[] = ["go", "stop_all", "panic", "playhead_next", "playhead_previous"];
+
 function MidiTab({
   connection,
   patches,
+  controls,
   onChange,
+  onControls,
 }: {
   connection: ShowConnection;
   patches: MidiPatch[];
+  controls: MidiControls;
   onChange: (patches: MidiPatch[]) => void;
+  onControls: (controls: MidiControls) => void;
 }) {
   const { t } = useI18n();
   const [outputs, setOutputs] = useState<string[] | null>(null);
@@ -324,6 +340,18 @@ function MidiTab({
         </button>
       </div>
       {outputs !== null && outputs.length === 0 && <p className="hint warn">{t("settings.noMidiOutputs")}</p>}
+      <h3>{t("settings.midiControls")}</h3>
+      <div className="midi-controls">
+        {MIDI_CONTROLS.map((name) => (
+          <MidiTriggerField
+            key={name}
+            connection={connection}
+            label={t(`control.${name}`)}
+            value={controls[name]}
+            onChange={(trigger) => onControls({ ...controls, [name]: trigger })}
+          />
+        ))}
+      </div>
     </div>
   );
 }

@@ -29,10 +29,42 @@ interface CueBase {
   triggers?: Triggers;
 }
 
+export type MidiTriggerKind = "note_on" | "note_off" | "control_change" | "program_change";
+
+/** An incoming MIDI message to react to. */
+export interface MidiTrigger {
+  kind: MidiTriggerKind;
+  /** 1–16; absent listens on every channel. */
+  channel?: number;
+  /** The note, controller or program number. */
+  number: number;
+  /** The velocity or value that has to match; absent accepts any. */
+  value?: number;
+}
+
+/** A channel message that arrived on one of the server's MIDI inputs. */
+export interface MidiEvent {
+  kind: MidiTriggerKind;
+  channel: number;
+  number: number;
+  value: number;
+}
+
+/** MIDI messages that work the show's transport. */
+export interface MidiControls {
+  go?: MidiTrigger;
+  stop_all?: MidiTrigger;
+  panic?: MidiTrigger;
+  playhead_next?: MidiTrigger;
+  playhead_previous?: MidiTrigger;
+}
+
 /** Ways of starting a cue other than GO and other cues. */
 export interface Triggers {
   /** A key or combination such as `F5`, `Q` or `Ctrl+Shift+1`. */
   hotkey?: string;
+  /** A MIDI message that starts the cue when it arrives on any input. */
+  midi?: MidiTrigger;
 }
 
 /** Crosspoint levels in dB, `matrix[file channel][output]`; null is silent. */
@@ -139,6 +171,7 @@ export interface WorkspaceSettings {
   network_patches?: NetworkPatch[];
   midi_patches?: MidiPatch[];
   dmx_outputs?: DmxOutput[];
+  midi_controls?: MidiControls;
 }
 
 export interface Workspace {
@@ -261,4 +294,5 @@ export type ServerMessage =
   | { type: "audio"; audio: AudioStatus }
   | { type: "notice"; notice: Notice }
   | { type: "dmx"; levels: DmxLevel[] }
+  | { type: "midi_in"; event: MidiEvent }
   | { type: "result"; id: number; error?: string };

@@ -1190,6 +1190,52 @@ tr[class*="color-"]:not(.selected) {
   align-items: center;
 }
 
+.midi-trigger {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: var(--control);
+  padding-left: 7px;
+  background: var(--surface-0);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.midi-trigger.learning {
+  border-color: var(--focus);
+}
+
+.midi-trigger-value {
+  flex: 1;
+  overflow: hidden;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.midi-trigger-value.unset {
+  color: var(--text-3);
+}
+
+.midi-trigger button:not(.icon-button) {
+  flex: none;
+  height: 20px;
+  margin-right: 2px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+.midi-trigger .icon-button {
+  flex: none;
+  margin-right: 1px;
+}
+
+.midi-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 12px;
+}
+
 input.hotkey {
   cursor: default;
   caret-color: transparent;

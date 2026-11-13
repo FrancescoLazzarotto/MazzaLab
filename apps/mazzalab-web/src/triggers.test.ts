@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Cue } from "./api/types";
 import { percent, slotName } from "./components/DmxPanel";
 import { defaultMessage, formatHex, parseHex } from "./components/MidiFields";
+import { triggerFromEvent, triggerSummary } from "./components/MidiTriggerField";
 import { midiSummary, problemOf } from "./cues";
 import { cuesForHotkey, hotkeyOf, isReserved, type KeyPress } from "./hotkeys";
 
@@ -96,5 +97,19 @@ describe("lights", () => {
     expect(problemOf({ id: "a", type: "light" }, exists)).toBe("no_commands");
     expect(problemOf({ id: "a", type: "light", commands: [] }, exists)).toBe("no_commands");
     expect(problemOf({ id: "a", type: "light", commands: ["1 @ 50"] }, exists)).toBeNull();
+  });
+});
+
+describe("midi triggers", () => {
+  it("learns the press, on its channel, whatever the velocity", () => {
+    expect(triggerFromEvent({ kind: "note_on", channel: 10, number: 36, value: 97 })).toEqual({ kind: "note_on", channel: 10, number: 36 });
+    expect(triggerFromEvent({ kind: "control_change", channel: 1, number: 64, value: 127 })).toEqual({ kind: "control_change", channel: 1, number: 64 });
+    expect(triggerFromEvent({ kind: "note_off", channel: 10, number: 36, value: 0 })).toBeNull();
+  });
+
+  it("sums a trigger up", () => {
+    expect(triggerSummary({ kind: "note_on", channel: 10, number: 36 }, "any")).toBe("Note 36 · ch 10");
+    expect(triggerSummary({ kind: "control_change", number: 64 }, "any channel")).toBe("CC 64 · any channel");
+    expect(triggerSummary({ kind: "program_change", channel: 1, number: 5, value: 0 }, "any")).toBe("PC 5 = 0 · ch 1");
   });
 });
