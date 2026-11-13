@@ -73,6 +73,31 @@ fn is_unit(value: &f64) -> bool {
     *value == 1.0
 }
 
+/// The kinds of incoming MIDI message that can trigger something.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MidiTriggerKind {
+    NoteOn,
+    NoteOff,
+    ControlChange,
+    ProgramChange,
+}
+
+/// An incoming MIDI message to react to: a pedal, a pad, a fader.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MidiTrigger {
+    pub kind: MidiTriggerKind,
+    /// Channel 1–16; `None` listens on all of them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub channel: Option<u8>,
+    /// The note, controller or program number.
+    pub number: u8,
+    /// The velocity or controller value that has to match; `None` accepts
+    /// any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<u8>,
+}
+
 /// Ways of starting a cue other than GO and other cues.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Triggers {
@@ -80,11 +105,14 @@ pub struct Triggers {
     /// screen, written as `F5`, `Q` or `Ctrl+Shift+1`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hotkey: Option<String>,
+    /// A MIDI message that starts the cue when it arrives on any input.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub midi: Option<MidiTrigger>,
 }
 
 impl Triggers {
     pub fn is_empty(&self) -> bool {
-        self.hotkey.is_none()
+        self.hotkey.is_none() && self.midi.is_none()
     }
 }
 

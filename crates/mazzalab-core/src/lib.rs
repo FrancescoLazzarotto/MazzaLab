@@ -16,13 +16,13 @@ mod workspace;
 
 pub use cue::{
     ActionLength, AudioCue, CameraCue, ContinueMode, Cue, CueColor, CueKind, FadeCue, FadeCurve,
-    GroupCue, GroupMode, LightCue, LoadCue, MicCue, MidiCue, MidiFileCue, MidiMessage, NetworkCue,
-    ScriptCue, SmpteFormat, TargetCue, TextCue, TimecodeCue, TimecodeSignal, Triggers, VideoCue,
-    WaitCue,
+    GroupCue, GroupMode, LightCue, LoadCue, MicCue, MidiCue, MidiFileCue, MidiMessage, MidiTrigger,
+    MidiTriggerKind, NetworkCue, ScriptCue, SmpteFormat, TargetCue, TextCue, TimecodeCue,
+    TimecodeSignal, Triggers, VideoCue, WaitCue,
 };
 pub use id::{CueId, WorkspaceId};
 pub use validate::{Issue, validate};
 pub use workspace::{
-    AudioSettings, Container, CueList, DmxOutput, DmxProtocol, MidiPatch, NetworkPatch,
-    NetworkProtocol, Workspace, WorkspaceSettings,
+    AudioSettings, Container, CueList, DmxOutput, DmxProtocol, MidiControls, MidiPatch,
+    NetworkPatch, NetworkProtocol, Workspace, WorkspaceSettings,
 };
