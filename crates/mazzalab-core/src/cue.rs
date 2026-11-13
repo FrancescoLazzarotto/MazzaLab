@@ -109,11 +109,15 @@ pub struct Triggers {
     /// A MIDI message that starts the cue when it arrives on any input.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub midi: Option<MidiTrigger>,
+    /// A timecode, `HH:MM:SS:FF`, that starts the cue when incoming
+    /// timecode running forward reaches it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timecode: Option<String>,
 }
 
 impl Triggers {
     pub fn is_empty(&self) -> bool {
-        self.hotkey.is_none() && self.midi.is_none()
+        self.hotkey.is_none() && self.midi.is_none() && self.timecode.is_none()
     }
 }
 
