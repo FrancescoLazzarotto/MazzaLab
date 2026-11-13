@@ -15,12 +15,13 @@ import type {
 import { useI18n } from "../i18n";
 import type { Preferences } from "../preferences";
 import { CheckField, LevelField, NumberField, SelectField, TextField, TimeField } from "./fields";
+import { FixturesTab } from "./FixturesTab";
 import { Icon } from "./icons";
 import { MidiTriggerField } from "./MidiTriggerField";
 
 const BUFFER_SIZES = [64, 128, 256, 512, 1024, 2048];
 const PROTOCOLS: NetworkProtocol[] = ["osc_udp", "osc_tcp", "plain_udp", "plain_tcp"];
-type Tab = "general" | "audio" | "network" | "midi" | "lights" | "keys";
+type Tab = "general" | "audio" | "network" | "midi" | "lights" | "fixtures" | "keys";
 
 const SHORTCUTS: [string, string][] = [
   ["Space", "action.go"],
@@ -74,11 +75,11 @@ export function SettingsDialog({
 
   return (
     <div className="overlay" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <div className="dialog" role="dialog" aria-modal aria-label={t("settings.title")}>
+      <div className={tab === "fixtures" ? "dialog wide" : "dialog"} role="dialog" aria-modal aria-label={t("settings.title")}>
         <header>
           <h1>{t("settings.title")}</h1>
           <nav className="inspector-tabs">
-            {(["general", "audio", "network", "midi", "lights", "keys"] as const).map((name) => (
+            {(["general", "audio", "network", "midi", "lights", "fixtures", "keys"] as const).map((name) => (
               <button key={name} className={name === tab ? "active" : undefined} onClick={() => setTab(name)}>
                 {t(`settings.${name}`)}
               </button>
@@ -121,6 +122,13 @@ export function SettingsDialog({
             />
           )}
           {tab === "lights" && <LightsTab outputs={settings.dmx_outputs ?? []} onChange={(dmx_outputs) => set({ dmx_outputs })} />}
+          {tab === "fixtures" && (
+            <FixturesTab
+              fixtures={settings.fixtures ?? []}
+              groups={settings.fixture_groups ?? []}
+              onChange={(fixtures, fixture_groups) => set({ fixtures, fixture_groups })}
+            />
+          )}
           {tab === "keys" && (
             <table className="shortcuts">
               <tbody>

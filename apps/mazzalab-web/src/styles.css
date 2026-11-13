@@ -1600,6 +1600,120 @@ button.audition.active {
   flex: 0 0 104px;
 }
 
+.dmx-slot.patched .dmx-address {
+  color: var(--text-2);
+}
+
+/* Fixtures and groups, as light cues call them. */
+.patch-names,
+.group-members {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.patch-names {
+  margin-top: -4px;
+}
+
+.patch-name {
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 11px;
+  color: var(--text-2);
+  font-size: 11px;
+}
+
+.patch-name.group {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.patch-name.active {
+  background: rgba(88, 148, 240, 0.16);
+  border-color: rgba(88, 148, 240, 0.55);
+  color: var(--text);
+}
+
+.patch-name.missing {
+  border-style: dashed;
+  color: var(--warn);
+}
+
+.light-commands {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 12px;
+}
+
+.patch-row.fixture-row .field:nth-child(1) {
+  flex: 1 1 150px;
+}
+
+.patch-row.fixture-row .field:nth-child(2) {
+  flex: 0 0 58px;
+}
+
+.patch-row.fixture-row .field:nth-child(3) {
+  flex: 0 0 66px;
+}
+
+.patch-row.fixture-row .field:nth-child(4) {
+  flex: 0 0 132px;
+}
+
+.patch-row.fixture-row .field:nth-child(5) {
+  flex: 1 1 170px;
+}
+
+.fixture-span {
+  flex: 0 0 48px;
+  align-self: flex-end;
+  height: 28px;
+  line-height: 28px;
+  color: var(--text-3);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.clash input {
+  border-color: rgba(219, 169, 60, 0.6);
+}
+
+.clash .fixture-span {
+  color: var(--warn);
+}
+
+.group-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.group-row .field {
+  flex: 0 0 150px;
+}
+
+.group-row .group-members {
+  flex: 1;
+  padding-top: 19px;
+}
+
+.group-row > button {
+  flex: none;
+  margin-top: 19px;
+}
+
+.group-row + .group-row .field-label {
+  display: none;
+}
+
+.group-row + .group-row .group-members,
+.group-row + .group-row > button {
+  padding-top: 0;
+  margin-top: 0;
+}
+
 /* Dialogs */
 .overlay {
   position: fixed;
@@ -1620,6 +1734,10 @@ button.audition.active {
   border: 1px solid var(--border);
   border-radius: 8px;
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+}
+
+.dialog.wide {
+  width: min(780px, calc(100vw - 32px));
 }
 
 .dialog.small {

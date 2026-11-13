@@ -163,6 +163,23 @@ export interface DmxOutput {
   net_universe: number;
 }
 
+/** A light in the rig, which light cues call by its name. */
+export interface Fixture {
+  name: string;
+  /** The show's universe, counted from 1; absent is 1. */
+  universe?: number;
+  /** Its first DMX address, from 1 to 512. */
+  address: number;
+  /** What each channel does, in order from the first address; absent is a dimmer, `["intensity"]`. */
+  parameters?: string[];
+}
+
+/** Fixtures (or other groups) that light cues set together by one name. */
+export interface FixtureGroup {
+  name: string;
+  members?: string[];
+}
+
 /** A lit DMX slot: universe, address and value (1–255). */
 export type DmxLevel = [number, number, number];
 
@@ -173,6 +190,8 @@ export interface WorkspaceSettings {
   network_patches?: NetworkPatch[];
   midi_patches?: MidiPatch[];
   dmx_outputs?: DmxOutput[];
+  fixtures?: Fixture[];
+  fixture_groups?: FixtureGroup[];
   midi_controls?: MidiControls;
 }
 
