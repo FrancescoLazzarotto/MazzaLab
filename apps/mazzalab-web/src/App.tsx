@@ -6,6 +6,7 @@ import { AudioPanel } from "./components/AudioPanel";
 import { CueCart } from "./components/CueCart";
 import { CueList, type SelectMode } from "./components/CueList";
 import { DmxPanel } from "./components/DmxPanel";
+import { slotLabels } from "./fixtures";
 import { Icon } from "./components/icons";
 import { Inspector } from "./components/Inspector";
 import { RenumberDialog } from "./components/RenumberDialog";
@@ -537,7 +538,7 @@ export function App({ connection }: { connection: ShowConnection }) {
               onMaster={(master_db) => updateSettings({ ...workspace.settings, audio: { ...workspace.settings.audio, master_db } })}
               onOpenSettings={() => setSettingsOpen(true)}
             />
-            {dmx !== null && ((workspace.settings.dmx_outputs ?? []).length > 0 || dmx.length > 0) && <DmxPanel levels={dmx} />}
+            {dmx !== null && ((workspace.settings.dmx_outputs ?? []).length > 0 || dmx.length > 0) && <DmxPanel levels={dmx} labels={slotLabels(workspace.settings.fixtures ?? [])} />}
             <ActiveCues
               running={status?.running ?? []}
               cues={allCues}

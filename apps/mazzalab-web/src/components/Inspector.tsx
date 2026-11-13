@@ -17,6 +17,7 @@ import { useI18n } from "../i18n";
 import { hotkeyOf, isReserved } from "../hotkeys";
 import { CheckField, HotkeyField, LevelField, NumberField, SelectField, TextField, TimeField } from "./fields";
 import { CueIcon, Icon } from "./icons";
+import { LightCommands } from "./LightCommands";
 import { MatrixEditor } from "./MatrixEditor";
 import { MidiFields } from "./MidiFields";
 import { MidiTriggerField } from "./MidiTriggerField";
@@ -367,12 +368,11 @@ function TypeSettings({
       return (
         <div className="form-columns">
           <div className="form-column grow">
-            <TextField
-              label={t("inspector.commands")}
-              value={(cue.commands ?? []).join("\n")}
-              placeholder={"1 thru 10 @ 50\n12 + 14 @ full\n2/1 thru 2/8 @ out"}
-              multiline
-              onCommit={(text) => set({ commands: text.split("\n").map((line) => line.trim()).filter(Boolean) })}
+            <LightCommands
+              commands={cue.commands ?? []}
+              fixtures={settings.fixtures ?? []}
+              groups={settings.fixture_groups ?? []}
+              onCommit={(commands) => set({ commands })}
             />
           </div>
           <div className="form-column">

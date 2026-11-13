@@ -16,7 +16,13 @@ export function percent(value: number): number {
 }
 
 /** The DMX slots that are lit right now, each with its level. */
-export function DmxPanel({ levels }: { levels: DmxLevel[] }) {
+export function DmxPanel({
+  levels,
+  labels,
+}: {
+  levels: DmxLevel[];
+  labels: Map<string, string>;
+}) {
   const { t } = useI18n();
   return (
     <section className="panel dmx-panel">
@@ -28,18 +34,27 @@ export function DmxPanel({ levels }: { levels: DmxLevel[] }) {
         <p className="placeholder">{t("dmx.dark")}</p>
       ) : (
         <div className="dmx-grid">
-          {levels.slice(0, SHOWN).map(([universe, address, value]) => (
-            <span
-              key={`${universe}/${address}`}
-              className="dmx-slot"
-              style={{ "--level": `${(value / 255) * 100}%` } as CSSProperties}
-              title={`${slotName(universe, address)} @ ${percent(value)}%`}
-            >
-              <span className="dmx-address">{slotName(universe, address)}</span>
-              <span className="dmx-value">{percent(value)}</span>
-            </span>
-          ))}
-          {levels.length > SHOWN && <span className="dmx-more">+{levels.length - SHOWN}</span>}
+          {levels.slice(0, SHOWN).map(([universe, address, value]) => {
+            const fixture = labels.get(`${universe}/${address}`);
+            return (
+              <span
+                key={`${universe}/${address}`}
+                className={fixture ? "dmx-slot patched" : "dmx-slot"}
+                style={
+                  { "--level": `${(value / 255) * 100}%` } as CSSProperties
+                }
+                title={`${fixture ? `${fixture} · ` : ""}${slotName(universe, address)} @ ${percent(value)}%`}
+              >
+                <span className="dmx-address">
+                  {slotName(universe, address)}
+                </span>
+                <span className="dmx-value">{percent(value)}</span>
+              </span>
+            );
+          })}
+          {levels.length > SHOWN && (
+            <span className="dmx-more">+{levels.length - SHOWN}</span>
+          )}
         </div>
       )}
     </section>
