@@ -1,7 +1,28 @@
 import { useEffect, useState } from "react";
 import type { ConnectionState } from "../api/connection";
-import type { AudioStatus } from "../api/types";
+import type { AudioStatus, TimecodeIn } from "../api/types";
 import { LANGUAGES, useI18n, type Language } from "../i18n";
+import { FORMAT_LABELS } from "../timecode";
+
+/** How long after the last frame incoming timecode still shows as running. */
+const TIMECODE_STALE_MS = 1000;
+
+/** Incoming timecode, dimmed once it stops coming. */
+function TimecodeReading({ value }: { value: TimecodeIn & { at: number } }) {
+  const { t } = useI18n();
+  const [, tick] = useState(0);
+  const running = performance.now() - value.at < TIMECODE_STALE_MS;
+  useEffect(() => {
+    if (!running) return;
+    const timer = setTimeout(() => tick((n) => n + 1), TIMECODE_STALE_MS);
+    return () => clearTimeout(timer);
+  }, [value, running]);
+  return (
+    <span className={running ? "status-item timecode running" : "status-item timecode"} title={t("status.timecodeIn")}>
+      TC <span className="timecode-value">{value.timecode}</span> {FORMAT_LABELS[value.format]}
+    </span>
+  );
+}
 
 function Clock() {
   const [now, setNow] = useState(() => new Date());
@@ -18,6 +39,7 @@ export function StatusBar({
   listCount,
   selectedCount,
   audio,
+  timecode,
   connection,
   onAudio,
 }: {
@@ -25,6 +47,7 @@ export function StatusBar({
   listCount: number;
   selectedCount: number;
   audio: AudioStatus | null;
+  timecode: (TimecodeIn & { at: number }) | null;
   connection: ConnectionState;
   onAudio: () => void;
 }) {
@@ -38,6 +61,7 @@ export function StatusBar({
         {selectedCount > 1 ? ` · ${selectedCount} ${t("status.selected")}` : ""}
       </span>
       <span className="spacer" />
+      {timecode && <TimecodeReading value={timecode} />}
       {audio && (
         <button className={trouble ? "status-item trouble" : "status-item"} onClick={onAudio} title={t("settings.audio")}>
           {audio.running

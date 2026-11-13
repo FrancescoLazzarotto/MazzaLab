@@ -12,6 +12,7 @@ import type {
   ServerMessage,
   Snapshot,
   Status,
+  TimecodeIn,
   Waveform,
 } from "./types";
 
@@ -29,6 +30,8 @@ export interface ShowState {
   audio: AudioStatus | null;
   /** The DMX slots that are lit; null when the server drives no lights. */
   dmx: DmxLevel[] | null;
+  /** The last timecode that came in, with when it came (`performance.now()`). */
+  timecode: (TimecodeIn & { at: number }) | null;
   toasts: Toast[];
 }
 
@@ -54,7 +57,7 @@ export class ShowConnection {
   private midiListeners = new Set<MidiListener>();
   private retries = 0;
   private stopped = false;
-  private state: ShowState = { connection: "connecting", snapshot: null, status: null, audio: null, dmx: null, toasts: [] };
+  private state: ShowState = { connection: "connecting", snapshot: null, status: null, audio: null, dmx: null, timecode: null, toasts: [] };
 
   constructor(private readonly url: string) {}
 
@@ -224,6 +227,9 @@ export class ShowConnection {
         break;
       case "midi_in":
         for (const listener of this.midiListeners) listener(message.event);
+        break;
+      case "timecode":
+        this.update({ timecode: { timecode: message.timecode, format: message.format, at: performance.now() } });
         break;
       case "result": {
         const pending = this.pending.get(message.id);

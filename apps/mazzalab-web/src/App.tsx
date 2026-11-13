@@ -38,7 +38,7 @@ import { loadPreferences, savePreferences, type Preferences } from "./preference
 
 export function App({ connection }: { connection: ShowConnection }) {
   const { t } = useI18n();
-  const { snapshot, status, audio, dmx, toasts, connection: connectionState } = useShow(connection);
+  const { snapshot, status, audio, dmx, timecode, toasts, connection: connectionState } = useShow(connection);
   // Selection and the visible list are per client, so several operators can
   // work on the same show without fighting over them.
   const [listId, setListId] = useState<Id | null>(null);
@@ -582,6 +582,7 @@ export function App({ connection }: { connection: ShowConnection }) {
         listCount={workspace?.cue_lists.length ?? 0}
         selectedCount={selected.length}
         audio={audio}
+        timecode={timecode}
         connection={connectionState}
         onAudio={() => setSettingsOpen(true)}
       />

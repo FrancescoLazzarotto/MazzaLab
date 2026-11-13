@@ -1604,6 +1604,20 @@ button.audition.active {
   color: var(--text-2);
 }
 
+/* Incoming timecode in the status bar. */
+.status-item.timecode {
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.status-item.timecode.running {
+  color: var(--text-2);
+}
+
+.status-item.timecode.running .timecode-value {
+  color: var(--go);
+}
+
 /* Slices of an audio cue: one strip under the fields. */
 .slices {
   display: flex;
