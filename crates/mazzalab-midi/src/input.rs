@@ -8,7 +8,7 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 
 use mazzalab_core::{MidiTrigger, MidiTriggerKind};
-use midir::{MidiInput, MidiInputConnection};
+use midir::{Ignore, MidiInput, MidiInputConnection};
 use serde::{Deserialize, Serialize};
 
 use crate::CLIENT_NAME;
@@ -19,6 +19,13 @@ const RESCAN: Duration = Duration::from_secs(2);
 
 /// What is called with the name of an input and a message it received.
 type EventCallback = Arc<dyn Fn(&str, MidiEvent) + Send + Sync>;
+/// What is called with the name of an input and an MTC message from it.
+type TimecodeCallback = Arc<dyn Fn(&str, &[u8]) + Send + Sync>;
+
+/// Whether `bytes` is MIDI Time Code: a quarter frame, or a full frame.
+pub fn is_timecode(bytes: &[u8]) -> bool {
+    matches!(bytes, [0xF1, _] | [0xF0, 0x7F, _, 0x01, 0x01, ..])
+}
 
 /// A channel message received from an input.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -79,16 +86,26 @@ impl Listener {
     pub fn start(
         on_event: impl Fn(&str, MidiEvent) + Send + Sync + 'static,
     ) -> std::io::Result<Self> {
+        Self::start_with_timecode(on_event, |_, _| {})
+    }
+
+    /// Like [`start`](Self::start), also handing `on_timecode` the MIDI
+    /// Time Code that arrives, as it came.
+    pub fn start_with_timecode(
+        on_event: impl Fn(&str, MidiEvent) + Send + Sync + 'static,
+        on_timecode: impl Fn(&str, &[u8]) + Send + Sync + 'static,
+    ) -> std::io::Result<Self> {
         let stop = Arc::new(AtomicBool::new(false));
         let stopping = stop.clone();
         let on_event: EventCallback = Arc::new(on_event);
+        let on_timecode: TimecodeCallback = Arc::new(on_timecode);
         let thread = std::thread::Builder::new()
             .name("mazzalab-midi-in".into())
             .spawn(move || {
                 // Connections live on this thread: they are not all `Send`.
                 let mut open: HashMap<String, MidiInputConnection<()>> = HashMap::new();
                 while !stopping.load(Ordering::Relaxed) {
-                    rescan(&mut open, &on_event);
+                    rescan(&mut open, &on_event, &on_timecode);
                     let mut waited = Duration::ZERO;
                     while waited < RESCAN && !stopping.load(Ordering::Relaxed) {
                         std::thread::sleep(Duration::from_millis(100));
@@ -113,7 +130,11 @@ impl Drop for Listener {
 }
 
 /// Opens the inputs that appeared and closes the ones that went away.
-fn rescan(open: &mut HashMap<String, MidiInputConnection<()>>, on_event: &EventCallback) {
+fn rescan(
+    open: &mut HashMap<String, MidiInputConnection<()>>,
+    on_event: &EventCallback,
+    on_timecode: &TimecodeCallback,
+) {
     let Ok(probe) = MidiInput::new(CLIENT_NAME) else {
         return;
     };
@@ -128,9 +149,11 @@ fn rescan(open: &mut HashMap<String, MidiInputConnection<()>>, on_event: &EventC
             continue;
         }
         // Connecting uses the input up, so each port gets its own.
-        let Ok(input) = MidiInput::new(CLIENT_NAME) else {
+        let Ok(mut input) = MidiInput::new(CLIENT_NAME) else {
             continue;
         };
+        // Time code is a system message: let it through.
+        input.ignore(Ignore::ActiveSense);
         let Some(port) = input
             .ports()
             .into_iter()
@@ -139,6 +162,7 @@ fn rescan(open: &mut HashMap<String, MidiInputConnection<()>>, on_event: &EventC
             continue;
         };
         let callback = on_event.clone();
+        let timecode = on_timecode.clone();
         let source = name.clone();
         match input.connect(
             &port,
@@ -146,6 +170,8 @@ fn rescan(open: &mut HashMap<String, MidiInputConnection<()>>, on_event: &EventC
             move |_, bytes, ()| {
                 if let Some(event) = parse_event(bytes) {
                     callback(&source, event);
+                } else if is_timecode(bytes) {
+                    timecode(&source, bytes);
                 }
             },
             (),

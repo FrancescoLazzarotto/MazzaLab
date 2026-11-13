@@ -10,8 +10,10 @@
 //! a [`MidiTrigger`] waits for.
 
 mod input;
+mod mtc;
 
-pub use input::{Listener, MidiEvent, matches, parse_event};
+pub use input::{Listener, MidiEvent, is_timecode, matches, parse_event};
+pub use mtc::MtcGenerator;
 
 use std::collections::HashMap;
 use std::sync::mpsc;
@@ -197,8 +199,9 @@ struct Job {
 type ErrorCallback = Box<dyn Fn(&str, &MidiError) + Send>;
 
 /// Sends messages to MIDI outputs from a background thread, in the order
-/// they were queued. Ports are opened on first use and stay open.
-#[derive(Debug)]
+/// they were queued. Ports are opened on first use and stay open. Clones
+/// share the thread.
+#[derive(Debug, Clone)]
 pub struct Sender {
     jobs: mpsc::Sender<Job>,
 }
@@ -226,7 +229,11 @@ impl Sender {
     /// Encodes `message` and queues it for `port`. Invalid messages are
     /// refused right away; delivery problems go to the error callback.
     pub fn send(&self, port: &str, message: &MidiMessage) -> Result<(), MidiError> {
-        let bytes = encode(message)?;
+        self.send_bytes(port, encode(message)?)
+    }
+
+    /// Queues a message already encoded, such as MIDI Time Code.
+    pub fn send_bytes(&self, port: &str, bytes: Vec<u8>) -> Result<(), MidiError> {
         self.jobs
             .send(Job {
                 port: port.to_owned(),
