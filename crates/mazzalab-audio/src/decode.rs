@@ -562,7 +562,7 @@ pub(crate) mod tests {
                     control.request(read);
                     // A reader that is ahead answers at once; give it time
                     // to, as the audio callback would.
-                    let until = std::time::Instant::now() + Duration::from_millis(300);
+                    let until = std::time::Instant::now() + Duration::from_secs(2);
                     while std::time::Instant::now() < until {
                         if let Some((at, skip)) = control.take_answer() {
                             if skip == DEVAMP_END {

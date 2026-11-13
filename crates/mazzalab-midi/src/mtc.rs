@@ -155,12 +155,16 @@ mod tests {
         drop(generator);
 
         let sent = sent.lock().unwrap();
-        // A full frame to locate, then a hundred quarter frames a second.
+        // A full frame to locate, then a hundred quarter frames a second,
+        // measured on when they went out: a busy machine may oversleep.
         assert_eq!(sent[0].1, mtc::full_frame(start, rate));
-        let quarters = sent[1..paused_at].len();
+        let quarters = &sent[1..paused_at];
+        assert!(quarters.len() >= 20, "{} quarter frames", quarters.len());
+        let span = quarters[quarters.len() - 1].0 - quarters[0].0;
+        let per_second = (quarters.len() - 1) as f64 / span.as_secs_f64();
         assert!(
-            (38..=46).contains(&quarters),
-            "{quarters} quarter frames in 0.41 s"
+            (90.0..=110.0).contains(&per_second),
+            "{per_second:.1} quarter frames a second"
         );
         // Read back, they count frames from the start.
         let mut decoder = mtc::Decoder::new();
