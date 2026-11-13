@@ -209,6 +209,13 @@ pub struct FixtureGroup {
     pub members: Vec<String>,
 }
 
+/// A screen the show puts video and text on: any client that opens the
+/// stage by name shows it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Stage {
+    pub name: String,
+}
+
 /// Workspace-wide behaviour settings.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WorkspaceSettings {
@@ -234,6 +241,10 @@ pub struct WorkspaceSettings {
     pub fixtures: Vec<Fixture>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub fixture_groups: Vec<FixtureGroup>,
+    /// The stages Video and Text cues go to; without any, there is one
+    /// called "Main".
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub stages: Vec<Stage>,
     /// Incoming MIDI messages that GO, stop or panic the show.
     #[serde(default, skip_serializing_if = "MidiControls::is_empty")]
     pub midi_controls: MidiControls,
@@ -250,6 +261,7 @@ impl Default for WorkspaceSettings {
             dmx_outputs: Vec::new(),
             fixtures: Vec::new(),
             fixture_groups: Vec::new(),
+            stages: Vec::new(),
             midi_controls: MidiControls::default(),
         }
     }

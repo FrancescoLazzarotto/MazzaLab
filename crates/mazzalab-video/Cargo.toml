@@ -1,6 +1,6 @@
 [package]
 name = "mazzalab-video"
-description = "Video playback, stages and output mapping for MazzaLab (planned)."
+description = "Video and text on stages for MazzaLab: what each stage shows, on which layer, from which time, followed from the engine's events."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,6 +9,12 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+mazzalab-core.workspace = true
+mazzalab-engine.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
 
 [lints]
 workspace = true

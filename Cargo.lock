@@ -2392,6 +2392,12 @@ version = "0.1.0"
 [[package]]
 name = "mazzalab-video"
 version = "0.1.0"
+dependencies = [
+ "mazzalab-core",
+ "mazzalab-engine",
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "memchr"

@@ -24,6 +24,7 @@ mazzalab-osc = { path = "crates/mazzalab-osc" }
 mazzalab-project = { path = "crates/mazzalab-project" }
 mazzalab-show = { path = "crates/mazzalab-show" }
 mazzalab-timecode = { path = "crates/mazzalab-timecode" }
+mazzalab-video = { path = "crates/mazzalab-video" }
 
 # External crates
 clap = { version = "4.6", features = ["derive"] }
