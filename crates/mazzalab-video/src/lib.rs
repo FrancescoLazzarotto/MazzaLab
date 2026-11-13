@@ -108,19 +108,29 @@ pub struct Stages {
     loaded: HashMap<CueId, Duration>,
 }
 
-fn stage_name(stage: Option<&String>) -> String {
+/// The stage a cue goes to: the one it names, or the show's first.
+fn stage_name(stage: Option<&String>, default: &str) -> String {
     stage
         .map(|name| name.trim())
         .filter(|name| !name.is_empty())
-        .unwrap_or(DEFAULT_STAGE)
+        .unwrap_or(default)
         .to_owned()
 }
 
+/// The show's first stage, where cues that name none go.
+fn default_stage(workspace: &Workspace) -> &str {
+    workspace
+        .settings
+        .stages
+        .first()
+        .map_or(DEFAULT_STAGE, |stage| stage.name.as_str())
+}
+
 /// What a cue puts on a stage, and where, if it is a Video or Text cue.
-fn placement(kind: &CueKind) -> Option<(String, i32, f64, Content)> {
+fn placement(kind: &CueKind, default: &str) -> Option<(String, i32, f64, Content)> {
     match kind {
         CueKind::Video(video) if video.file.is_some() => Some((
-            stage_name(video.stage.as_ref()),
+            stage_name(video.stage.as_ref(), default),
             video.layer,
             video.opacity.clamp(0.0, 1.0),
             Content::Video {
@@ -136,7 +146,7 @@ fn placement(kind: &CueKind) -> Option<(String, i32, f64, Content)> {
             },
         )),
         CueKind::Text(text) => Some((
-            stage_name(text.stage.as_ref()),
+            stage_name(text.stage.as_ref(), default),
             text.layer,
             1.0,
             Content::Text {
@@ -168,7 +178,9 @@ impl Stages {
                         }
                         continue;
                     }
-                    let Some((stage, layer, opacity, content)) = placement(&definition.kind) else {
+                    let Some((stage, layer, opacity, content)) =
+                        placement(&definition.kind, default_stage(workspace))
+                    else {
                         continue;
                     };
                     let into = self.loaded.remove(&cue).map_or(Duration::ZERO, |time| {
@@ -241,7 +253,7 @@ impl Stages {
         self.items.retain(|cue, item| {
             let Some((stage, layer, opacity, content)) = workspace
                 .find_cue(*cue)
-                .and_then(|definition| placement(&definition.kind))
+                .and_then(|definition| placement(&definition.kind, default_stage(workspace)))
             else {
                 // Deleted, or no longer something a stage shows.
                 changed = true;
