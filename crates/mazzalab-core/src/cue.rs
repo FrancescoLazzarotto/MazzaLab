@@ -4,6 +4,7 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 
 use crate::id::CueId;
+use crate::slice::SliceMarker;
 use crate::time::{option_seconds, seconds};
 
 /// What happens after a cue has been started.
@@ -331,14 +332,7 @@ impl CueKind {
 
     pub fn action_length(&self) -> ActionLength {
         match self {
-            Self::Audio(cue) => media_length(
-                cue.media_duration,
-                cue.start_time,
-                cue.end_time,
-                cue.play_count,
-                cue.rate,
-                cue.infinite_loop,
-            ),
+            Self::Audio(cue) => audio_length(cue),
             Self::Video(cue) if cue.hold_at_end => ActionLength::UntilStopped,
             Self::Video(cue) => media_length(
                 cue.media_duration,
@@ -385,6 +379,23 @@ fn fixed_or_instant(duration: Duration) -> ActionLength {
     }
 }
 
+/// Slices included: a slice that loops until devamped runs until stopped.
+fn audio_length(cue: &AudioCue) -> ActionLength {
+    if cue
+        .segments()
+        .iter()
+        .any(|segment| segment.passes.is_none())
+    {
+        return ActionLength::UntilStopped;
+    }
+    match cue.file_length() {
+        Some(length) if cue.rate.is_finite() && cue.rate > 0.0 => {
+            fixed_or_instant(length.div_f64(cue.rate))
+        }
+        _ => ActionLength::UntilReported,
+    }
+}
+
 fn media_length(
     media_duration: Option<Duration>,
     start: Duration,
@@ -423,6 +434,14 @@ pub struct AudioCue {
     pub play_count: u32,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub infinite_loop: bool,
+    /// Markers that cut the file into slices, each played its own number
+    /// of times; with slices, `play_count` and `infinite_loop` do not apply.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub slices: Vec<SliceMarker>,
+    /// How often the slice after the last marker plays; 0 loops it until
+    /// devamped.
+    #[serde(default = "default_play_count", skip_serializing_if = "is_one")]
+    pub last_slice_play_count: u32,
     #[serde(default = "default_rate", skip_serializing_if = "is_unit")]
     pub rate: f64,
     /// Main output level in dB.
@@ -462,6 +481,8 @@ impl Default for AudioCue {
             end_time: None,
             play_count: 1,
             infinite_loop: false,
+            slices: Vec::new(),
+            last_slice_play_count: 1,
             rate: 1.0,
             level_db: 0.0,
             output_patch: None,

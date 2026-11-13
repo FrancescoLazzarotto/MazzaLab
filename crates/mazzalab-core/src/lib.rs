@@ -10,6 +10,7 @@
 
 mod cue;
 mod id;
+mod slice;
 pub mod time;
 mod validate;
 mod workspace;
@@ -21,6 +22,7 @@ pub use cue::{
     TimecodeSignal, Triggers, VideoCue, WaitCue,
 };
 pub use id::{CueId, WorkspaceId};
+pub use slice::{Position, Segment, SliceMarker};
 pub use validate::{Issue, validate};
 pub use workspace::{
     AudioSettings, Container, CueList, DmxOutput, DmxProtocol, Fixture, FixtureGroup, MidiControls,
