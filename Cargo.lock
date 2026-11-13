@@ -2287,6 +2287,7 @@ version = "0.1.0"
 dependencies = [
  "mazzalab-core",
  "midir",
+ "serde",
  "thiserror 2.0.21",
  "tracing",
 ]

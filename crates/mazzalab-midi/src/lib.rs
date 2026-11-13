@@ -4,16 +4,27 @@
 //! bytes that go down the cable (voice messages, System Exclusive and MIDI
 //! Show Control), and [`Sender`] delivers them to output ports from a
 //! background thread, keeping the ports open between messages.
+//!
+//! What comes in: [`Listener`] follows every input port, [`parse_event`]
+//! reads channel messages and [`matches`] tells whether one is the message
+//! a [`MidiTrigger`] waits for.
+
+mod input;
+
+pub use input::{Listener, MidiEvent, matches, parse_event};
 
 use std::collections::HashMap;
 use std::sync::mpsc;
 
 use mazzalab_core::MidiMessage;
 use midir::{MidiInput, MidiOutput, MidiOutputConnection};
+
+#[cfg(doc)]
+use mazzalab_core::MidiTrigger;
 use thiserror::Error;
 
 /// Name MazzaLab shows up with in the system's MIDI clients.
-const CLIENT_NAME: &str = "MazzaLab";
+pub(crate) const CLIENT_NAME: &str = "MazzaLab";
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum MidiError {
