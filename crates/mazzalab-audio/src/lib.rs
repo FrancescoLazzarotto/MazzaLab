@@ -370,6 +370,20 @@ impl AudioOutput {
         }
     }
 
+    /// Plays a cue's audio by itself, outside the show: whatever was being
+    /// auditioned stops, and the cue is heard with its trims, level and
+    /// fades on the first outputs of this device, whatever its routing.
+    pub fn audition(&mut self, cue: CueId, audio: &AudioCue) {
+        self.stop_all();
+        let plain = AudioCue {
+            matrix: None,
+            // Heard once through, so it ends on its own.
+            infinite_loop: false,
+            ..audio.clone()
+        };
+        self.play(cue, &plain, Duration::ZERO);
+    }
+
     /// Stops every voice immediately (with a de-click fade).
     pub fn stop_all(&mut self) {
         self.send(MixerCommand::StopAll);

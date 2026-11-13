@@ -65,6 +65,10 @@ pub struct AudioSettings {
     /// Master level in dB applied to every output.
     #[serde(default)]
     pub master_db: f64,
+    /// Device cues are auditioned on (headphones, a desk monitor), away
+    /// from the show's own output; `None` is the system default output.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub audition_device: Option<String>,
 }
 
 /// How a network patch talks to its device.
