@@ -20,6 +20,7 @@ JSON text frames in both directions.
 | `audio` | `audio`: `running`, `device_id`, `device_name`, `sample_rate`, `channels`, `buffer_size`, `fallback`, `error` | on connect and when the audio output changes |
 | `notice` | `notice`: `level` (`info`, `warning`, `error`) and `message` | when the operator should know something: unreadable file, missing network patch, device lost |
 | `dmx` | `levels`: the DMX slots that are lit, each as `[universe, address, value]` with values from 1 to 255 | on connect and whenever they change, when the server drives lights |
+| `timecode` | `timecode` (`HH:MM:SS:FF`) and `format` of the timecode coming in | as it arrives, every two frames for MTC |
 | `midi_in` | `event`: a channel message that arrived on a MIDI input, as `kind` (`note_on`, `note_off`, `control_change`, `program_change`), `channel`, `number`, `value` | as it arrives; lets a client learn a trigger from the controller |
 | `result` | `id` of the request, `error` when it failed | in answer to each client message |
 
@@ -77,6 +78,7 @@ the target container once the cue has been taken out of its old place.
 | `GET /api/status` | the current status |
 | `POST /api/command` | run a command (JSON body) |
 | `POST /api/save` | save the show to its file |
+| `POST /api/timecode/in` | feeds the show `timecode` (`HH:MM:SS:FF`) at a `format` (`fps25`...) as if it had come in, to try timecode triggers without a source |
 | `POST /api/midi/in` | feeds the show a MIDI message (`kind`, `channel`, `number`, `value`) as if it had arrived on an input, to try triggers without the controller |
 | `GET /api/audio` | `status` (as in the `audio` message, or `null` without an audio backend) and `devices`: every output device with `id`, `name`, `host`, `is_default`, `max_channels`, `sample_rates`, `default_sample_rate` |
 | `GET /api/midi` | the MIDI ports of the server's machine: `outputs` and `inputs`, by name |
@@ -141,6 +143,22 @@ the `channel` (1–16) and the `value` it must carry. A note on with
 velocity 0 counts as a note off. `workspace.settings.midi_controls` ties
 `go`, `stop_all`, `panic`, `playhead_next` and `playhead_previous` to
 messages in the same form.
+
+## Timecode
+
+A Timecode cue sends timecode from its `start` (`HH:MM:SS:FF`) at its
+`format` (`fps24`, `fps25`, `fps30_non_drop`, `fps30_drop`, `fps23_976`,
+`fps29_97_non_drop`, `fps29_97_drop`) for its `duration`, or until it is
+stopped. With `signal: "mtc"` it goes to the MIDI `patch` (the first when
+absent) as a full frame and then quarter frames; with `signal: "ltc"` it
+comes out of the audio device's `output` (from 1) at `level_db`. Pausing
+holds it, resuming locates the receiver again and runs on. A cue loaded
+to a time starts that much further on.
+
+MTC arriving on any MIDI input is followed. A cue's `triggers.timecode`
+starts it when incoming timecode, running forward, passes that frame; a
+jump (a locate, a source looping back) starts nothing, so a show can be
+rewound over its triggers.
 
 ## Slices
 

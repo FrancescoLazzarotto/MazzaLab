@@ -65,7 +65,7 @@ pannello uscita audio, impostazioni (generale, audio, rete, scorciatoie),
 modalità Show, segnalazione dei cue rotti, avvisi all'operatore, tasti
 rapidi per cue.
 
-Stima della copertura rispetto a QLab: 35–40% delle funzioni. Le
+Stima della copertura rispetto a QLab: 40–45% delle funzioni. Le
 fondamenta (motore, protocollo, server) non vanno riscritte.
 
 ## Ordine delle fasi
@@ -241,9 +241,10 @@ Parità con QLab e poi oltre.
       SysEx.
 - [ ] MSC in ingresso e in uscita.
 - [ ] MIDI File cue sincronizzato con lo show.
-- [ ] Timecode MTC e LTC in ingresso e in uscita, tutti i formati di frame,
-      inseguimento con freewheel, comportamenti di partenza e arresto
-      (skip, lookback, start all...).
+- [x] Timecode MTC e LTC in uscita, MTC in ingresso, tutti i formati di
+      frame (drop frame compreso). Mancano LTC in ingresso (serve
+      l'ingresso audio), inseguimento con freewheel e i comportamenti di
+      partenza e arresto (skip, lookback, start all...).
 - [ ] Network cue che inviano davvero: OSC su UDP e TCP, UDP, TCP, HTTP,
       WebSocket; fade dei valori OSC.
 - [ ] **Schema aperto e versionato** per le descrizioni dei dispositivi
@@ -385,10 +386,17 @@ Voci ancora aperte qui sopra di cui esiste già un pezzo:
   import GDTF/OFL, palette, effetti, merge HTP, dashboard e programmer.
 - **MIDI**: in uscita note, CC, program change, SysEx e MSC verso le
   patch MIDI dello show; in ingresso note, CC e program change da tutti
-  gli ingressi. Mancano SysEx e MSC in ingresso, il MIDI File cue e MTC.
+  gli ingressi. Mancano SysEx e MSC in ingresso e il MIDI File cue.
+- **Timecode**: il cue Timecode genera MTC verso una patch MIDI o LTC su
+  un'uscita della scheda audio (verificato sulla scheda), in tutti i
+  formati, drop frame compreso; l'MTC in ingresso si vede nella barra di
+  stato e fa partire i cue col trigger timecode quando ci passa sopra in
+  avanti (un salto non fa partire niente). Mancano LTC in ingresso e
+  l'inseguimento (chase).
 - **Trigger dei cue**: tasti rapidi e messaggi MIDI per cue, con
   apprendimento dal controller; GO, stop, panic e playhead comandabili via
-  MIDI. Mancano timecode, orario e OSC come trigger, e Stream Deck.
+  MIDI; trigger da timecode. Mancano orario e OSC come trigger, e Stream
+  Deck.
 - **Slice e Devamp**: un cue audio si divide in slice, ognuna con le sue
   ripetizioni o in loop fino al devamp; il Devamp chiude il passaggio in
   corso e passa alla slice successiva senza buchi, al campione (verificato

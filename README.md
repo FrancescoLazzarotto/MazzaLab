@@ -83,7 +83,8 @@ the web UI.
 | `crates/mazzalab-osc` | OSC parsing, replies, SLIP framing |
 | `crates/mazzalab-audio` | Decoding, real-time mixer with routing matrix and meters, device selection, waveforms |
 | `crates/mazzalab-network` | Network cues: message text to OSC or raw bytes, sent over UDP and TCP |
-| `crates/mazzalab-midi` | MIDI cues: voice messages, SysEx and MIDI Show Control sent to output ports |
+| `crates/mazzalab-midi` | MIDI cues: voice messages, SysEx and MIDI Show Control sent to output ports; MTC out; MIDI and MTC in |
+| `crates/mazzalab-timecode` | SMPTE timecode with drop frame, MIDI Time Code and LTC, to send and to read |
 | `crates/mazzalab-lighting` | Light cues: console-style commands on addresses, fixtures and groups, a fading DMX rig, Art-Net and sACN output |
 | `crates/mazzalab-{video,timeline,ui,plugin}` | Planned subsystems |
 | `apps/mazzalab-server` | Real-time show server: OSC, HTTP/WebSocket API, outputs |
