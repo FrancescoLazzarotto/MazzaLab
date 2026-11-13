@@ -74,6 +74,9 @@ pub struct AudioBackend {
     /// first attempt.
     applied: Option<AudioSettings>,
     error: Option<String>,
+    /// The output cues are auditioned on, opened the first time it is
+    /// needed, and the device it was opened for.
+    audition: Option<(Option<String>, AudioOutput)>,
 }
 
 impl AudioBackend {
@@ -86,7 +89,31 @@ impl AudioBackend {
             output: None,
             applied: None,
             error: None,
+            audition: None,
         }
+    }
+
+    /// The audition output for `device`, opened or reopened as needed.
+    fn audition_output(&mut self, device: &Option<String>) -> Option<&mut AudioOutput> {
+        if self
+            .audition
+            .as_ref()
+            .is_none_or(|(opened, _)| opened != device)
+        {
+            self.audition = None;
+            let request = DeviceRequest {
+                device: device.clone(),
+                ..DeviceRequest::default()
+            };
+            // Nothing in the show waits for an audition to end.
+            match AudioOutput::start(&self.base_dir, request, |_| {}) {
+                Ok(output) => self.audition = Some((device.clone(), output)),
+                Err(error) => self
+                    .completion
+                    .notify(NoticeLevel::Error, format!("No audition output: {error}")),
+            }
+        }
+        self.audition.as_mut().map(|(_, output)| output)
     }
 
     /// (Re)opens the output device for `settings`. Sounds playing on the
@@ -135,6 +162,14 @@ impl AudioBackend {
 impl Output for AudioBackend {
     fn handle(&mut self, show: &Show, events: &[Event]) {
         let workspace = show.workspace();
+        // A panic silences everything, what is being auditioned included.
+        if events
+            .iter()
+            .any(|event| matches!(event.kind, EventKind::Panicking { .. }))
+            && let Some((_, audition)) = &mut self.audition
+        {
+            audition.stop_all();
+        }
         let Some(output) = &mut self.output else {
             // Without a device nothing reports the end of sounds whose
             // length is unknown: end them at once rather than leave them
@@ -189,11 +224,32 @@ impl Output for AudioBackend {
         }
     }
 
+    fn audition(&mut self, show: &Show, cue: Option<CueId>) {
+        let Some(cue) = cue else {
+            if let Some((_, output)) = &mut self.audition {
+                output.stop_all();
+            }
+            return;
+        };
+        let workspace = show.workspace();
+        let Some(CueKind::Audio(audio)) = workspace.find_cue(cue).map(|cue| &cue.kind) else {
+            return;
+        };
+        let device = workspace.settings.audio.audition_device.clone();
+        if let Some(output) = self.audition_output(&device) {
+            output.audition(cue, audio);
+        }
+    }
+
     fn meters(&mut self) -> Option<Vec<f32>> {
         self.output.as_ref().map(AudioOutput::take_peaks_db)
     }
 
     fn audio_status(&self) -> Option<AudioStatus> {
+        let audition = self
+            .audition
+            .as_ref()
+            .and_then(|(_, output)| output.playing_cues().into_iter().next());
         Some(match &self.output {
             Some(output) => {
                 let info = output.info();
@@ -206,10 +262,12 @@ impl Output for AudioBackend {
                     buffer_size: info.buffer_size,
                     fallback: info.fallback,
                     error: None,
+                    audition,
                 }
             }
             None => AudioStatus {
                 error: self.error.clone(),
+                audition,
                 ..AudioStatus::default()
             },
         })

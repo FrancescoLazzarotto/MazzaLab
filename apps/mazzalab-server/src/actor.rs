@@ -46,6 +46,10 @@ pub trait Output: Send {
         None
     }
 
+    /// Plays a cue by itself on the audition output, or stops what is being
+    /// auditioned when `cue` is `None`. Nothing in the show changes.
+    fn audition(&mut self, _show: &Show, _cue: Option<CueId>) {}
+
     /// The DMX slots that are lit, as `(universe, address, value)`, for the
     /// backend that drives lights. Unless `force` is set, `None` means
     /// nothing changed since the last call.
@@ -79,6 +83,9 @@ pub struct AudioStatus {
     /// Why no device could be opened.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    /// The cue being auditioned, if any.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub audition: Option<CueId>,
 }
 
 /// Something the operator should know: a file that cannot be played, a
@@ -182,6 +189,10 @@ enum Request {
         event: MidiEvent,
         reply: oneshot::Sender<()>,
     },
+    Audition {
+        cue: Option<CueId>,
+        reply: oneshot::Sender<Result<(), String>>,
+    },
 }
 
 const GONE: &str = "the show is no longer running";
@@ -208,6 +219,14 @@ impl ShowHandle {
     /// The state of the audio output, if the show has one.
     pub async fn audio_status(&self) -> Option<AudioStatus> {
         self.ask(|reply| Request::Audio { reply }).await.flatten()
+    }
+
+    /// Plays a cue by itself on the audition output (headphones), without
+    /// running it in the show; `None` stops what is being auditioned.
+    pub async fn audition(&self, cue: Option<CueId>) -> Result<(), String> {
+        self.ask(|reply| Request::Audition { cue, reply })
+            .await
+            .unwrap_or_else(|| Err(GONE.to_owned()))
     }
 
     /// Feeds the show a MIDI message as if it had arrived on an input.
@@ -477,6 +496,20 @@ impl Actor {
                 self.midi_in(event);
                 let _ = reply.send(());
             }
+            Request::Audition { cue, reply } => {
+                let known = cue.is_none_or(|cue| self.show.workspace().find_cue(cue).is_some());
+                if known {
+                    for output in &mut self.outputs {
+                        output.audition(&self.show, cue);
+                    }
+                    self.send_audio_status();
+                }
+                let _ = reply.send(if known {
+                    Ok(())
+                } else {
+                    Err("unknown cue".to_owned())
+                });
+            }
             Request::Dmx { reply } => {
                 let levels = self
                     .outputs
@@ -649,13 +682,7 @@ impl Actor {
             for output in &mut self.outputs {
                 output.sync(&self.show);
             }
-            let audio = self.audio_status();
-            if audio != self.last_audio {
-                if let Some(audio) = &audio {
-                    let _ = self.updates.send(Update::Audio(Arc::new(audio.clone())));
-                }
-                self.last_audio = audio;
-            }
+            self.send_audio_status();
             let _ = self
                 .updates
                 .send(Update::Snapshot(Arc::new(self.show.snapshot())));
@@ -689,9 +716,31 @@ impl Actor {
             let _ = self.updates.send(Update::Status(Arc::new(status.clone())));
             self.last_status = Some((Instant::now(), status));
             self.send_meters();
+            // An audition ends by itself: this is where clients find out.
+            self.send_audio_status();
         }
         if due || recheck {
             self.send_dmx();
+        }
+        // The engine knows nothing of an audition: its end is found by
+        // looking, each time the actor wakes for it.
+        if self
+            .last_audio
+            .as_ref()
+            .is_some_and(|audio| audio.audition.is_some())
+        {
+            self.send_audio_status();
+        }
+    }
+
+    /// Broadcasts the state of the audio output when it has changed.
+    fn send_audio_status(&mut self) {
+        let audio = self.audio_status();
+        if audio != self.last_audio {
+            if let Some(audio) = &audio {
+                let _ = self.updates.send(Update::Audio(Arc::new(audio.clone())));
+            }
+            self.last_audio = audio;
         }
     }
 
@@ -733,6 +782,13 @@ impl Actor {
         }
         if let Some(recheck) = self.dmx_recheck {
             wake = wake.min(recheck);
+        }
+        if self
+            .last_audio
+            .as_ref()
+            .is_some_and(|audio| audio.audition.is_some())
+        {
+            wake = wake.min(Instant::now() + AUDITION_TICK);
         }
         wake
     }
@@ -786,6 +842,10 @@ fn absolute(path: &Path) -> Option<PathBuf> {
 fn is_busy(status: &Status) -> bool {
     status.panicking || !status.running.is_empty()
 }
+
+/// How often the audio state is looked at while a cue is auditioned, which
+/// the engine knows nothing about.
+const AUDITION_TICK: Duration = Duration::from_millis(250);
 
 fn message(addr: String, argument: Option<String>) -> OscMessage {
     OscMessage {

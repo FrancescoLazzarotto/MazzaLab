@@ -43,8 +43,20 @@ pub enum ServerMessage<'a> {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ClientMessage {
-    Command { id: u64, command: Box<Command> },
-    Save { id: u64 },
+    Command {
+        id: u64,
+        command: Box<Command>,
+    },
+    Save {
+        id: u64,
+    },
+    /// Plays a cue by itself on the audition output; without a cue, stops
+    /// what is being auditioned.
+    Audition {
+        id: u64,
+        #[serde(default)]
+        cue: Option<CueId>,
+    },
 }
 
 /// An engine event in client form, times in seconds.

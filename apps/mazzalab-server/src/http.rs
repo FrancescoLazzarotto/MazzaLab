@@ -436,6 +436,7 @@ async fn client(socket: WebSocket, handle: ShowHandle) {
                     let (id, result) = match serde_json::from_str::<ClientMessage>(text.as_str()) {
                         Ok(ClientMessage::Command { id, command }) => (id, handle.execute(*command).await),
                         Ok(ClientMessage::Save { id }) => (id, handle.save().await),
+                        Ok(ClientMessage::Audition { id, cue }) => (id, handle.audition(cue).await),
                         Err(error) => (0, Err(format!("invalid message: {error}"))),
                     };
                     send(&ServerMessage::Result { id, error: result.err() })
