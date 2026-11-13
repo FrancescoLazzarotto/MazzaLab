@@ -114,6 +114,7 @@ export function Inspector({
             cue={cue}
             run={running.get(cue.id)}
             loadedAt={loaded.get(cue.id)}
+            auditioning={audio?.audition === cue.id}
             editable={editable}
             set={set}
             onLoad={(time) => onLoad(cue.id, time)}
@@ -234,6 +235,7 @@ function AudioTime({
   cue,
   run,
   loadedAt,
+  auditioning,
   editable,
   set,
   onLoad,
@@ -242,6 +244,8 @@ function AudioTime({
   cue: AudioCue;
   run: RunningCue | undefined;
   loadedAt: number | undefined;
+  /** Whether this cue is being played on the audition output right now. */
+  auditioning: boolean;
   editable: boolean;
   set: (patch: Patch) => void;
   onLoad: (time: number) => void;
@@ -269,6 +273,15 @@ function AudioTime({
           <TextField label={t("inspector.file")} value={cue.file ?? ""} placeholder="media/file.wav" onCommit={(file) => setFile(file || undefined)} />
           <button onClick={() => picker.current?.click()} disabled={progress !== null}>
             {progress === null ? t("inspector.chooseFile") : `${Math.round(progress * 100)}%`}
+          </button>
+          <button
+            className={auditioning ? "audition active" : "audition"}
+            disabled={!cue.file}
+            title={t("inspector.auditionHint")}
+            onClick={() => connection.audition(auditioning ? null : cue.id).catch(() => {})}
+          >
+            <Icon name={auditioning ? "stop" : "audition"} size={auditioning ? 11 : 14} />
+            {auditioning ? t("action.stop") : t("inspector.audition")}
           </button>
           <input
             ref={picker}

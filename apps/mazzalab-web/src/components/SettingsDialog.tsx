@@ -176,6 +176,9 @@ function AudioTab({
   const rates = chosen?.sample_rates ?? [];
   const status = info?.status;
   const missing = audio.device !== undefined && info !== null && !devices.some((device) => device.id === audio.device);
+  // An audition that comes out of the show's own output is heard in the house.
+  const auditionId = audio.audition_device ?? devices.find((device) => device.is_default)?.id;
+  const sameAsShow = status?.running === true && auditionId !== undefined && auditionId === status.device_id;
   return (
     <div className="form-column">
       <SelectField
@@ -209,6 +212,19 @@ function AudioTab({
         />
       </div>
       <LevelField label={t("audio.master")} value={audio.master_db ?? 0} onCommit={(master_db) => onChange({ ...audio, master_db })} />
+      <SelectField
+        label={t("settings.auditionDevice")}
+        value={audio.audition_device ?? ""}
+        options={[
+          { value: "", label: t("settings.defaultDevice") },
+          ...devices.map((device) => ({ value: device.id, label: device.name })),
+          ...(audio.audition_device !== undefined && info !== null && !devices.some((device) => device.id === audio.audition_device)
+            ? [{ value: audio.audition_device, label: t("settings.missingDevice") }]
+            : []),
+        ]}
+        onChange={(device) => onChange({ ...audio, audition_device: device || undefined })}
+      />
+      {sameAsShow && <p className="hint warn">{t("settings.auditionSame")}</p>}
       <div className={status?.running && !status.fallback ? "status-box" : "status-box trouble"}>
         {error ? (
           error

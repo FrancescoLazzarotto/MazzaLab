@@ -1305,6 +1305,11 @@ input.hotkey {
   flex: none;
 }
 
+button.audition.active {
+  background: var(--focus);
+  color: #06101f;
+}
+
 .waveform canvas {
   display: block;
   width: 100%;

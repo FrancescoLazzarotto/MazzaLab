@@ -131,6 +131,8 @@ export interface AudioSettings {
   sample_rate?: number;
   buffer_size?: number;
   master_db?: number;
+  /** Device cues are auditioned on; absent is the system default output. */
+  audition_device?: string;
 }
 
 export type NetworkProtocol = "osc_udp" | "osc_tcp" | "plain_udp" | "plain_tcp";
@@ -221,6 +223,8 @@ export interface AudioStatus {
   /** The show's device is missing and the default one is in use. */
   fallback: boolean;
   error?: string;
+  /** The cue being auditioned, if any. */
+  audition?: Id;
 }
 
 export interface OutputDevice {

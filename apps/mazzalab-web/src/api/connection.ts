@@ -100,6 +100,14 @@ export class ShowConnection {
     return this.request({ type: "save" });
   }
 
+  /**
+   * Plays a cue by itself on the audition output, without running it in
+   * the show; `null` stops what is being auditioned.
+   */
+  audition(cue: Id | null): Promise<void> {
+    return this.request({ type: "audition", cue });
+  }
+
   /** The server's HTTP address, derived from the WebSocket one. */
   get httpBase(): string {
     return this.url.replace(/^ws/, "http").replace(/\/ws$/, "");
@@ -159,7 +167,7 @@ export class ShowConnection {
     this.update({ toasts: this.state.toasts.filter((toast) => toast.id !== id) });
   }
 
-  private request(message: { type: "command"; command: Command } | { type: "save" }): Promise<void> {
+  private request(message: { type: "command"; command: Command } | { type: "save" } | { type: "audition"; cue: Id | null }): Promise<void> {
     const socket = this.socket;
     if (!socket || socket.readyState !== WebSocket.OPEN) {
       return Promise.reject(new Error("not connected"));

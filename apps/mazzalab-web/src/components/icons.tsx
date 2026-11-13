@@ -20,6 +20,7 @@ import {
   FolderSimplePlus,
   GearSix,
   Globe,
+  Headphones,
   Hourglass,
   Lightbulb,
   ListNumbers,
@@ -122,6 +123,7 @@ const ICONS = {
   playhead: [CaretRight, "fill"],
   loaded: [CaretDoubleRight, "bold"],
   cart: [SquaresFour, "regular"],
+  audition: [Headphones, "regular"],
   auto_continue: [ArrowDown, "bold"],
   auto_follow: [ArrowLineDown, "bold"],
 } satisfies Record<string, [PhosphorIcon, IconWeight]>;
