@@ -15,13 +15,15 @@ import type {
 import { displayName, flatten, needsTarget, problemOf, typeLabel } from "../cues";
 import { useI18n } from "../i18n";
 import { hotkeyOf, isReserved } from "../hotkeys";
+import { markers } from "../slices";
 import { CheckField, HotkeyField, LevelField, NumberField, SelectField, TextField, TimeField } from "./fields";
 import { CueIcon, Icon } from "./icons";
 import { LightCommands } from "./LightCommands";
+import { SliceList } from "./SliceList";
 import { MatrixEditor } from "./MatrixEditor";
 import { MidiFields } from "./MidiFields";
 import { MidiTriggerField } from "./MidiTriggerField";
-import { Waveform } from "./Waveform";
+import { filePosition, Waveform } from "./Waveform";
 
 const COLORS: CueColor[] = ["red", "orange", "yellow", "green", "blue", "purple", "grey"];
 const CONTINUE_MODES: ContinueMode[] = ["do_not_continue", "auto_continue", "auto_follow"];
@@ -254,6 +256,8 @@ function AudioTime({
   const { t } = useI18n();
   const picker = useRef<HTMLInputElement>(null);
   const [progress, setProgress] = useState<number | null>(null);
+  const duration = cue.media_duration ?? 0;
+  const sliced = markers(cue, duration).length > 0;
   // A new file starts from a clean slate: its length and channels are read
   // again by the server.
   const setFile = (file: string | undefined) =>
@@ -300,10 +304,22 @@ function AudioTime({
         <TimeField label={t("inspector.endTime")} value={cue.end_time} optional onCommit={(end_time) => set({ end_time })} />
         <TimeField label={t("inspector.fadeIn")} value={cue.fade_in ?? 0} onCommit={(fade_in) => set({ fade_in })} />
         <TimeField label={t("inspector.fadeOut")} value={cue.fade_out ?? 0} onCommit={(fade_out) => set({ fade_out })} />
-        <NumberField label={t("inspector.playCount")} value={cue.play_count ?? 1} min={1} onCommit={(play_count) => set({ play_count: Math.round(play_count) })} />
+        {/* With slices, each slice has its own count instead. */}
+        {!sliced && (
+          <NumberField label={t("inspector.playCount")} value={cue.play_count ?? 1} min={1} onCommit={(play_count) => set({ play_count: Math.round(play_count) })} />
+        )}
         <NumberField label={t("inspector.rate")} value={cue.rate ?? 1} step={0.05} min={0.05} onCommit={(rate) => set({ rate })} />
-        <CheckField label={t("inspector.loop")} checked={cue.infinite_loop ?? false} onChange={(infinite_loop) => set({ infinite_loop })} />
+        {!sliced && <CheckField label={t("inspector.loop")} checked={cue.infinite_loop ?? false} onChange={(infinite_loop) => set({ infinite_loop })} />}
       </div>
+      {cue.file && (
+        <SliceList
+          cue={cue}
+          duration={duration}
+          suggested={loadedAt === undefined ? undefined : filePosition(cue, loadedAt, duration)}
+          editable={editable}
+          onChange={set}
+        />
+      )}
     </div>
   );
 }

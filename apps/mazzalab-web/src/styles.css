@@ -1604,6 +1604,85 @@ button.audition.active {
   color: var(--text-2);
 }
 
+/* Slices of an audio cue: one strip under the fields. */
+.slices {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin-top: 2px;
+}
+
+.slices > .field-label {
+  margin: 0 4px 0 0;
+}
+
+.slices .hint {
+  margin: 0;
+}
+
+.slice-add {
+  height: 24px;
+}
+
+.slice {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 2px 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.slice .field {
+  flex: none;
+}
+
+.slice .field-label {
+  display: none;
+}
+
+.slice input[type="number"] {
+  width: 46px;
+  height: 20px;
+  padding: 0 4px;
+}
+
+.slice-index {
+  color: var(--text-3);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.slice-range {
+  color: var(--text-2);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.slice-loop {
+  width: 24px;
+  height: 20px;
+  padding: 0;
+  color: var(--text-3);
+}
+
+.slice-loop.active {
+  background: rgba(88, 148, 240, 0.16);
+  border-color: rgba(88, 148, 240, 0.55);
+  color: var(--text);
+}
+
+.slice.looping {
+  border-color: rgba(88, 148, 240, 0.4);
+}
+
+.slice .icon-button {
+  width: 20px;
+  height: 20px;
+}
+
 /* Fixtures and groups, as light cues call them. */
 .patch-names,
 .group-members {
