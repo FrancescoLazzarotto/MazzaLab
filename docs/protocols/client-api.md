@@ -20,6 +20,7 @@ JSON text frames in both directions.
 | `audio` | `audio`: `running`, `device_id`, `device_name`, `sample_rate`, `channels`, `buffer_size`, `fallback`, `error` | on connect and when the audio output changes |
 | `notice` | `notice`: `level` (`info`, `warning`, `error`) and `message` | when the operator should know something: unreadable file, missing network patch, device lost |
 | `dmx` | `levels`: the DMX slots that are lit, each as `[universe, address, value]` with values from 1 to 255 | on connect and whenever they change, when the server drives lights |
+| `midi_in` | `event`: a channel message that arrived on a MIDI input, as `kind` (`note_on`, `note_off`, `control_change`, `program_change`), `channel`, `number`, `value` | as it arrives; lets a client learn a trigger from the controller |
 | `result` | `id` of the request, `error` when it failed | in answer to each client message |
 
 ### Client to server
@@ -27,7 +28,14 @@ JSON text frames in both directions.
 ```json
 { "type": "command", "id": 7, "command": { "command": "go" } }
 { "type": "save", "id": 8 }
+{ "type": "audition", "id": 9, "cue": "…" }
 ```
+
+`audition` plays an audio cue by itself on the audition output, without
+running it in the show: no cue starts, the playhead stays, nothing is
+edited. Without a `cue` it stops what is being auditioned. The `audio`
+message carries the cue being auditioned in `audition` and is sent again
+when the audition ends.
 
 `id` is chosen by the client and comes back in the `result`.
 
@@ -36,8 +44,14 @@ JSON text frames in both directions.
 The same JSON is accepted by `POST /api/command`.
 
 Transport: `go` (`list?`), `start` / `stop` / `pause` / `resume` (`cue`),
-`stop_all`, `pause_all`, `resume_all`, `panic`, `reset`, `set_playhead`
-(`cue`, `list?`), `playhead_next`, `playhead_previous`.
+`load` (`cue`, `time`), `stop_all`, `pause_all`, `resume_all`, `panic`,
+`reset`, `set_playhead` (`cue`, `list?`), `playhead_next`,
+`playhead_previous`.
+
+`load` makes a cue's next start pick up `time` seconds into it, counted
+from the beginning of its pre-wait; the status lists loaded cues in
+`loaded` until they start. A Load cue does the same to its target. Events
+gain `loaded` (`cue`, `time`), `unloaded` and `devamped`.
 
 Editing (each is one undo step): `update_cue` (`cue`), `insert_cue`
 (`container`, `index?`, `cue`), `delete_cue` (`cue`), `move_cue` (`cue`,
@@ -63,6 +77,7 @@ the target container once the cue has been taken out of its old place.
 | `GET /api/status` | the current status |
 | `POST /api/command` | run a command (JSON body) |
 | `POST /api/save` | save the show to its file |
+| `POST /api/midi/in` | feeds the show a MIDI message (`kind`, `channel`, `number`, `value`) as if it had arrived on an input, to try triggers without the controller |
 | `GET /api/audio` | `status` (as in the `audio` message, or `null` without an audio backend) and `devices`: every output device with `id`, `name`, `host`, `is_default`, `max_channels`, `sample_rates`, `default_sample_rate` |
 | `GET /api/midi` | the MIDI ports of the server's machine: `outputs` and `inputs`, by name |
 | `GET /api/waveform?cue=ID&buckets=N` | the outline of an audio cue's file: `duration`, `channels`, `sample_rate`, and `peaks`, a minimum and a maximum (-127…127) for each of N slices. Cached per file |
@@ -119,6 +134,27 @@ any operator screen: `Q`, `F5`, `Num3`, `Ctrl+Shift+1`. Modifiers come in
 the order Ctrl, Alt, Shift; letters and digits are named after the physical
 key. The keys the operator screen uses itself (Space, Esc, arrows, Enter,
 Delete, V and the Ctrl shortcuts) cannot be assigned.
+
+A cue's `triggers.midi` is a message that starts it when it arrives on any
+MIDI input: `kind`, `number` (note, controller or program), and optionally
+the `channel` (1–16) and the `value` it must carry. A note on with
+velocity 0 counts as a note off. `workspace.settings.midi_controls` ties
+`go`, `stop_all`, `panic`, `playhead_next` and `playhead_previous` to
+messages in the same form.
+
+## Carts
+
+A cue list with `cart: true` is a cart: its cues are called up in no
+particular order and clients show them as a grid of buttons. `add_cue_list`
+takes `cart` to make one.
+
+## Audition
+
+`workspace.settings.audio.audition_device` names the device cues are
+auditioned on (headphones, a desk monitor); absent, it is the system
+default output. An auditioned cue is heard with its trims, level and fades
+on the first outputs of that device, once through, whatever its routing
+and loops. A panic stops it too.
 
 ## Safety copies
 

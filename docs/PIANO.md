@@ -53,6 +53,10 @@ tempi di fade; gli universi escono in Art-Net o sACN.
 Affidabilità: autosave delle modifiche non salvate, backup delle ultime
 dieci versioni a ogni salvataggio, recupero automatico dopo un crash.
 
+Controllo: cue Load, Reset, Devamp e Target attivi, carico a un punto
+qualsiasi con un clic sulla forma d'onda, cue cart, trigger MIDI con
+apprendimento, preascolto in cuffia.
+
 Interfaccia: barra dei tipi di cue, selezione multipla, copia/incolla,
 duplica, raggruppa, rinumera, drag & drop (riordino e import di file
 audio), modifica in linea, inspector a schede con forma d'onda e matrice,
@@ -60,7 +64,7 @@ pannello uscita audio, impostazioni (generale, audio, rete, scorciatoie),
 modalità Show, segnalazione dei cue rotti, avvisi all'operatore, tasti
 rapidi per cue.
 
-Stima della copertura rispetto a QLab: 30–35% delle funzioni. Le
+Stima della copertura rispetto a QLab: 35–40% delle funzioni. Le
 fondamenta (motore, protocollo, server) non vanno riscritte.
 
 ## Ordine delle fasi
@@ -132,7 +136,7 @@ Parità con QLab e poi oltre.
       polarità e ritardo per canale.
 - [x] **Matrice per cue**: canali del file → uscite della patch, con
       livello per incrocio.
-- [ ] Uscita di preascolto (cuffia) separata, per provare un cue senza
+- [x] Uscita di preascolto (cuffia) separata, per provare un cue senza
       mandarlo in sala.
 
 ### Riproduzione
@@ -193,7 +197,7 @@ Parità con QLab e poi oltre.
       trascinabili, scrub e preascolto.
 - [ ] Vista timeline per i gruppi timeline, con i pre-wait modificabili
       graficamente.
-- [ ] Cue cart: griglia di pulsanti per gli effetti a chiamata.
+- [x] Cue cart: griglia di pulsanti per gli effetti a chiamata.
 - [ ] Pannello dei cue attivi con pausa, stop, fade out e livelli dal vivo.
 - [ ] Pannello impostazioni dello show: doppio GO, durata del panic, nome,
       cue di apertura e chiusura.
@@ -216,7 +220,7 @@ Parità con QLab e poi oltre.
 
 - [ ] Trigger dei cue: tasti rapidi, MIDI, timecode, orario (con
       calendario), messaggi OSC in ingresso, "second trigger".
-- [ ] `load` e `preview` sui cue.
+- [x] `load` e `preview` sui cue.
 - [ ] **OSC completo**: coprire i circa 1.100 metodi documentati da QLab,
       in ordine di uso reale, con test di conformità basati sulla
       documentazione pubblica.
@@ -375,9 +379,14 @@ Voci ancora aperte qui sopra di cui esiste già un pezzo:
   sACN, interfacce DMX USB, RDM, fixture (GDTF/OFL), gruppi e palette,
   effetti, merge HTP, dashboard e programmer.
 - **MIDI**: in uscita note, CC, program change, SysEx e MSC verso le
-  patch MIDI dello show. Mancano l'ingresso, il MIDI File cue e MTC.
-- **Trigger dei cue**: tasti rapidi per cue, da qualsiasi schermo
-  operatore. Mancano MIDI, timecode, orario e OSC come trigger.
+  patch MIDI dello show; in ingresso note, CC e program change da tutti
+  gli ingressi. Mancano SysEx e MSC in ingresso, il MIDI File cue e MTC.
+- **Trigger dei cue**: tasti rapidi e messaggi MIDI per cue, con
+  apprendimento dal controller; GO, stop, panic e playhead comandabili via
+  MIDI. Mancano timecode, orario e OSC come trigger, e Stream Deck.
+- **Devamp**: chiude un loop alla fine del passaggio in corso, al
+  campione. Mancano le slice, quindi non salta ancora alla slice
+  successiva.
 - **Avvisi**: file illeggibili, patch mancanti e dispositivi assenti
   arrivano all'operatore come notifiche; manca il controllo pre-show unico.
 
