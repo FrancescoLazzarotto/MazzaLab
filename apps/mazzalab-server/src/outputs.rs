@@ -280,11 +280,13 @@ impl Output for NetworkBackend {
     }
 }
 
-/// Sends the messages of MIDI cues to the show's MIDI patches.
+/// Sends the messages of MIDI cues to the show's MIDI patches, and listens
+/// on every MIDI input for the messages that trigger cues.
 #[derive(Debug)]
 pub struct MidiBackend {
     sender: Option<mazzalab_midi::Sender>,
     completion: Completion,
+    _listener: Option<mazzalab_midi::Listener>,
 }
 
 impl MidiBackend {
@@ -298,7 +300,16 @@ impl MidiBackend {
         })
         .map_err(|error| tracing::error!(%error, "MIDI cues are disabled"))
         .ok();
-        Self { sender, completion }
+        let incoming = completion.clone();
+        let listener =
+            mazzalab_midi::Listener::start(move |_, event| incoming.midi_received(event))
+                .map_err(|error| tracing::error!(%error, "MIDI triggers are disabled"))
+                .ok();
+        Self {
+            sender,
+            completion,
+            _listener: listener,
+        }
     }
 }
 

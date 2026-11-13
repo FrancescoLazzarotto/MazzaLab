@@ -50,6 +50,7 @@ pub fn router(handle: ShowHandle, ui_dir: Option<PathBuf>) -> Router {
         .route("/api/save", post(save))
         .route("/api/audio", get(audio))
         .route("/api/midi", get(midi))
+        .route("/api/midi/in", post(midi_in))
         .route("/api/waveform", get(waveform))
         .route(
             "/api/media",
@@ -148,6 +149,16 @@ async fn midi() -> Json<Value> {
     .await
     .unwrap_or_default();
     Json(json!({ "outputs": ports.0, "inputs": ports.1 }))
+}
+
+/// Feeds the show a MIDI message as if it had arrived on an input, to try
+/// triggers out without the controller.
+async fn midi_in(
+    State(state): State<AppState>,
+    Json(event): Json<mazzalab_midi::MidiEvent>,
+) -> (StatusCode, Json<Value>) {
+    state.handle.midi_in(event).await;
+    outcome(Ok(()))
 }
 
 #[derive(Deserialize)]
@@ -440,6 +451,7 @@ async fn client(socket: WebSocket, handle: ShowHandle) {
                 Ok(Update::Audio(audio)) => send(&ServerMessage::Audio { audio: &audio }),
                 Ok(Update::Notice(notice)) => send(&ServerMessage::Notice { notice: &notice }),
                 Ok(Update::Dmx(levels)) => send(&ServerMessage::Dmx { levels: &levels }),
+                Ok(Update::MidiIn(event)) => send(&ServerMessage::MidiIn { event }),
                 Ok(Update::Osc(_)) => continue,
                 // Too slow to keep up: resynchronise with a fresh snapshot.
                 Err(RecvError::Lagged(_)) => match handle.snapshot().await {

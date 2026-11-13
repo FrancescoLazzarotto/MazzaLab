@@ -2,6 +2,7 @@
 
 use mazzalab_core::CueId;
 use mazzalab_engine::{Event, EventKind};
+use mazzalab_midi::MidiEvent;
 use mazzalab_show::{Command, Snapshot, Status};
 use serde::{Deserialize, Serialize};
 
@@ -27,6 +28,9 @@ pub enum ServerMessage<'a> {
     /// The DMX slots that are lit, as `[universe, address, value]`: sent on
     /// connect and whenever they change.
     Dmx { levels: &'a [DmxLevel] },
+    /// A MIDI message arrived on an input: `kind`, `channel`, `number` and
+    /// `value`. Lets a client learn a trigger from the controller itself.
+    MidiIn { event: MidiEvent },
     /// Answer to a client request carrying the same `id`.
     Result {
         id: u64,
