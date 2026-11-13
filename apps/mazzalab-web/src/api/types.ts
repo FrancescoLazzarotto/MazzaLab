@@ -59,6 +59,36 @@ export interface MidiControls {
   playhead_previous?: MidiTrigger;
 }
 
+/** A screen the show puts video and text on. */
+export interface Stage {
+  name: string;
+}
+
+/** A cue that is up on a stage; times on the server's clock, in seconds. */
+export type StageItem = {
+  cue: Id;
+  stage: string;
+  layer: number;
+  /** The opacity it has, or is fading to. */
+  opacity: number;
+  fade?: { from: number; started: number; duration: number };
+  /** When it started or last resumed. */
+  started: number;
+  /** How far into its action it was at `started`. */
+  offset: number;
+  paused: boolean;
+} & (
+  | { kind: "video"; start_time: number; end_time?: number; looped: boolean; hold: boolean; rate: number }
+  | { kind: "text"; text: string }
+);
+
+/** Everything up on every stage, with the server's clock when it was taken. */
+export interface StageState {
+  now: number;
+  stages: string[];
+  items: StageItem[];
+}
+
 export type SmpteFormat = "fps24" | "fps25" | "fps30_non_drop" | "fps30_drop" | "fps23_976" | "fps29_97_non_drop" | "fps29_97_drop";
 export type TimecodeSignal = "mtc" | "ltc";
 
@@ -117,8 +147,22 @@ export type MidiMessage =
 export type Cue = CueBase &
   (
     | ({ type: "audio" } & AudioFields)
-    | { type: "video"; file?: string; stage?: string; layer?: number; opacity?: number; media_duration?: number; hold_at_end?: boolean }
-    | { type: "text"; text: string; stage?: string }
+    | {
+        type: "video";
+        file?: string;
+        /** Absent is the stage called "Main". */
+        stage?: string;
+        layer?: number;
+        opacity?: number;
+        start_time?: number;
+        end_time?: number;
+        play_count?: number;
+        infinite_loop?: boolean;
+        rate?: number;
+        media_duration?: number;
+        hold_at_end?: boolean;
+      }
+    | { type: "text"; text: string; stage?: string; layer?: number }
     | { type: "mic"; input_patch?: string; output_patch?: string }
     | { type: "camera"; input_patch?: string; stage?: string }
     | { type: "light"; commands?: string[]; duration?: number }
@@ -226,6 +270,7 @@ export interface WorkspaceSettings {
   dmx_outputs?: DmxOutput[];
   fixtures?: Fixture[];
   fixture_groups?: FixtureGroup[];
+  stages?: Stage[];
   midi_controls?: MidiControls;
 }
 
@@ -353,4 +398,5 @@ export type ServerMessage =
   | { type: "dmx"; levels: DmxLevel[] }
   | { type: "midi_in"; event: MidiEvent }
   | ({ type: "timecode" } & TimecodeIn)
+  | ({ type: "stage" } & StageState)
   | { type: "result"; id: number; error?: string };

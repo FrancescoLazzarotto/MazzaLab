@@ -11,6 +11,7 @@ import type {
   Notice,
   ServerMessage,
   Snapshot,
+  StageState,
   Status,
   TimecodeIn,
   Waveform,
@@ -32,6 +33,8 @@ export interface ShowState {
   dmx: DmxLevel[] | null;
   /** The last timecode that came in, with when it came (`performance.now()`). */
   timecode: (TimecodeIn & { at: number }) | null;
+  /** What the stages show, with when it came (`performance.now()`). */
+  stage: (StageState & { received: number }) | null;
   toasts: Toast[];
 }
 
@@ -57,7 +60,7 @@ export class ShowConnection {
   private midiListeners = new Set<MidiListener>();
   private retries = 0;
   private stopped = false;
-  private state: ShowState = { connection: "connecting", snapshot: null, status: null, audio: null, dmx: null, timecode: null, toasts: [] };
+  private state: ShowState = { connection: "connecting", snapshot: null, status: null, audio: null, dmx: null, timecode: null, stage: null, toasts: [] };
 
   constructor(private readonly url: string) {}
 
@@ -109,6 +112,16 @@ export class ShowConnection {
    */
   audition(cue: Id | null): Promise<void> {
     return this.request({ type: "audition", cue });
+  }
+
+  /** From a stage: the file of `cue` played to its end. */
+  stageEnded(cue: Id): Promise<void> {
+    return this.request({ type: "stage_ended", cue });
+  }
+
+  /** Where a stage fetches the file of a cue. */
+  cueMediaUrl(cue: Id): string {
+    return `${this.httpBase}/api/cue-media?cue=${cue}`;
   }
 
   /** The server's HTTP address, derived from the WebSocket one. */
@@ -170,7 +183,9 @@ export class ShowConnection {
     this.update({ toasts: this.state.toasts.filter((toast) => toast.id !== id) });
   }
 
-  private request(message: { type: "command"; command: Command } | { type: "save" } | { type: "audition"; cue: Id | null }): Promise<void> {
+  private request(
+    message: { type: "command"; command: Command } | { type: "save" } | { type: "audition"; cue: Id | null } | { type: "stage_ended"; cue: Id },
+  ): Promise<void> {
     const socket = this.socket;
     if (!socket || socket.readyState !== WebSocket.OPEN) {
       return Promise.reject(new Error("not connected"));
@@ -230,6 +245,9 @@ export class ShowConnection {
         break;
       case "timecode":
         this.update({ timecode: { timecode: message.timecode, format: message.format, at: performance.now() } });
+        break;
+      case "stage":
+        this.update({ stage: { now: message.now, stages: message.stages, items: message.items, received: performance.now() } });
         break;
       case "result": {
         const pending = this.pending.get(message.id);
