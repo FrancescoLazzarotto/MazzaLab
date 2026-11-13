@@ -144,7 +144,7 @@ Parità con QLab e poi oltre.
 - [ ] Precaricamento (autoload) e partenze a latenza zero.
 - [ ] Partenze allineate al campione per i cue che partono nello stesso
       istante (gruppi timeline).
-- [ ] Slice e loop per slice; il cue Devamp funziona davvero.
+- [x] Slice e loop per slice; il cue Devamp funziona davvero.
 - [ ] Cambio di velocità con intonazione mantenuta (time-stretch; verificare
       la licenza della libreria scelta).
 - [x] Fade integrati in apertura e chiusura di ogni cue.
@@ -366,7 +366,8 @@ Voci ancora aperte qui sopra di cui esiste già un pezzo:
   sono decodificati prima del GO. Manca la misura della latenza GO → suono.
 - **Meter**: picco per uscita. Mancano RMS, LUFS e i meter per cue.
 - **Forma d'onda**: disegno, inizio e fine trascinabili, cursore di
-  riproduzione, fade disegnati. Mancano zoom, slice, scrub e preascolto.
+  riproduzione, fade disegnati, marcatori di slice (Alt+clic per tagliare,
+  trascinabili) con le ripetizioni di ogni slice. Mancano zoom e scrub.
 - **Cue list**: aggiungere, rinominare, eliminare. Manca la vista di più
   liste insieme.
 - **Impostazioni dello show**: nome, doppio GO, panic, audio, patch di
@@ -388,9 +389,10 @@ Voci ancora aperte qui sopra di cui esiste già un pezzo:
 - **Trigger dei cue**: tasti rapidi e messaggi MIDI per cue, con
   apprendimento dal controller; GO, stop, panic e playhead comandabili via
   MIDI. Mancano timecode, orario e OSC come trigger, e Stream Deck.
-- **Devamp**: chiude un loop alla fine del passaggio in corso, al
-  campione. Mancano le slice, quindi non salta ancora alla slice
-  successiva.
+- **Slice e Devamp**: un cue audio si divide in slice, ognuna con le sue
+  ripetizioni o in loop fino al devamp; il Devamp chiude il passaggio in
+  corso e passa alla slice successiva senza buchi, al campione (verificato
+  sulla scheda audio), o chiude il cue nell'ultima.
 - **Avvisi**: file illeggibili, patch mancanti e dispositivi assenti
   arrivano all'operatore come notifiche; manca il controllo pre-show unico.
 

@@ -142,6 +142,20 @@ velocity 0 counts as a note off. `workspace.settings.midi_controls` ties
 `go`, `stop_all`, `panic`, `playhead_next` and `playhead_previous` to
 messages in the same form.
 
+## Slices
+
+An audio cue's `slices` are markers, each a `time` in the file and the
+`play_count` of the slice that ends there (0 loops it until devamped);
+`last_slice_play_count` is the count of the slice after the last marker.
+Markers outside the region between `start_time` and `end_time` are
+ignored. While a cue has slices its own `play_count` and `infinite_loop`
+do not apply, and a cue with a slice that loops has no fixed length.
+
+A Devamp cue aimed at a sliced cue lets the pass in progress finish and
+moves on to the next slice, on the sample; in the last slice, or on a
+plain loop, it ends the cue at the end of that pass. A devamp right at
+the top of a pass plays that whole pass.
+
 ## Carts
 
 A cue list with `cart: true` is a cart: its cues are called up in no
