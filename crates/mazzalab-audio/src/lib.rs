@@ -38,7 +38,7 @@ pub use device::{DeviceInfo, DeviceRequest, OutputDevice, output_devices};
 pub use mixer::Meters;
 pub use waveform::{Waveform, waveform};
 
-use decode::Playback;
+use decode::{DevampControl, Playback};
 use mixer::{Mixer, MixerCommand, MixerEvent, Routes, Voice, VoiceConfig};
 
 /// Seconds of audio each reader decodes ahead.
@@ -424,42 +424,19 @@ impl AudioOutput {
         let capacity = (READ_AHEAD_SECONDS * f64::from(info.sample_rate)) as usize * info.channels;
         let (producer, consumer) = RingBuffer::new(capacity.max(1024));
         let ended = Arc::new(AtomicBool::new(false));
+        let devamp = Arc::new(DevampControl::default());
 
-        // Where in the file `into` lands: whole passes are skipped and the
-        // first one played starts partway through.
+        // Where in the file `into` lands: which slice, which pass of it,
+        // how far in. The file's own length stands in for one not probed.
         let rate = if audio.rate.is_finite() && audio.rate > 0.0 {
             audio.rate
         } else {
             1.0
         };
-        let pass = audio
-            .end_time
-            .or(info.duration)
-            .map(|end| end.saturating_sub(audio.start_time))
-            .filter(|pass| !pass.is_zero());
-        let travelled = into.mul_f64(rate);
-        let (skipped, within) = match pass {
-            Some(pass) => (
-                (travelled.as_secs_f64() / pass.as_secs_f64()) as u32,
-                Duration::from_secs_f64(travelled.as_secs_f64() % pass.as_secs_f64()),
-            ),
-            None => (0, travelled),
-        };
-        let passes = if audio.infinite_loop {
-            None
-        } else {
-            match audio.play_count.max(1).checked_sub(skipped) {
-                Some(left) if left > 0 => Some(left),
-                // Loaded past its end: there is nothing left to play.
-                _ => return Err(()),
-            }
-        };
-        let source_frames =
-            |time: Duration| (time.as_secs_f64() * f64::from(info.sample_rate)).round() as u64;
-        let pass_frames = pass.map(|pass| {
-            let whole = source_frames(pass);
-            (whole.saturating_sub(source_frames(within)), whole)
-        });
+        let mut timeline = audio.clone();
+        timeline.media_duration = audio.media_duration.or(info.duration);
+        // Loaded past its end: there is nothing left to play.
+        let start = timeline.locate(into.mul_f64(rate)).ok_or(())?;
 
         let fade_out_frames = self.frames(audio.fade_out);
         // The fade out needs to know where the end is.
@@ -491,18 +468,16 @@ impl AudioOutput {
                     0
                 },
                 fade_out,
-                passes: pass_frames,
             },
             consumer,
             ended.clone(),
+            devamp.clone(),
         );
         let playback = Playback {
-            start: audio.start_time,
-            first_start: audio.start_time + within,
-            end: audio.end_time,
-            passes,
+            segments: timeline.segments(),
+            start,
         };
-        decode::spawn_reader(source, playback, producer, ended).map_err(|error| {
+        decode::spawn_reader(source, playback, producer, ended, devamp).map_err(|error| {
             tracing::warn!(%error, "cannot start audio reader");
         })?;
         Ok((Box::new(voice), info.channels))

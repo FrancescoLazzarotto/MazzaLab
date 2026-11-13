@@ -6,7 +6,7 @@ use std::sync::mpsc;
 use std::time::Duration;
 
 use mazzalab_audio::{AudioOutput, DeviceRequest, output_devices, probe_workspace};
-use mazzalab_core::{ActionLength, AudioCue, Cue, CueKind, Workspace};
+use mazzalab_core::{ActionLength, AudioCue, Cue, CueKind, SliceMarker, Workspace};
 use mazzalab_engine::Engine;
 
 fn write_tone(path: &std::path::Path, rate: u32, seconds: f32) {
@@ -176,6 +176,68 @@ fn a_loaded_cue_plays_only_what_is_left_and_a_loop_can_be_devamped() {
     println!("devamped loop took {took:?}");
     assert!(
         (Duration::from_millis(1800)..Duration::from_millis(2600)).contains(&took),
+        "{took:?}"
+    );
+}
+
+#[test]
+#[ignore = "needs an audio output device"]
+fn a_sliced_cue_vamps_until_devamped_then_plays_its_ending() {
+    let dir = std::env::temp_dir().join(format!("mazzalab-device-slices-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    write_tone(&dir.join("tone.wav"), 44_100, 1.0);
+
+    // An intro to 0.3 s, a vamp from 0.3 to 0.6 s, an ending to 1 s.
+    let mut workspace = Workspace::new("device test");
+    let sliced = Cue::new(CueKind::Audio(AudioCue {
+        file: Some("tone.wav".into()),
+        level_db: -6.0,
+        slices: vec![
+            SliceMarker {
+                time: Duration::from_millis(300),
+                play_count: 1,
+            },
+            SliceMarker {
+                time: Duration::from_millis(600),
+                play_count: 0,
+            },
+        ],
+        ..AudioCue::default()
+    }));
+    let devamp = Cue::new(CueKind::Devamp).with_target(sliced.id);
+    let (sliced_id, devamp_id) = (sliced.id, devamp.id);
+    workspace.cue_lists[0].cues = vec![sliced, devamp];
+    assert!(probe_workspace(&mut workspace, &dir).is_empty());
+
+    let (finished_tx, finished) = mpsc::channel();
+    let mut audio = AudioOutput::start(&dir, DeviceRequest::default(), move |cue| {
+        let _ = finished_tx.send(cue);
+    })
+    .unwrap();
+    let mut engine = Engine::new(workspace);
+    let run = |engine: &mut Engine, audio: &mut AudioOutput| {
+        let events = engine.take_events();
+        audio.handle_events(engine.workspace(), &events);
+    };
+
+    engine.start(sliced_id).unwrap();
+    let started = std::time::Instant::now();
+    run(&mut engine, &mut audio);
+    // Well past the length of the file, the vamp still goes round.
+    assert!(finished.recv_timeout(Duration::from_millis(1400)).is_err());
+    // 1.4 s in: 1.1 s into the vamp, whose fourth pass ends at 1.5 s; then
+    // the 0.4 s ending.
+    engine.advance_to(Duration::from_millis(1400));
+    engine.start(devamp_id).unwrap();
+    run(&mut engine, &mut audio);
+    assert_eq!(
+        finished.recv_timeout(Duration::from_secs(5)).unwrap(),
+        sliced_id
+    );
+    let took = started.elapsed();
+    println!("sliced cue took {took:?}");
+    assert!(
+        (Duration::from_millis(1800)..Duration::from_millis(2400)).contains(&took),
         "{took:?}"
     );
 }

@@ -8,6 +8,8 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use mazzalab_core::{CueId, FadeCurve};
 use rtrb::{Consumer, Producer};
 
+use crate::decode::{DEVAMP_END, DevampControl};
+
 /// Maximum number of channels read from a source.
 pub(crate) const MAX_CHANNELS: usize = 16;
 /// Maximum number of output channels a voice can be routed to.
@@ -299,8 +301,13 @@ pub struct Voice {
     fade_out_frames: u32,
     /// Source frames read so far.
     pulled: u64,
-    /// Source frames in the first pass and in each pass after it.
-    passes: Option<(u64, u64)>,
+    /// Where devamps are asked for and answered by the reader.
+    devamp: Arc<DevampControl>,
+    /// A devamp was asked for and not answered yet.
+    devamp_asked: bool,
+    /// Source frame where the stream jumps to the next slice, and how many
+    /// frames written past it are dropped there.
+    skip_at: Option<(u64, u64)>,
     /// Source frame at which the voice ends, once devamped.
     stop_at: Option<u64>,
     paused: bool,
@@ -326,9 +333,6 @@ pub(crate) struct VoiceConfig {
     /// Where the fade to silence starts and how long it lasts, in output
     /// frames.
     pub fade_out: Option<(u64, u32)>,
-    /// Source frames in the first pass and in each pass after it, when the
-    /// source loops and its length is known; needed to devamp.
-    pub passes: Option<(u64, u64)>,
 }
 
 impl std::fmt::Debug for Voice {
@@ -342,7 +346,12 @@ impl std::fmt::Debug for Voice {
 }
 
 impl Voice {
-    pub(crate) fn new(config: VoiceConfig, samples: Consumer<f32>, ended: Arc<AtomicBool>) -> Self {
+    pub(crate) fn new(
+        config: VoiceConfig,
+        samples: Consumer<f32>,
+        ended: Arc<AtomicBool>,
+        devamp: Arc<DevampControl>,
+    ) -> Self {
         let rate = if config.rate.is_finite() && config.rate > 0.0 {
             config.rate
         } else {
@@ -371,7 +380,9 @@ impl Voice {
             fade_out_at: config.fade_out.map(|(at, _)| at),
             fade_out_frames: config.fade_out.map_or(0, |(_, frames)| frames),
             pulled: 0,
-            passes: config.passes,
+            devamp,
+            devamp_asked: false,
+            skip_at: None,
             stop_at: None,
             paused: false,
             stopping: false,
@@ -389,20 +400,30 @@ impl Voice {
         }
     }
 
-    /// Stops looping: the voice plays the pass it is in to the end and
-    /// finishes there, as if the source had ended.
+    /// Stops looping: the voice plays the pass it is in to the end, then
+    /// the next slice, or finishes there. The reader says where that is.
     fn devamp(&mut self) {
-        let Some((first, pass)) = self.passes else {
-            return;
-        };
-        if pass == 0 || self.stop_at.is_some() {
+        if self.devamp_asked || self.stop_at.is_some() {
             return;
         }
-        self.stop_at = Some(if self.pulled < first {
-            first
+        self.devamp_asked = true;
+        self.devamp.request(self.pulled);
+    }
+
+    /// Takes in the reader's answer to a devamp, if it has come.
+    fn follow_devamp(&mut self) {
+        if !self.devamp_asked {
+            return;
+        }
+        let Some((at, skip)) = self.devamp.take_answer() else {
+            return;
+        };
+        self.devamp_asked = false;
+        if skip == DEVAMP_END {
+            self.stop_at = Some(at);
         } else {
-            first + ((self.pulled - first) / pass + 1) * pass
-        });
+            self.skip_at = Some((at, skip));
+        }
     }
 
     fn shift(&mut self, frame: [f32; MAX_CHANNELS]) {
@@ -411,6 +432,19 @@ impl Voice {
     }
 
     fn pull(&mut self) -> Pull {
+        if let Some((at, skip)) = self.skip_at
+            && self.pulled >= at
+        {
+            // An answer that came late finds a few frames past the end of
+            // the pass already played; the rest of what was written past it
+            // goes, and the next slice follows.
+            let drop = skip.saturating_sub(self.pulled - at) as usize * self.channels;
+            if let Ok(chunk) = self.samples.read_chunk(drop.min(self.samples.slots())) {
+                chunk.commit_all();
+            }
+            self.pulled = at;
+            self.skip_at = None;
+        }
         if self.stop_at.is_some_and(|at| self.pulled >= at) {
             self.shift([0.0; MAX_CHANNELS]);
             self.drained = self.drained.saturating_add(1);
@@ -441,6 +475,7 @@ impl Voice {
     /// Adds this voice into `out` (interleaved). Returns `false` once the
     /// voice has finished and can be removed.
     fn mix(&mut self, out: &mut [f32], out_channels: usize) -> bool {
+        self.follow_devamp();
         for frame in out.chunks_exact_mut(out_channels) {
             if self.paused {
                 continue;
@@ -696,7 +731,6 @@ mod tests {
             routes: Routes::default_for(channels, outputs),
             fade_in_frames: 0,
             fade_out: None,
-            passes: None,
         }
     }
 
@@ -709,8 +743,16 @@ mod tests {
     }
 
     fn voice_with(config: VoiceConfig, samples: &[f32]) -> Box<Voice> {
+        voice_with_devamp(config, samples, Arc::default())
+    }
+
+    fn voice_with_devamp(
+        config: VoiceConfig,
+        samples: &[f32],
+        devamp: Arc<DevampControl>,
+    ) -> Box<Voice> {
         let (consumer, ended) = loaded(samples);
-        Box::new(Voice::new(config, consumer, ended))
+        Box::new(Voice::new(config, consumer, ended, devamp))
     }
 
     /// A voice whose source is already fully decoded, with default routing
@@ -851,6 +893,7 @@ mod tests {
                 config(1, 1, RATE, 0.0, 1),
                 consumer,
                 ended.clone(),
+                Arc::default(),
             ))))
             .unwrap();
         assert!(render(&mut rig, 4, 1).iter().all(|s| *s == 0.0));
@@ -979,26 +1022,36 @@ mod tests {
     }
 
     #[test]
-    fn devamp_ends_the_voice_at_the_end_of_the_current_pass() {
+    fn devamp_asks_the_reader_and_ends_where_it_says() {
         let mut rig = rig(1);
-        // A source that would loop five times over ten frames, the first
-        // pass starting four frames in (a cue loaded to a time).
         let source: Vec<f32> = (0..46).map(|i| (i + 1) as f32).collect();
-        let mut config = config(1, 1, RATE, 0.0, 1);
-        config.passes = Some((6, 10));
+        let devamp = Arc::new(DevampControl::default());
         rig.commands
-            .push(MixerCommand::Add(voice_with(config, &source)))
+            .push(MixerCommand::Add(voice_with_devamp(
+                config(1, 1, RATE, 0.0, 1),
+                &source,
+                devamp.clone(),
+            )))
             .unwrap();
-        // Eight frames out: two into the second pass.
+        // Eight frames out: ten read, counting those read ahead for the
+        // interpolation.
         assert_eq!(render(&mut rig, 8, 1)[7], 8.0);
         rig.commands
             .push(MixerCommand::Devamp(CueId::from_u128(1)))
             .unwrap();
+        render(&mut rig, 1, 1);
+        assert_eq!(devamp.requested(), Some(10));
+        // Asked twice, it asks once.
+        rig.commands
+            .push(MixerCommand::Devamp(CueId::from_u128(1)))
+            .unwrap();
+        render(&mut rig, 1, 1);
+        // The pass ends at frame 16.
+        devamp.answer(16, DEVAMP_END);
         let out = render(&mut rig, 40, 1);
-        // The second pass ends after sixteen frames in all: eight more.
-        assert_eq!(out[7], 16.0);
+        assert_eq!(out[5], 16.0);
         assert!(
-            out[8..].iter().all(|sample| *sample == 0.0),
+            out[6..].iter().all(|sample| *sample == 0.0),
             "{:?}",
             &out[..12]
         );
@@ -1007,30 +1060,31 @@ mod tests {
     }
 
     #[test]
-    fn devamp_in_the_first_pass_and_without_known_passes() {
+    fn devamp_into_the_next_slice_drops_what_the_reader_wrote_ahead() {
         let mut rig = rig(1);
-        let source: Vec<f32> = (0..30).map(|i| (i + 1) as f32).collect();
-        let mut first = config(1, 1, RATE, 0.0, 1);
-        first.passes = Some((6, 10));
+        let source: Vec<f32> = (0..20).map(|i| (i + 1) as f32).collect();
+        let devamp = Arc::new(DevampControl::default());
         rig.commands
-            .push(MixerCommand::Add(voice_with(first, &source)))
-            .unwrap();
-        // A voice that does not know its passes plays on.
-        rig.commands
-            .push(MixerCommand::Add(voice_with(
-                config(2, 1, RATE, 0.0, 1),
-                &[0.0; 20],
+            .push(MixerCommand::Add(voice_with_devamp(
+                config(1, 1, RATE, 0.0, 1),
+                &source,
+                devamp.clone(),
             )))
             .unwrap();
         render(&mut rig, 2, 1);
-        for cue in [1, 2] {
-            rig.commands
-                .push(MixerCommand::Devamp(CueId::from_u128(cue)))
-                .unwrap();
-        }
-        let out = render(&mut rig, 10, 1);
-        assert_eq!(out[3], 6.0);
-        assert!(out[4..].iter().all(|sample| *sample == 0.0));
-        assert_eq!(done(&mut rig), vec![(CueId::from_u128(1), true)]);
+        rig.commands
+            .push(MixerCommand::Devamp(CueId::from_u128(1)))
+            .unwrap();
+        render(&mut rig, 1, 1);
+        // Frames 11 to 15 were a pass the reader wrote ahead: they go.
+        devamp.answer(10, 5);
+        let out = render(&mut rig, 20, 1);
+        let played: Vec<f32> = out.into_iter().filter(|sample| *sample != 0.0).collect();
+        assert_eq!(
+            played,
+            [
+                4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 16.0, 17.0, 18.0, 19.0, 20.0
+            ]
+        );
     }
 }
