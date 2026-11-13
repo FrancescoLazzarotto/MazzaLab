@@ -47,8 +47,9 @@ Rete e MIDI: i Network cue inviano OSC e testo su UDP e TCP verso le
 patch di rete dello show; i cue MIDI inviano note, CC, program change,
 SysEx e MSC verso le patch MIDI.
 
-Luci: i cue Light impostano i canali DMX con comandi in stile console e
-tempi di fade; gli universi escono in Art-Net o sACN.
+Luci: i cue Light impostano canali DMX, fixture e gruppi del patch per
+nome, con parametri, colori e tempi di fade; gli universi escono in
+Art-Net o sACN.
 
 Affidabilità: autosave delle modifiche non salvate, backup delle ultime
 dieci versioni a ogni salvataggio, recupero automatico dopo un crash.
@@ -257,8 +258,9 @@ Parità con QLab e poi oltre.
 - [ ] RDM: scoperta e indirizzamento delle fixture dalla rete.
 - [ ] Patch delle fixture con import di **GDTF** e della **Open Fixture
       Library** (formati aperti, dove QLab usa un formato suo).
-- [ ] Light cue con comandi testuali in stile console (`1 thru 10 @ 50`),
-      gruppi, palette, tempi per parametro.
+- [x] Light cue con comandi testuali in stile console (`1 thru 10 @ 50`),
+      fixture e gruppi per nome, parametri e colori. Mancano palette e
+      tempi per parametro.
 - [ ] Effetti (chase, onde, random) e modalità tracking opzionale.
 - [ ] Merge HTP/LTP tra più cue attivi.
 - [ ] Dashboard luci dal vivo e programmer con "registra nel cue".
@@ -375,9 +377,11 @@ Voci ancora aperte qui sopra di cui esiste già un pezzo:
 - **Luci**: uscita Art-Net e sACN (unicast, broadcast o multicast), Light
   cue con comandi in stile console (`1 thru 10 @ 50`, `2/7 @ full`,
   `all @ out`) e tempo di fade, i look si sommano come su una console
-  tracking, monitor dei canali accesi. Mancano priorità e sincronizzazione
-  sACN, interfacce DMX USB, RDM, fixture (GDTF/OFL), gruppi e palette,
-  effetti, merge HTP, dashboard e programmer.
+  tracking, monitor dei canali accesi. Patch delle fixture con tipo e
+  canali, gruppi anche annidati, chiamati per nome nei cue
+  (`front wash @ 75`, `spot.pan @ 50`, `cyc @ #ff8000`, CMY compreso).
+  Mancano priorità e sincronizzazione sACN, interfacce DMX USB, RDM,
+  import GDTF/OFL, palette, effetti, merge HTP, dashboard e programmer.
 - **MIDI**: in uscita note, CC, program change, SysEx e MSC verso le
   patch MIDI dello show; in ingresso note, CC e program change da tutti
   gli ingressi. Mancano SysEx e MSC in ingresso, il MIDI File cue e MTC.

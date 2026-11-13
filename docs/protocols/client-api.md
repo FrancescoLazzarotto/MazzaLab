@@ -175,12 +175,26 @@ or `sacn`), `host` (an address, optionally with a port; empty broadcasts
 Art-Net and uses the multicast group for sACN) and `net_universe`, the
 number on the wire (Art-Net counts from 0, sACN from 1).
 
-A Light cue holds `commands`, one per line, and a `duration` for the fade.
-A command is `channels @ level`:
+`workspace.settings.fixtures` is the rig: each fixture has a `name`, a
+`universe` (1 if absent), the first `address` it takes and `parameters`,
+what its channels do in order from that address (`["intensity"]`, a
+dimmer, if absent; `["red", "green", "blue"]` for an RGB LED).
+`workspace.settings.fixture_groups` gives `members` (names of fixtures or
+of other groups) a single `name`. Names are matched ignoring case and
+extra spaces.
 
-- channels are addresses from 1 to 512, `2/7` for universe 2, ranges with
-  `thru` (`1 thru 10`), joined with `+`; `all` is a whole universe;
-- the level is a percentage, `full` or `out`.
+A Light cue holds `commands`, one per line, and a `duration` for the fade.
+A command is `selection @ value`:
+
+- the selection joins terms with `+` (or `and`); a term is an address from
+  1 to 512, `2/7` for universe 2, a range with `thru` (`1 thru 10`), `all`
+  for a whole universe, or the name of a fixture or a group;
+- a fixture or group on its own sets its `intensity` (or, if it has none,
+  every channel); `name.parameter` sets one parameter, on those fixtures of
+  a group that have it (`front wash.intensity`, `spot.pan`);
+- the value is a percentage, `full` or `out`, or a colour as `#rrggbb` for
+  fixtures and groups: red, green and blue channels take it as it is,
+  cyan, magenta and yellow as what they take away.
 
 A cue takes over the slots it names and leaves the others where they are,
 so looks build on each other. Lines that cannot be read are reported as a
