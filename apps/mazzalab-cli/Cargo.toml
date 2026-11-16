@@ -17,6 +17,8 @@ clap.workspace = true
 mazzalab-core.workspace = true
 mazzalab-engine.workspace = true
 mazzalab-project.workspace = true
+mazzalab-show.workspace = true
+serde_json.workspace = true
 
 [lints]
 workspace = true

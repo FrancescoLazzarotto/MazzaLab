@@ -6,7 +6,7 @@
 
 mod demo;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Duration;
 
@@ -49,6 +49,14 @@ enum Command {
         /// Stop simulating after this many seconds.
         #[arg(long, default_value_t = 600.0)]
         until: f64,
+    },
+    /// Replay a recorded performance (a `.jsonl` from the show's `logs`
+    /// folder) and print its timeline.
+    Replay {
+        path: PathBuf,
+        /// Carry on to this many seconds after the last input.
+        #[arg(long)]
+        until: Option<f64>,
     },
 }
 
@@ -110,6 +118,11 @@ fn run(command: Command) -> Result<ExitCode, String> {
             simulate(workspace, list_id, gos, interval, until);
             Ok(ExitCode::SUCCESS)
         }
+        Command::Replay { path, until } => {
+            let until = until.map(seconds).transpose()?;
+            replay(&path, until)?;
+            Ok(ExitCode::SUCCESS)
+        }
     }
 }
 
@@ -169,68 +182,10 @@ fn print_cues(cues: &[Cue], depth: usize) {
 }
 
 fn simulate(workspace: Workspace, list: CueId, gos: u32, interval: Duration, until: Duration) {
-    let label = |workspace: &Workspace, id: CueId| {
-        workspace.find_cue(id).map_or_else(
-            || id.to_string(),
-            |cue| {
-                format!(
-                    "{} {} [{}]",
-                    cue.number.as_deref().unwrap_or("-"),
-                    cue.display_name(),
-                    cue.type_name()
-                )
-            },
-        )
-    };
     let mut engine = Engine::new(workspace);
     let print_events = |engine: &mut Engine| {
         for event in engine.take_events() {
-            let text = match event.kind {
-                EventKind::Triggered(cue) => format!("start    {}", label(engine.workspace(), cue)),
-                EventKind::Skipped(cue) => format!("skip     {}", label(engine.workspace(), cue)),
-                EventKind::ActionStarted { cue, armed: true } => {
-                    format!("action   {}", label(engine.workspace(), cue))
-                }
-                EventKind::ActionStarted { cue, armed: false } => {
-                    format!("action   {} (disarmed)", label(engine.workspace(), cue))
-                }
-                EventKind::ActionCompleted(cue) => {
-                    format!("done     {}", label(engine.workspace(), cue))
-                }
-                EventKind::Stopped(cue) => format!("stop     {}", label(engine.workspace(), cue)),
-                EventKind::Paused(cue) => format!("pause    {}", label(engine.workspace(), cue)),
-                EventKind::Resumed(cue) => format!("resume   {}", label(engine.workspace(), cue)),
-                EventKind::Panicking { cue, fade } => format!(
-                    "panic    {} (fade {:.2}s)",
-                    label(engine.workspace(), cue),
-                    fade.as_secs_f64()
-                ),
-                EventKind::PlayheadMoved { cue, .. } => format!(
-                    "playhead {}",
-                    cue.map_or_else(|| "(end)".to_owned(), |c| label(engine.workspace(), c))
-                ),
-                EventKind::Loaded { cue, time } => format!(
-                    "load     {} (to {:.2}s)",
-                    label(engine.workspace(), cue),
-                    time.as_secs_f64()
-                ),
-                EventKind::Unloaded(cue) => format!("unload   {}", label(engine.workspace(), cue)),
-                EventKind::Devamped(cue) => format!("devamp   {}", label(engine.workspace(), cue)),
-                EventKind::FadingOut { cue, fade } => format!(
-                    "fadeout  {} over {:.2}s",
-                    label(engine.workspace(), cue),
-                    fade.as_secs_f64()
-                ),
-                EventKind::Ducked { cue, by_db, .. } => {
-                    format!(
-                        "duck     {} by {by_db:.1} dB",
-                        label(engine.workspace(), cue)
-                    )
-                }
-                EventKind::Unducked { cue, .. } => {
-                    format!("unduck   {}", label(engine.workspace(), cue))
-                }
-            };
+            let text = describe(engine.workspace(), event.kind);
             println!("{:>9.3}s  {text}", event.at.as_secs_f64());
         }
     };
@@ -260,4 +215,108 @@ fn simulate(workspace: Workspace, list: CueId, gos: u32, interval: Duration, unt
             println!("  {}", label(engine.workspace(), cue));
         }
     }
+}
+
+/// A cue as the timeline names it: number, name and type.
+fn label(workspace: &Workspace, id: CueId) -> String {
+    workspace.find_cue(id).map_or_else(
+        || id.to_string(),
+        |cue| {
+            format!(
+                "{} {} [{}]",
+                cue.number.as_deref().unwrap_or("-"),
+                cue.display_name(),
+                cue.type_name()
+            )
+        },
+    )
+}
+
+/// One line of the timeline for an engine event.
+fn describe(workspace: &Workspace, kind: EventKind) -> String {
+    match kind {
+        EventKind::Triggered(cue) => format!("start    {}", label(workspace, cue)),
+        EventKind::Skipped(cue) => format!("skip     {}", label(workspace, cue)),
+        EventKind::ActionStarted { cue, armed: true } => {
+            format!("action   {}", label(workspace, cue))
+        }
+        EventKind::ActionStarted { cue, armed: false } => {
+            format!("action   {} (disarmed)", label(workspace, cue))
+        }
+        EventKind::ActionCompleted(cue) => {
+            format!("done     {}", label(workspace, cue))
+        }
+        EventKind::Stopped(cue) => format!("stop     {}", label(workspace, cue)),
+        EventKind::Paused(cue) => format!("pause    {}", label(workspace, cue)),
+        EventKind::Resumed(cue) => format!("resume   {}", label(workspace, cue)),
+        EventKind::Panicking { cue, fade } => format!(
+            "panic    {} (fade {:.2}s)",
+            label(workspace, cue),
+            fade.as_secs_f64()
+        ),
+        EventKind::PlayheadMoved { cue, .. } => format!(
+            "playhead {}",
+            cue.map_or_else(|| "(end)".to_owned(), |c| label(workspace, c))
+        ),
+        EventKind::Loaded { cue, time } => format!(
+            "load     {} (to {:.2}s)",
+            label(workspace, cue),
+            time.as_secs_f64()
+        ),
+        EventKind::Unloaded(cue) => format!("unload   {}", label(workspace, cue)),
+        EventKind::Devamped(cue) => format!("devamp   {}", label(workspace, cue)),
+        EventKind::FadingOut { cue, fade } => format!(
+            "fadeout  {} over {:.2}s",
+            label(workspace, cue),
+            fade.as_secs_f64()
+        ),
+        EventKind::Ducked { cue, by_db, .. } => {
+            format!("duck     {} by {by_db:.1} dB", label(workspace, cue))
+        }
+        EventKind::Unducked { cue, .. } => {
+            format!("unduck   {}", label(workspace, cue))
+        }
+    }
+}
+
+/// Replays an input record and prints the timeline it produces.
+fn replay(path: &Path, until: Option<Duration>) -> Result<(), String> {
+    let file = std::fs::File::open(path).map_err(|error| format!("{}: {error}", path.display()))?;
+    let mut show = mazzalab_show::replay(std::io::BufReader::new(file), |show, entry| {
+        let input = match &entry.input {
+            mazzalab_show::Input::Command { command } => {
+                serde_json::to_string(command).unwrap_or_default()
+            }
+            mazzalab_show::Input::Osc { request } => format!("OSC {request:?}"),
+            mazzalab_show::Input::OscTrigger { address } => format!("OSC trigger {address}"),
+            mazzalab_show::Input::ActionFinished { cue } => {
+                format!("media ended {}", label(show.workspace(), *cue))
+            }
+            mazzalab_show::Input::MediaInfo { cue, .. } => {
+                format!("media read {}", label(show.workspace(), *cue))
+            }
+        };
+        let events = show.take_events();
+        println!("{:>9.3}s  ===== {input}", entry.time().as_secs_f64());
+        for event in events {
+            println!(
+                "{:>9.3}s  {}",
+                event.at.as_secs_f64(),
+                describe(show.workspace(), event.kind)
+            );
+        }
+    })
+    .map_err(|error| error.to_string())?;
+    let end = until.unwrap_or_else(|| show.now());
+    while let Some(deadline) = show.next_deadline().filter(|deadline| *deadline <= end) {
+        show.advance_to(deadline);
+        for event in show.take_events() {
+            println!(
+                "{:>9.3}s  {}",
+                event.at.as_secs_f64(),
+                describe(show.workspace(), event.kind)
+            );
+        }
+    }
+    Ok(())
 }

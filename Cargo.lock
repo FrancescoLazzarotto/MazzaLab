@@ -2335,6 +2335,8 @@ dependencies = [
  "mazzalab-core",
  "mazzalab-engine",
  "mazzalab-project",
+ "mazzalab-show",
+ "serde_json",
 ]
 
 [[package]]
