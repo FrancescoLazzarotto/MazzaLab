@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { WorkspaceSettings } from "../api/types";
 import { useI18n } from "../i18n";
-import { stageNames, stageUrl } from "../stage";
+import { stageNames, stageSize, stageUrl } from "../stage";
 import { Icon } from "./icons";
 
 /** A live, silent picture of one stage, as the projector shows it. */
@@ -10,6 +10,7 @@ export function StageMonitor({ settings }: { settings: WorkspaceSettings }) {
   const names = stageNames(settings);
   const [chosen, setChosen] = useState(names[0]);
   const name = names.includes(chosen) ? chosen : names[0];
+  const size = stageSize(settings.stages, name);
   return (
     <section className="panel stage-monitor">
       <h2>
@@ -27,7 +28,7 @@ export function StageMonitor({ settings }: { settings: WorkspaceSettings }) {
           <Icon name="external" size={13} />
         </button>
       </h2>
-      <div className="stage-frame">
+      <div className="stage-frame" style={{ aspectRatio: `${size.width} / ${size.height}` }}>
         <iframe title={name} src={stageUrl(name, true)} />
       </div>
     </section>

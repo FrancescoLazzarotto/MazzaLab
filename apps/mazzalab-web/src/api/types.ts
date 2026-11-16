@@ -59,9 +59,47 @@ export interface MidiControls {
   playhead_previous?: MidiTrigger;
 }
 
-/** A screen the show puts video and text on. */
+/** A screen the show puts video and text on, `width` by `height` stage pixels. */
 export interface Stage {
   name: string;
+  width?: number;
+  height?: number;
+}
+
+/** How a picture fills its stage before it is moved, scaled and turned. */
+export type Fit = "fit" | "fill" | "stretch" | "native";
+
+/** Where a picture or text sits on its stage; lengths in stage pixels, absent values at their defaults. */
+export interface Geometry {
+  fit?: Fit;
+  /** From the stage's centre to the picture's; right and down are positive. */
+  x?: number;
+  y?: number;
+  scale_x?: number;
+  scale_y?: number;
+  /** Degrees, clockwise. */
+  rotation?: number;
+  /** Fractions of the picture cut from each side. */
+  crop_top?: number;
+  crop_right?: number;
+  crop_bottom?: number;
+  crop_left?: number;
+}
+
+export type TextAlign = "left" | "center" | "right";
+
+/** How a Text cue looks; sizes in stage pixels. */
+export interface TextStyle {
+  font?: string;
+  size?: number;
+  color?: string;
+  align?: TextAlign;
+  bold?: boolean;
+  italic?: boolean;
+  line_height?: number;
+  width?: number;
+  /** A box behind the text, `#rrggbb` or `#rrggbbaa`. */
+  background?: string;
 }
 
 /** A cue that is up on a stage; times on the server's clock, in seconds. */
@@ -71,7 +109,9 @@ export type StageItem = {
   layer: number;
   /** The opacity it has, or is fading to. */
   opacity: number;
-  fade?: { from: number; started: number; duration: number };
+  /** Where it sits, or is moving to. */
+  geometry: Geometry;
+  fade?: { from: number; from_geometry: Geometry; started: number; duration: number; curve: FadeCurve };
   /** When it started or last resumed. */
   started: number;
   /** How far into its action it was at `started`. */
@@ -79,13 +119,13 @@ export type StageItem = {
   paused: boolean;
 } & (
   | { kind: "video"; start_time: number; end_time?: number; looped: boolean; hold: boolean; rate: number }
-  | { kind: "text"; text: string }
+  | { kind: "text"; text: string; style: TextStyle }
 );
 
 /** Everything up on every stage, with the server's clock when it was taken. */
 export interface StageState {
   now: number;
-  stages: string[];
+  stages: Stage[];
   items: StageItem[];
 }
 
@@ -161,12 +201,13 @@ export type Cue = CueBase &
         rate?: number;
         media_duration?: number;
         hold_at_end?: boolean;
+        geometry?: Geometry;
       }
-    | { type: "text"; text: string; stage?: string; layer?: number }
+    | { type: "text"; text: string; stage?: string; layer?: number; opacity?: number; style?: TextStyle; geometry?: Geometry }
     | { type: "mic"; input_patch?: string; output_patch?: string }
     | { type: "camera"; input_patch?: string; stage?: string }
     | { type: "light"; commands?: string[]; duration?: number }
-    | { type: "fade"; duration?: number; curve?: FadeCurve; level_db?: number; opacity?: number; stop_target_when_done?: boolean }
+    | { type: "fade"; duration?: number; curve?: FadeCurve; level_db?: number; opacity?: number; geometry?: Geometry; stop_target_when_done?: boolean }
     | { type: "network"; patch?: string; message: string; duration?: number }
     | { type: "midi"; patch?: string; message: MidiMessage }
     | { type: "midi_file"; file?: string; rate?: number }

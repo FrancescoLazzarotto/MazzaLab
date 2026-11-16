@@ -1678,26 +1678,29 @@ button.audition.active {
   cursor: default;
 }
 
-.stage-video {
+/* The stage in its own pixels, scaled to the window; outside it stays black. */
+.stage-outer {
   position: absolute;
   inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
+  overflow: hidden;
+}
+
+.stage-canvas {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  overflow: hidden;
+  background: #000;
+}
+
+.stage-video {
+  position: absolute;
+  object-fit: fill;
 }
 
 .stage-text {
   position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 6vh 8vw;
-  color: #fff;
-  font-size: 6vh;
-  font-weight: 600;
-  line-height: 1.25;
-  text-align: center;
+  box-sizing: border-box;
   white-space: pre-wrap;
 }
 
@@ -1819,6 +1822,7 @@ button.audition.active {
 
 .patch-names {
   margin-top: -4px;
+  overflow-wrap: break-word;
 }
 
 .patch-name {
