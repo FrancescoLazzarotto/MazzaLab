@@ -1241,7 +1241,7 @@ input.hotkey {
   caret-color: transparent;
 }
 
-.field:has(> input.hotkey) {
+.row .field:has(> input.hotkey) {
   flex: 0 0 104px;
 }
 
@@ -1666,6 +1666,32 @@ button.audition.active {
 
 .stage-row .field:has(select) {
   flex: 0 0 200px;
+}
+
+/* Trigger fields keep their own height, one under the other. */
+.trigger-fields .form-column > .field {
+  flex: none;
+}
+
+.weekdays {
+  display: flex;
+  gap: 4px;
+  width: 100%;
+}
+
+.weekdays button {
+  flex: 1 1 0;
+  min-width: 0;
+  height: var(--control);
+  padding: 0;
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.weekdays button.active {
+  border-color: var(--focus);
+  background: var(--select);
+  color: var(--text);
 }
 
 button.icon-button.quiet.toggled {

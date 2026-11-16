@@ -5,6 +5,7 @@ import { defaultMessage, formatHex, parseHex } from "./components/MidiFields";
 import { triggerFromEvent, triggerSummary } from "./components/MidiTriggerField";
 import { midiSummary, problemOf } from "./cues";
 import { cuesForHotkey, hotkeyOf, isReserved, type KeyPress } from "./hotkeys";
+import { normalizeClockTime, toggleWeekday } from "./triggers";
 
 const press = (key: string, code: string, modifiers: Partial<KeyPress> = {}): KeyPress => ({
   key,
@@ -111,5 +112,22 @@ describe("midi triggers", () => {
     expect(triggerSummary({ kind: "note_on", channel: 10, number: 36 }, "any")).toBe("Note 36 · ch 10");
     expect(triggerSummary({ kind: "control_change", number: 64 }, "any channel")).toBe("CC 64 · any channel");
     expect(triggerSummary({ kind: "program_change", channel: 1, number: 5, value: 0 }, "any")).toBe("PC 5 = 0 · ch 1");
+  });
+});
+
+describe("wall clock triggers", () => {
+  it("read times as people type them", () => {
+    expect(normalizeClockTime("19.30")).toBe("19:30");
+    expect(normalizeClockTime(" 7:5 ")).toBe("07:05");
+    expect(normalizeClockTime("07:05:09")).toBe("07:05:09");
+    for (const wrong of ["24:00", "12:60", "12", "1:2:3:4", "ab:cd", ""]) expect(normalizeClockTime(wrong)).toBeNull();
+  });
+
+  it("take days off and put them back, every day being none named", () => {
+    const weekdays = toggleWeekday(toggleWeekday(undefined, "saturday"), "sunday");
+    expect(weekdays).toEqual(["monday", "tuesday", "wednesday", "thursday", "friday"]);
+    expect(toggleWeekday(toggleWeekday(weekdays, "sunday"), "saturday")).toBeUndefined();
+    // The last day stays.
+    expect(toggleWeekday(["monday"], "monday")).toEqual(["monday"]);
   });
 });

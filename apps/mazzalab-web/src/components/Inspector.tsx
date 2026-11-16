@@ -14,17 +14,16 @@ import type {
 } from "../api/types";
 import { displayName, flatten, needsTarget, problemOf, typeLabel } from "../cues";
 import { useI18n } from "../i18n";
-import { hotkeyOf, isReserved } from "../hotkeys";
 import { markers } from "../slices";
 import { FORMAT_LABELS, normalizeTimecode, SMPTE_FORMATS } from "../timecode";
-import { CheckField, HotkeyField, LevelField, NumberField, SelectField, TextField, TimeField } from "./fields";
+import { CheckField, LevelField, NumberField, SelectField, TextField, TimeField } from "./fields";
 import { CueIcon, Icon } from "./icons";
 import { LightCommands } from "./LightCommands";
 import { SliceList } from "./SliceList";
 import { MatrixEditor } from "./MatrixEditor";
 import { MidiFields } from "./MidiFields";
-import { MidiTriggerField } from "./MidiTriggerField";
 import { GeometryFields, GeometryTab, StagePreview, TextStyleFields } from "./GeometryFields";
+import { TriggerFields } from "./TriggerFields";
 import { StageField, VideoFields } from "./VideoFields";
 import { filePosition, Waveform } from "./Waveform";
 
@@ -33,14 +32,14 @@ const CONTINUE_MODES: ContinueMode[] = ["do_not_continue", "auto_continue", "aut
 const GROUP_MODES: GroupMode[] = ["timeline", "start_first_and_enter", "start_first", "start_random", "playlist"];
 const CURVES: FadeCurve[] = ["linear", "s_curve"];
 
-type Tab = "basics" | "time" | "levels" | "settings" | "geometry";
+type Tab = "basics" | "time" | "levels" | "settings" | "geometry" | "triggers";
 type Patch = Record<string, unknown>;
 
 function tabsFor(cue: Cue): Tab[] {
-  if (cue.type === "audio") return ["basics", "time", "levels"];
-  if (cue.type === "video" || cue.type === "text") return ["basics", "settings", "geometry"];
+  if (cue.type === "audio") return ["basics", "time", "levels", "triggers"];
+  if (cue.type === "video" || cue.type === "text") return ["basics", "settings", "geometry", "triggers"];
   const plain = ["start", "stop", "pause", "reset", "devamp", "goto", "arm", "disarm", "memo", "mic", "camera", "midi_file", "script"];
-  return plain.includes(cue.type) ? ["basics"] : ["basics", "settings"];
+  return plain.includes(cue.type) ? ["basics", "triggers"] : ["basics", "settings", "triggers"];
 }
 
 export function Inspector({
@@ -114,7 +113,7 @@ export function Inspector({
         </span>
       </header>
       <fieldset className="inspector-body" disabled={!editable}>
-        {current === "basics" && <Basics connection={connection} cue={cue} allCues={allCues} set={set} />}
+        {current === "basics" && <Basics cue={cue} allCues={allCues} set={set} />}
         {current === "time" && cue.type === "audio" && (
           <AudioTime
             connection={connection}
@@ -130,27 +129,21 @@ export function Inspector({
         {current === "levels" && cue.type === "audio" && <AudioLevels cue={cue} outputs={audio?.channels ?? 2} set={set} />}
         {current === "settings" && <TypeSettings connection={connection} cue={cue} allCues={allCues} settings={settings} set={set} />}
         {current === "geometry" && (cue.type === "video" || cue.type === "text") && <GeometryTab connection={connection} cue={cue} settings={settings} set={set} />}
+        {current === "triggers" && <TriggerFields connection={connection} cue={cue} set={set} />}
       </fieldset>
     </section>
   );
 }
 
 function Basics({
-  connection,
   cue,
   allCues,
   set,
 }: {
-  connection: ShowConnection;
   cue: Cue;
   allCues: Cue[];
   set: (patch: Patch) => void;
 }) {
-  /** Triggers with a change applied, or nothing at all when none is left. */
-  const triggers = (change: Partial<NonNullable<Cue["triggers"]>>) => {
-    const next = { ...cue.triggers, ...change };
-    return next.hotkey || next.midi || next.timecode ? next : undefined;
-  };
   const { t } = useI18n();
   const targets = flatten(allCues).filter((row) => row.cue.id !== cue.id);
   return (
@@ -193,26 +186,7 @@ function Basics({
             options={CONTINUE_MODES.map((mode) => ({ value: mode, label: t(`continue.${mode}`) }))}
             onChange={(continue_mode) => set({ continue_mode })}
           />
-          <HotkeyField
-            label={t("inspector.hotkey")}
-            value={cue.triggers?.hotkey}
-            placeholder={t("inspector.hotkeyNone")}
-            nameOf={hotkeyOf}
-            refuse={(hotkey) => (isReserved(hotkey) ? t("inspector.hotkeyReserved") : null)}
-            onCommit={(hotkey) => set({ triggers: triggers({ hotkey }) })}
-          />
         </div>
-        <MidiTriggerField connection={connection} label={t("inspector.midiTrigger")} value={cue.triggers?.midi} onChange={(midi) => set({ triggers: triggers({ midi }) })} />
-        <TextField
-          label={t("inspector.timecodeTrigger")}
-          value={cue.triggers?.timecode ?? ""}
-          placeholder={t("inspector.timecodeNone")}
-          onCommit={(text) => {
-            const timecode = text.trim() === "" ? undefined : normalizeTimecode(text);
-            if (timecode === null) connection.toast("error", t("inspector.badTimecode"));
-            else set({ triggers: triggers({ timecode }) });
-          }}
-        />
         <div className="row checks">
           <CheckField label={t("inspector.armed")} checked={cue.armed ?? true} onChange={(armed) => set({ armed })} />
           <CheckField label={t("inspector.flagged")} checked={cue.flagged ?? false} onChange={(flagged) => set({ flagged })} />

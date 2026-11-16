@@ -165,6 +165,18 @@ export interface Triggers {
   midi?: MidiTrigger;
   /** `HH:MM:SS:FF`: incoming timecode running forward past it starts the cue. */
   timecode?: string;
+  /** An OSC address, `*` and `?` matching any characters: a message to it starts the cue. */
+  osc?: string;
+  /** A time of day that starts the cue. */
+  wall_clock?: WallClockTrigger;
+}
+
+export type Weekday = "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
+
+/** `HH:MM` or `HH:MM:SS` on the show machine's clock, on some days of the week (none: every day). */
+export interface WallClockTrigger {
+  time: string;
+  days?: Weekday[];
 }
 
 /** Crosspoint levels in dB, `matrix[file channel][output]`; null is silent. */
