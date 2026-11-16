@@ -226,6 +226,12 @@ impl AudioOutput {
         &self.info
     }
 
+    /// Relative media paths start from `base_dir` for the sounds started
+    /// from now on.
+    pub fn set_base_dir(&mut self, base_dir: impl Into<PathBuf>) {
+        self.base_dir = base_dir.into();
+    }
+
     pub fn set_master_db(&mut self, db: f32) {
         self.send(MixerCommand::Master(db));
     }
