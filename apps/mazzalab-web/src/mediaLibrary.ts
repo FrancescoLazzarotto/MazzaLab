@@ -18,9 +18,10 @@ const VIDEO_EXTENSIONS = ["mp4", "m4v", "mov", "mkv", "avi", "mpg", "mpeg", "wmv
 
 /** What a file is for: an Audio cue, a Video cue, or neither. */
 export function mediaKind(name: string): MediaKind {
-  if (isAudioFile(name)) return "audio";
   const extension = name.split(".").pop()?.toLowerCase() ?? "";
-  return VIDEO_EXTENSIONS.includes(extension) ? "video" : "other";
+  // Containers that can hold both (webm, mkv) are taken for video: that is what they are in a theatre.
+  if (VIDEO_EXTENSIONS.includes(extension)) return "video";
+  return isAudioFile(name) ? "audio" : "other";
 }
 
 /** A path with one kind of separator, so `media\a.wav` and `media/a.wav` are the same file. */

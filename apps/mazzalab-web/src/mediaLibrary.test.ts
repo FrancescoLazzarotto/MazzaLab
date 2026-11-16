@@ -17,6 +17,8 @@ describe("media library", () => {
   it("tells audio from video from the rest", () => {
     expect(mediaKind("a.WAV")).toBe("audio");
     expect(mediaKind("a.mov")).toBe("video");
+    for (const name of ["a.webm", "a.MP4", "a.mkv", "a.m4v"]) expect(mediaKind(name)).toBe("video");
+    expect(mediaKind("a.m4a")).toBe("audio");
     expect(mediaKind("a.pdf")).toBe("other");
   });
 
