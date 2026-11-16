@@ -422,6 +422,8 @@ export function Waveform({
     <div className="waveform">
       <canvas
         ref={canvas}
+        role="img"
+        aria-label={`${t("waveform.label")}: ${formatTime(start)} – ${formatTime(end)}`}
         className={hover || draft ? "trimming" : undefined}
         onPointerDown={(event) => {
           if (duration <= 0) return;

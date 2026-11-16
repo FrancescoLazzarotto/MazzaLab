@@ -6,6 +6,7 @@ describe("theme", () => {
     expect(normalizeTheme("light")).toBe("light");
     expect(normalizeTheme("blackout")).toBe("blackout");
     expect(normalizeTheme("dark")).toBe("dark");
+    expect(normalizeTheme("contrast")).toBe("contrast");
   });
 
   it("falls back to dark for anything else", () => {

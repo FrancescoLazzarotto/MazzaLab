@@ -122,14 +122,13 @@ export function CueList({
   return (
     <div
       className={`cue-list${drop?.where === "end" ? " drop-end" : ""}`}
-      role="grid"
       onDragOver={(event) => over(event, { where: "end" })}
       onDragLeave={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDrop(null);
       }}
       onDrop={(event) => finish(event, { where: "end" })}
     >
-      <table>
+      <table role="grid" aria-label={t("list.title")} aria-multiselectable="true">
         <thead>
           <tr>
             <th className="col-gutter" />
@@ -187,6 +186,8 @@ export function CueList({
                 key={cue.id}
                 ref={cue.id === focus ? focusRow : undefined}
                 className={classes}
+                aria-selected={selection.has(cue.id)}
+                aria-current={cue.id === playhead ? "true" : undefined}
                 draggable={editable && editing === null}
                 onClick={(event) => onSelect(cue.id, event.shiftKey ? "range" : event.ctrlKey || event.metaKey ? "toggle" : "single")}
                 onDragStart={(event) => {

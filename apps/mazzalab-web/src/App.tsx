@@ -42,6 +42,8 @@ import {
 import { NO_FILTER, visibleIds, type CueFilter } from "./cueFilter";
 import { cuesForHotkey, hotkeyOf } from "./hotkeys";
 import { actionFor } from "./keymap";
+import { useTitleLabels } from "./a11y";
+import { Announcer } from "./components/Announcer";
 import { resolveSplit, showInPane, toggleSplit } from "./panes";
 import { applyTheme } from "./theme";
 import { useI18n } from "./i18n";
@@ -76,6 +78,7 @@ export function App({ connection }: { connection: ShowConnection }) {
   }, []);
   const editable = preferences.mode === "edit";
   useEffect(() => applyTheme(preferences.theme), [preferences.theme]);
+  useTitleLabels();
 
   const workspace = snapshot?.workspace;
   // Two panes, when the device asks for them and the show has two lists; the one worked in is the active list.
@@ -747,6 +750,7 @@ export function App({ connection }: { connection: ShowConnection }) {
         connection={connectionState}
         onAudio={() => setSettingsOpen(true)}
       />
+      <Announcer standby={standby} running={(status?.running ?? []).map((entry) => entry.cue)} find={(id) => findCue(allCues, id)} />
       <Toasts connection={connection} toasts={toasts} />
     </div>
   );

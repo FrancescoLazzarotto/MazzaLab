@@ -55,10 +55,10 @@ export function ShowView({ connection }: { connection: ShowConnection }) {
         {t("action.go")}
       </button>
       <div className="sv-steps">
-        <button onClick={() => run({ command: "playhead_previous", list: listId })} disabled={position <= 0 && standbyId !== null}>
+        <button onClick={() => run({ command: "playhead_previous", list: listId })} disabled={position <= 0 && standbyId !== null} aria-label={t("action.playheadPrevious")}>
           <Icon name="previous" size={22} />
         </button>
-        <button onClick={() => run({ command: "playhead_next", list: listId })} disabled={standbyId !== null && position >= order.length - 1}>
+        <button onClick={() => run({ command: "playhead_next", list: listId })} disabled={standbyId !== null && position >= order.length - 1} aria-label={t("action.playheadNext")}>
           <Icon name="next" size={22} />
         </button>
       </div>

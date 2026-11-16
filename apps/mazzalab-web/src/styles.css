@@ -106,6 +106,64 @@
   scrollbar-color: var(--scrollbar) transparent;
 }
 
+/* High contrast: black and white, a yellow focus, state told by more than hue. */
+:root[data-theme="contrast"] {
+  --surface-0: #000000;
+  --surface-1: #000000;
+  --surface-2: #161616;
+  --surface-3: #2a2a2a;
+  --hairline: #6b6b6b;
+  --border: #bdbdbd;
+  --text: #ffffff;
+  --text-2: #f0f0f0;
+  --text-3: #d0d0d0;
+  --text-4: #a0a0a0;
+  --go: #3dff8a;
+  --go-hover: #7dffb0;
+  --go-active: #26d46c;
+  --go-ink: #000000;
+  --focus: #ffe14d;
+  --select: rgba(255, 225, 77, 0.22);
+  --warn: #ffc400;
+  --danger: #ff6a5e;
+  --danger-ink: #ffb3ac;
+  --meter-low: #3dff8a;
+  --meter-mid: #ffc400;
+  --meter-high: #ff6a5e;
+  --meter-track: #1c1c1c;
+  --wave: #ffffff;
+  --wave-off: #5a5a5a;
+  --border-hover: #ffffff;
+  --scrollbar: #bdbdbd;
+  --on-accent: #000000;
+  --accent-hover: #fff08a;
+  --wash: rgba(255, 255, 255, 0.08);
+  --slider-track: #6b6b6b;
+  --slider-thumb: #ffffff;
+  --slider-thumb-hover: #ffe14d;
+  --c-red: #ff6a5e;
+  --c-orange: #ffa24d;
+  --c-yellow: #ffe14d;
+  --c-green: #3dff8a;
+  --c-blue: #6db6ff;
+  --c-purple: #cfa8ff;
+  --c-grey: #d0d0d0;
+  color-scheme: dark;
+  scrollbar-color: var(--scrollbar) transparent;
+}
+
+:root[data-theme="contrast"] button,
+:root[data-theme="contrast"] input,
+:root[data-theme="contrast"] select,
+:root[data-theme="contrast"] textarea {
+  border-color: var(--border);
+}
+
+:root[data-theme="contrast"] .cue-list tbody tr.selected {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
 :root[data-theme="blackout"] {
   --surface-0: #060100;
   --surface-1: #0b0302;
@@ -203,8 +261,43 @@ button:disabled {
 }
 
 :focus-visible {
-  outline: 1px solid var(--focus);
+  outline: 2px solid var(--focus);
   outline-offset: 1px;
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1px var(--focus);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .progress > .indeterminate {
+    width: 100%;
+    opacity: 0.5;
+  }
 }
 
 button.primary {

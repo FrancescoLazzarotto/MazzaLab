@@ -1,6 +1,6 @@
-export type Theme = "dark" | "light" | "blackout";
+export type Theme = "dark" | "light" | "blackout" | "contrast";
 
-export const THEMES: Theme[] = ["dark", "light", "blackout"];
+export const THEMES: Theme[] = ["dark", "light", "blackout", "contrast"];
 
 /** Anything that is not a known theme is the default one. */
 export function normalizeTheme(value: unknown): Theme {
