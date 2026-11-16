@@ -71,20 +71,20 @@ cue e le impostazioni dello show: dispositivo audio, patch di rete e MIDI,
 uscite DMX, fixture, stage, codici.
 
 I media (file audio e video) stanno in una cartella chiamata `media` **accanto al
-file dello show**. Le cue nominano i file relativi allo show
+file dello show**. I cue nominano i file relativi allo show
 (`media/Pioggia.wav`), quindi la cartella dello show si copia su un'altra
 macchina così com'è.
 
 Per portare dentro dei file:
 
-- trascina file audio sulla cue list (ognuno diventa una cue Audio);
+- trascina file audio sulla cue list (ognuno diventa un cue Audio);
 - nel pannello **Media** (a destra) premi il pulsante per aggiungere e scegli i
   file. Funziona anche da tablet, e si possono scegliere più file insieme;
 - copiali tu nella cartella `media`.
 
 Il pannello Media elenca il contenuto della cartella, con la dimensione e
-quante cue usano ogni file. **Non usati** nel filtro mostra i file che nessuna
-cue riproduce. Trascina un file dal pannello sulla cue list per creare una cue
+quanti cue usano ogni file. **Non usati** nel filtro mostra i file che nessun
+cue riproduce. Trascina un file dal pannello sulla cue list per creare un cue
 Audio o Video.
 
 Uno show non ancora salvato non ha una cartella, quindi non si possono
@@ -98,7 +98,7 @@ aggiungere media: salvalo prima.
 - **A sinistra**: il trasporto (GO, standby, pulsanti), la toolbox con i tipi
   di cue, le schede delle cue list, la cue list e sotto l'inspector.
 - **A destra**: uscita audio con meter e livello master, luci, il monitor degli
-  stage (se lo show ha cue Video o Text), le cue attive e i media.
+  stage (se lo show ha cue Video o Text), i cue attivi e i media.
 - **Riga in basso**: numero di cue, timecode in ingresso, il dispositivo audio,
   la connessione e, se lo show chiede un codice, cosa permette il tuo.
 
@@ -112,17 +112,17 @@ lavorato. L'affiancamento vale per dispositivo.
 
 ## 4. La cue list e i tipi di cue
 
-Uno show ha una o più cue list. Ogni riga è una cue: numero, nome, target (il
-file, il messaggio o la cue a cui punta), pre-wait, durata dell'azione,
+Uno show ha una o più cue list. Ogni riga è un cue: numero, nome, target (il
+file, il messaggio o il cue a cui punta), pre-wait, durata dell'azione,
 post-wait, un segno per auto-continue o auto-follow, e un flag o un'avvertenza.
 Un numero colorato indica un'etichetta di colore. Il segno di avvertenza dice
-che la cue non può ancora fare nulla (manca il file, il target, il messaggio...).
+che il cue non può ancora fare nulla (manca il file, il target, il messaggio...).
 
-Aggiungi le cue dalla toolbox sopra la lista; la nuova va dopo quella
-selezionata. Doppio clic su un numero o un nome per modificarlo. Trascina le
-righe per spostarle; trascina una cue su un Group per metterla dentro. Copia,
+Aggiungi i cue dalla toolbox sopra la lista; il nuovo va dopo quello
+selezionato. Doppio clic su un numero o un nome per modificarlo. Trascina le
+righe per spostarle; trascina un cue su un Group per metterlo dentro. Copia,
 taglia, incolla e duplica funzionano come al solito (vedi la
-[sezione 15](#15-scorciatoie-da-tastiera)). **Group** raggruppa le cue
+[sezione 15](#15-scorciatoie-da-tastiera)). **Group** raggruppa i cue
 selezionate. **Rinumera** numera la selezione da un primo numero con un passo.
 
 **Ricerca**: il campo sopra la lista cerca nel numero, nel nome e nelle note;
@@ -146,17 +146,17 @@ ignorate e il tipo di default è Memo.
 | **Video** | riproduce un file video su uno stage |
 | **Text** | mostra un testo su uno stage |
 | **Light** | imposta i livelli DMX con comandi in stile console, con un fade |
-| **Fade** | porta al livello voluto (o opacità, o posizione) un'altra cue, nel tempo |
+| **Fade** | porta al livello voluto (o opacità, o posizione) un altro cue, nel tempo |
 | **Network** | manda messaggi OSC o semplici su UDP o TCP |
 | **MIDI** | manda un messaggio MIDI: note, controller, program change, SysEx, MIDI Show Control |
 | **Timecode** | manda MTC o LTC |
-| **Group** | contiene altre cue e le fa partire in uno di cinque modi |
-| **Start, Stop, Pause, Load, Reset, Devamp, Go To, Arm, Disarm** | agiscono sulla cue indicata come target |
-| **Target** | sta al posto di un'altra cue, dal suo numero |
+| **Group** | contiene altri cue e li fa partire in uno di cinque modi |
+| **Start, Stop, Pause, Load, Reset, Devamp, Go To, Arm, Disarm** | agiscono sul cue indicato come target |
+| **Target** | sta al posto di un altro cue, dal suo numero |
 | **Wait** | non fa nulla per la sua durata (utile con l'auto-follow) |
 | **Memo** | una nota nella lista; non fa nulla |
 
-Le cue Mic, Camera, MIDI File e Script si possono aggiungere ma per ora non
+I cue Mic, Camera, MIDI File e Script si possono aggiungere ma per ora non
 fanno nulla.
 
 I **Group** fanno partire i figli in uno di cinque modi: *Timeline (avvia
@@ -166,27 +166,27 @@ quello che dicono.
 
 **Tempi.** Ogni cue ha un *pre-wait* (un ritardo prima dell'azione) e un
 *post-wait*. *Continua* sceglie cosa succede dopo: **Non continuare** aspetta il
-GO successivo; **Auto-continue** avvia la cue seguente quando è passato il
-post-wait, contato da quando parte l'azione di questa cue; **Auto-follow** avvia
-la seguente appena finisce l'azione di questa. Una cue disarmata viene saltata;
+GO successivo; **Auto-continue** avvia il cue seguente quando è passato il
+post-wait, contato da quando parte l'azione di questo cue; **Auto-follow** avvia
+il seguente appena finisce l'azione di questo. Un cue disarmato viene saltato;
 *Armata* è nella scheda Generale.
 
 ## 5. L'inspector
 
-Seleziona una cue e l'inspector mostra le sue schede. Più cue selezionate si
+Seleziona un cue e l'inspector mostra le sue schede. Più cue selezionati si
 modificano insieme per i campi che hanno in comune.
 
-- **Generale** (tutte le cue): numero, colore, nome, target (per le cue che
+- **Generale** (tutti i cue): numero, colore, nome, target (per i cue che
   puntano a un'altra), pre-wait, post-wait, modo di continuazione, armata, flag
   e note.
 - **Tempi e loop** (Audio): il file e la sua forma d'onda; inizio e fine; loop e
   slice. Vedi la [sezione 8](#8-audio).
 - **Livelli** (Audio): livello, fade in e out, matrice di instradamento, patch
   di uscita.
-- **La scheda propria della cue** (col nome del tipo: Wait, Fade, Network, MIDI,
-  Light, Timecode, Group...): cosa fa la cue.
+- **La scheda propria del cue** (col nome del tipo: Wait, Fade, Network, MIDI,
+  Light, Timecode, Group...): cosa fa il cue.
 - **Geometria** (Video, Text): dove sta l'immagine o il testo sul suo stage.
-- **Trigger** (tutte le cue): cosa la avvia dall'esterno. Vedi la
+- **Trigger** (tutti i cue): cosa lo avvia dall'esterno. Vedi la
   [sezione 11](#11-trigger).
 
 In un Group in modalità timeline la scheda disegna anche i figli come barre su
@@ -198,33 +198,33 @@ Le modifiche valgono subito e si possono annullare.
 
 ## 6. GO, standby e trasporto
 
-La cue in **standby** è quella che il GO avvierà. Compare accanto al pulsante GO
-con numero, nome e note. Dopo che una cue parte, lo standby passa alla cue
+Il cue in **standby** è quello che il GO avvierà. Compare accanto al pulsante GO
+con numero, nome e note. Dopo che un cue parte, lo standby passa al cue
 successiva della lista.
 
-- **GO** (Spazio) avvia la cue in standby. La **protezione doppio GO** nelle
+- **GO** (Spazio) avvia il cue in standby. La **protezione doppio GO** nelle
   impostazioni ignora un secondo GO che arriva troppo presto dopo il primo.
-- Selezionare una cue la mette in standby; si disattiva in Impostazioni,
+- Selezionare un cue lo mette in standby; si disattiva in Impostazioni,
   *Questo dispositivo*, su un secondo schermo che non deve spostarlo. **Invio**
-  mette in standby la cue selezionata; lo fa anche il doppio clic sul margine
+  mette in standby il cue selezionato; lo fa anche il doppio clic sul margine
   sinistro di una riga.
-- **V** avvia la cue selezionata senza spostare lo standby.
-- **Stop**, **Pausa** e **Riprendi** agiscono su tutte le cue in corso. **Reset**
+- **V** avvia il cue selezionato senza spostare lo standby.
+- **Stop**, **Pausa** e **Riprendi** agiscono su tutti i cue in corso. **Reset**
   ferma tutto e torna all'inizio della lista.
 - **Panic** (Esc) sfuma e ferma tutto, nel *tempo di sfumo del panic* delle
   impostazioni.
 - **Cue attive** (pannello a destra) elenca quello che sta andando, con
   avanzamento e tempo residuo, e pausa, ripresa e stop per ognuna.
-- **Load**: un clic sulla forma d'onda di una cue audio la carica a quel punto;
+- **Load**: un clic sulla forma d'onda di un cue audio lo carica a quel punto;
   la partenza successiva riprende da lì.
 
 ## 7. Cart
 
 Un **cart** è una cue list mostrata come griglia di pulsanti, per effetti
-sonori e altre cue chiamate senza un ordine fisso. Se ne aggiunge uno col
-pulsante cart accanto alle schede. Un clic su un pulsante avvia la sua cue (e la
-ferma se è in corso). Le cue entrano in un cart come in una lista: trascinando o
-rilasciando file, o aggiungendole dalla toolbox.
+sonori e altri cue chiamati senza un ordine fisso. Se ne aggiunge uno col
+pulsante cart accanto alle schede. Un clic su un pulsante avvia il suo cue (e lo
+ferma se è in corso). I cue entrano in un cart come in una lista: trascinando o
+rilasciando file, o aggiungendoli dalla toolbox.
 
 ## 8. Audio
 
@@ -234,10 +234,10 @@ latenza e chiedono una macchina più veloce), e il livello master. I driver ASIO
 su Windows sono un'opzione della compilazione. Se il dispositivo scelto manca,
 lo show suona sull'uscita predefinita e la riga in basso lo dice. Si può
 scegliere un secondo dispositivo per il **preascolto**: nell'inspector, il
-pulsante delle cuffie riproduce la cue lì, una volta, con tagli e fade, fuori
+pulsante delle cuffie riproduce il cue lì, una volta, con tagli e fade, fuori
 dallo show.
 
-**File.** Si riproducono WAV, AIFF, FLAC, MP3, AAC, ALAC e Vorbis. Le cue in
+**File.** Si riproducono WAV, AIFF, FLAC, MP3, AAC, ALAC e Vorbis. I cue in
 standby sul playhead vengono decodificate prima del GO.
 
 **Tempi e loop.** La forma d'onda mostra il file con i fade integrati. Trascina
@@ -245,19 +245,19 @@ le due bandierine in alto per impostare inizio e fine. Sotto il righello, i
 quadratini sulla linea del fade impostano le durate di fade in e fade out. Lo
 zoom si fa con la rotella o con un pizzico, si scorre con Shift e la rotella (o
 con la barra che compare quando è ingrandita), o coi pulsanti di zoom. Un clic
-nella parte che suona carica la cue a quel punto. Loop: un numero di
+nella parte che suona carica il cue a quel punto. Loop: un numero di
 riproduzioni, o loop infinito.
 
 **Slice.** Alt-clic sulla forma d'onda per tagliare una slice. Ogni slice ha il
 proprio numero di riproduzioni (0 la ripete finché non arriva un devamp); i
-marcatori si trascinano. Una cue **Devamp** che punta alla cue lascia finire il
+marcatori si trascinano. Un cue **Devamp** che punta al cue lascia finire il
 giro in corso e passa alla slice successiva senza stacco; nell'ultima slice
-chiude la cue.
+chiude il cue.
 
 **Livelli e instradamento.** Il livello è in dB. La *matrice di instradamento*
 imposta, per ogni canale del file, il livello verso ogni uscita del
 dispositivo, in dB, o silenzio. Senza matrice un file mono va alle uscite 1 e 2 e
-ogni altro file va canale per canale. Una cue **Fade** che punta a una cue Audio
+ogni altro file va canale per canale. Un cue **Fade** che punta a un cue Audio
 ne porta il livello a un valore, in un tempo, con curva lineare o a S, e può
 fermare il target alla fine.
 
@@ -289,14 +289,14 @@ Una selezione unisce i termini con `+`: un indirizzo (da 1 a 512, `2/7` per
 l'universo 2), un intervallo (`1 thru 10`), `all` per un universo, o il nome di
 una fixture o di un gruppo. `nome.parametro` imposta un solo parametro. Il
 valore è una percentuale, `full`, `out`, o un colore `#rrggbb`. La *durata* della
-cue è il tempo del fade. Una cue cambia solo gli slot che nomina, quindi i look
+cue è il tempo del fade. Un cue cambia solo gli slot che nomina, quindi i look
 si sommano; fermarla o premere Panic lascia le luci dove sono. Per un blackout
 usa `all @ out`. Il pannello DMX a destra mostra gli slot accesi, coi nomi delle
 fixture.
 
 ## 10. Video e stage
 
-Uno **stage** è uno schermo che mostra le cue Video e Text. Qualunque browser
+Uno **stage** è uno schermo che mostra i cue Video e Text. Qualunque browser
 può essere uno stage: apri `http://<indirizzo della macchina>:53080/?stage=Main`
 sul computer del proiettore (aggiungi `&monitor` per una copia muta).
 Impostazioni, *Video* elenca gli stage per nome e dimensione (1920 per 1080 di
@@ -307,20 +307,20 @@ scegli il display di ogni stage in Impostazioni, *Video*, poi usa *Video, Mostra
 gli stage sugli schermi* (Ctrl+Maiusc+D). Il monitor degli stage nel pannello a
 destra mostra cosa mostrano gli stage.
 
-Una cue **Video** riproduce un file su uno stage, su un layer, con opacità,
-inizio e fine, velocità e loop. Una cue **Text** mostra un testo con font,
+Un cue **Video** riproduce un file su uno stage, su un layer, con opacità,
+inizio e fine, velocità e loop. Un cue **Text** mostra un testo con font,
 dimensione, colore, allineamento e un riquadro di sfondo facoltativo. La scheda
-**Geometria** colloca una cue sul suo stage: modo di adattamento, posizione,
-scala, rotazione e ritaglio, con un'anteprima. Una cue **Fade** che punta a una
-cue Video o Text può sfumarne l'opacità e portarla a una nuova geometria.
+**Geometria** colloca un cue sul suo stage: modo di adattamento, posizione,
+scala, rotazione e ritaglio, con un'anteprima. Un cue **Fade** che punta a un
+cue Video o Text può sfumarne l'opacità e portarlo a una nuova geometria.
 
 ## 11. Trigger
 
-La scheda **Trigger** di una cue imposta cosa la avvia dall'esterno, oltre al
-GO. Una cue ne può avere più d'uno.
+La scheda **Trigger** di un cue imposta cosa lo avvia dall'esterno, oltre al
+GO. Un cue ne può avere più d'uno.
 
 - **Hotkey**: un tasto o una combinazione (`Q`, `F5`, `Ctrl+Shift+1`) che avvia
-  la cue da qualsiasi schermo dell'operatore. I tasti che lo schermo usa per sé
+  il cue da qualsiasi schermo dell'operatore. I tasti che lo schermo usa per sé
   non si possono assegnare.
 - **MIDI**: una nota, un controller o un program change in arrivo su un
   qualsiasi ingresso MIDI. Premi *Impara* e muovi il controllo per riempirlo. Una
@@ -328,9 +328,9 @@ GO. Una cue ne può avere più d'uno.
   apprendimento lega GO, Ferma tutto, Panic e i pulsanti del playhead ai
   controlli.
 - **OSC**: un indirizzo OSC; un messaggio a quell'indirizzo sulla porta OSC dello
-  show (UDP o TCP) avvia la cue. `*` e `?` sostituiscono qualsiasi carattere,
+  show (UDP o TCP) avvia il cue. `*` e `?` sostituiscono qualsiasi carattere,
   quindi `/scena/*/go` risponde a `/scena/12/go`.
-- **Timecode**: avvia la cue quando il timecode in ingresso (MTC su un qualsiasi
+- **Timecode**: avvia il cue quando il timecode in ingresso (MTC su un qualsiasi
   ingresso MIDI, o LTC su un ingresso audio) passa da quel frame. Un salto o un
   locate non avvia nulla, così lo show si può riavvolgere sopra i suoi trigger.
   L'LTC si legge dall'ingresso e dal canale scelti in Impostazioni, *Audio*; il
@@ -357,7 +357,7 @@ stringa), oppure il testo stesso per i protocolli semplici (con `\n`, `\r`, `\t`
 **Patch MIDI** (Impostazioni, *MIDI*): un nome e una delle porte di uscita della
 macchina del server. Una **cue MIDI** manda una nota on o off, un controller, un
 program change, byte SysEx, o MIDI Show Control (device, formato del comando,
-comando, numero e lista della cue).
+comando, numero e lista del cue).
 
 Le **cue Timecode** mandano timecode da un valore iniziale per una durata (o
 finché non le fermi) a un frame rate (24, 25, 30 e varianti drop frame). L'**MTC**
@@ -370,7 +370,7 @@ Qualunque tablet o telefono in rete è un telecomando: apri
 `http://<indirizzo della macchina>:53080`. Non serve installare nulla.
 
 **La vista show.** `http://<indirizzo della macchina>:53080/?view=show` è uno
-schermo solo per condurre lo show: la cue in standby con le sue note, un GO
+schermo solo per condurre lo show: il cue in standby con le sue note, un GO
 molto grande, standby precedente e successivo, cosa sta andando con il suo
 avanzamento, Stop e Panic. Non si modifica nulla.
 
@@ -416,10 +416,10 @@ può modificare).
 | --- | --- |
 | Spazio | GO |
 | Esc | Panic |
-| ↑ ↓ | seleziona la cue precedente o successiva |
+| ↑ ↓ | seleziona il cue precedente o successivo |
 | Maiusc + ↑ ↓ | estende la selezione |
-| Invio | mette in standby la cue selezionata |
-| V | avvia la cue selezionata |
+| Invio | mette in standby il cue selezionato |
+| V | avvia il cue selezionato |
 | Ctrl+A | seleziona tutto |
 | Ctrl+C, X, V | copia, taglia, incolla |
 | Ctrl+D | duplica |
@@ -433,8 +433,8 @@ può modificare).
 dispositivo: Impostazioni, *Generale*, *Questo dispositivo*, *Tasti del
 trasporto*. Oltre a GO e Panic, si possono dare tasti a Ferma tutto, Pausa,
 Riprendi e standby successivo e precedente; un tasto già usato da un'altra
-azione, da una cue o dallo schermo viene rifiutato, e *Ripristina i predefiniti*
-rimette gli originali. L'hotkey di una cue (scheda Trigger) ha la precedenza.
+azione, da un cue o dallo schermo viene rifiutato, e *Ripristina i predefiniti*
+rimette gli originali. L'hotkey di un cue (scheda Trigger) ha la precedenza.
 
 ## 16. Aspetto e lingua
 

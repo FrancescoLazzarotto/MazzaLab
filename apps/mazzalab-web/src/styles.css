@@ -1010,7 +1010,8 @@ fieldset.bare {
 
 /* Pre-show check */
 .preflight {
-  height: min(560px, calc(100vh - 64px));
+  /* As tall as what it lists, up to the window. */
+  max-height: min(560px, calc(100vh - 64px));
 }
 
 .preflight header .icon-button:first-of-type {
