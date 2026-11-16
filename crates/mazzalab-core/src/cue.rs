@@ -758,9 +758,13 @@ pub struct FadeCue {
     pub duration: Duration,
     #[serde(default)]
     pub curve: FadeCurve,
-    /// Target main level in dB, when the fade affects audio.
+    /// Target main level in dB, when the fade affects audio; in relative
+    /// mode, how many dB it moves the level by.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub level_db: Option<f64>,
+    /// `level_db` moves the level from where it is, instead of setting it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub relative: bool,
     /// Target opacity, when the fade affects video.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub opacity: Option<f64>,
