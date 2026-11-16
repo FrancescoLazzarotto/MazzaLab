@@ -141,7 +141,8 @@ Parità con QLab e poi oltre.
       mandarlo in sala.
 
 ### Riproduzione
-- [ ] Precaricamento (autoload) e partenze a latenza zero.
+- [x] Precaricamento (autoload): i cue audio al playhead sono decodificati
+      prima del GO.
 - [ ] Partenze allineate al campione per i cue che partono nello stesso
       istante (gruppi timeline).
 - [x] Slice e loop per slice; il cue Devamp funziona davvero.
@@ -188,8 +189,8 @@ Parità con QLab e poi oltre.
 - [x] Rinumerazione e auto-numerazione con passo configurabile.
 - [ ] Template dei cue.
 - [ ] Ricerca e filtri (per tipo, colore, flag, testo nelle note).
-- [ ] Gestione delle cue list: aggiungere, rinominare, eliminare, più
-      liste visibili insieme.
+- [x] Gestione delle cue list: aggiungere, rinominare, eliminare, anche
+      liste cart. Manca vederne più di una insieme.
 - [ ] Inspector completo per ogni tipo di cue.
 - [ ] Browser dei media, con caricamento dei file anche da tablet.
 
@@ -238,17 +239,18 @@ Parità con QLab e poi oltre.
 
 ## Fase 4 — MIDI, timecode e dispositivi di rete (L)
 
-- [ ] MIDI in ingresso e in uscita (`midir`): note, CC, program change,
-      SysEx.
-- [ ] MSC in ingresso e in uscita.
+- [x] MIDI in ingresso e in uscita (`midir`): note, CC, program change e
+      SysEx in uscita; note, CC e program change in ingresso, come trigger
+      dei cue e dei comandi del trasporto, con apprendimento dal controller.
+- [ ] MSC: in uscita c'è, manca in ingresso.
 - [ ] MIDI File cue sincronizzato con lo show.
 - [x] Timecode MTC e LTC in uscita, MTC e LTC in ingresso, tutti i
       formati di frame (drop frame compreso); l'LTC si legge da un canale
       di un ingresso audio, col frame rate riconosciuto dal segnale.
       Mancano l'inseguimento con freewheel e i comportamenti di partenza
       e arresto (skip, lookback, start all...).
-- [ ] Network cue che inviano davvero: OSC su UDP e TCP, UDP, TCP, HTTP,
-      WebSocket; fade dei valori OSC.
+- [ ] Network cue che inviano davvero: OSC su UDP e TCP, UDP e TCP semplici
+      (fatto). Mancano HTTP, WebSocket e il fade dei valori OSC.
 - [ ] **Schema aperto e versionato** per le descrizioni dei dispositivi
       (JSON Schema), con editor nell'interfaccia.
 - [ ] Libreria iniziale di dispositivi (mixer, media server, PTZ,
@@ -256,7 +258,8 @@ Parità con QLab e poi oltre.
 
 ## Fase 5 — Luci (XL)
 
-- [ ] Uscita Art-Net 4 e sACN (E1.31) con priorità e sincronizzazione.
+- [ ] Uscita Art-Net e sACN (E1.31) con priorità: fatta, per universo e
+      con indirizzo del nodo. Manca la sincronizzazione.
 - [ ] Interfacce DMX USB (Enttec Open e Pro, DMXking) via `serialport`.
 - [ ] RDM: scoperta e indirizzamento delle fixture dalla rete.
 - [ ] Patch delle fixture con import di **GDTF** e della **Open Fixture
