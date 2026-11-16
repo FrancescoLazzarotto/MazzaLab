@@ -204,6 +204,8 @@ async fn access(
 ) -> Json<Value> {
     Json(json!({
         "required": state.handle.has_passcodes(),
+        // A backup following another server: everyone only watches.
+        "following": state.handle.is_following(),
         "view": access.view,
         "control": access.control,
         "edit": access.edit,

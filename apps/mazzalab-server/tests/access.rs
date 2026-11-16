@@ -99,12 +99,12 @@ async fn web_clients_see_run_and_change_what_their_passcode_allows() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(
         access,
-        json!({ "required": true, "view": false, "control": false, "edit": false })
+        json!({ "required": true, "following": false, "view": false, "control": false, "edit": false })
     );
     let (_, access) = call(&app, "GET", "/api/access", Some(CONTROL), None).await;
     assert_eq!(
         access,
-        json!({ "required": true, "view": true, "control": true, "edit": false })
+        json!({ "required": true, "following": false, "view": true, "control": true, "edit": false })
     );
 
     assert_eq!(
