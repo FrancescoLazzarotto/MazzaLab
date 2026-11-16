@@ -119,6 +119,25 @@ struct Preloaded {
 
 type PlayingMap = Arc<Mutex<HashMap<CueId, Playing>>>;
 
+/// `cue` itself, or the audio cues inside it when it is a group.
+fn sounds_in(workspace: &Workspace, cue: CueId) -> Vec<CueId> {
+    fn collect(cue: &Cue, out: &mut Vec<CueId>) {
+        match &cue.kind {
+            CueKind::Audio(_) => out.push(cue.id),
+            _ => {
+                for child in cue.children() {
+                    collect(child, out);
+                }
+            }
+        }
+    }
+    let mut out = Vec::new();
+    if let Some(cue) = workspace.find_cue(cue) {
+        collect(cue, &mut out);
+    }
+    out
+}
+
 /// Plays audio cues on an output device.
 pub struct AudioOutput {
     commands: Producer<MixerCommand>,
@@ -289,12 +308,25 @@ impl AudioOutput {
                         CueKind::Fade(fade) => {
                             if let (Some(target), Some(level)) = (definition.target, fade.level_db)
                             {
-                                self.send(MixerCommand::Fade {
-                                    cue: target,
-                                    to_db: level as f32,
-                                    frames: self.frames(fade.duration),
-                                    curve: fade.curve,
-                                });
+                                // A group's fade takes every sound in it.
+                                let frames = self.frames(fade.duration);
+                                for cue in sounds_in(workspace, target) {
+                                    self.send(if fade.relative {
+                                        MixerCommand::FadeBy {
+                                            cue,
+                                            by_db: level as f32,
+                                            frames,
+                                            curve: fade.curve,
+                                        }
+                                    } else {
+                                        MixerCommand::Fade {
+                                            cue,
+                                            to_db: level as f32,
+                                            frames,
+                                            curve: fade.curve,
+                                        }
+                                    });
+                                }
                             }
                         }
                         _ => {}
@@ -610,5 +642,36 @@ fn collect_audio<'a>(cue: &'a Cue, out: &mut Vec<(CueId, &'a AudioCue, Duration)
     }
     for child in cue.children() {
         collect_audio(child, out);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use mazzalab_core::{CueList, GroupCue, GroupMode, WaitCue};
+
+    use super::*;
+
+    #[test]
+    fn a_fade_on_a_group_takes_every_sound_inside() {
+        let sound = |n| Cue::new(CueKind::Audio(AudioCue::default())).with_id(CueId::from_u128(n));
+        let inner = Cue::new(CueKind::Group(GroupCue {
+            mode: GroupMode::default(),
+            children: vec![sound(3), Cue::new(CueKind::Wait(WaitCue::default()))],
+        }));
+        let group = Cue::new(CueKind::Group(GroupCue {
+            mode: GroupMode::default(),
+            children: vec![sound(1), inner, sound(2)],
+        }));
+        let group_id = group.id;
+        let mut workspace = Workspace::new("fades");
+        workspace.cue_lists = vec![CueList::new("Main").with_cues(vec![group, sound(4)])];
+        assert_eq!(
+            sounds_in(&workspace, group_id),
+            [1, 3, 2].map(CueId::from_u128)
+        );
+        assert_eq!(
+            sounds_in(&workspace, CueId::from_u128(4)),
+            [CueId::from_u128(4)]
+        );
     }
 }

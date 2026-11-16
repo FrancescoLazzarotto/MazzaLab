@@ -18,6 +18,8 @@ pub(crate) const MAX_OUTPUTS: usize = 64;
 pub(crate) const MAX_ROUTES: usize = 256;
 /// Levels at or below this are treated as silence.
 pub(crate) const SILENT_DB: f32 = -90.0;
+/// The loudest a relative fade takes a cue.
+const MAX_LEVEL_DB: f32 = 12.0;
 /// Short fade applied when a voice is stopped, to avoid clicks.
 const DECLICK_SECONDS: f32 = 0.005;
 
@@ -64,6 +66,11 @@ impl Level {
                 curve,
             });
         }
+    }
+
+    /// The level it is at, or going to when a fade runs.
+    pub(crate) fn heading(&self) -> f32 {
+        self.ramp.map_or(self.db, |ramp| ramp.to_db)
     }
 
     fn is_settled_silent(&self) -> bool {
@@ -547,6 +554,13 @@ pub(crate) enum MixerCommand {
     FadeAll {
         frames: u32,
     },
+    /// Moves a cue's level by `by_db` from where it is heading.
+    FadeBy {
+        cue: CueId,
+        by_db: f32,
+        frames: u32,
+        curve: FadeCurve,
+    },
     /// Sets how far a cue is ducked, 0 dB being not at all.
     Duck {
         cue: CueId,
@@ -633,6 +647,17 @@ impl Mixer {
             } => {
                 for voice in find(&mut self.voices, cue).filter(|voice| !voice.stopping) {
                     voice.level.fade_to(to_db, frames, curve);
+                }
+            }
+            MixerCommand::FadeBy {
+                cue,
+                by_db,
+                frames,
+                curve,
+            } => {
+                for voice in find(&mut self.voices, cue).filter(|voice| !voice.stopping) {
+                    let to = (voice.level.heading() + by_db).clamp(SILENT_DB, MAX_LEVEL_DB);
+                    voice.level.fade_to(to, frames, curve);
                 }
             }
             MixerCommand::Duck { cue, db, frames } => {
@@ -886,6 +911,30 @@ mod tests {
         let out = render(&mut rig, 200, 1);
         assert!(out[50] < 1.0 && out[50] > 0.1);
         assert!((out[150] - 0.1).abs() < 1e-3);
+    }
+
+    #[test]
+    fn relative_fades_move_from_where_the_level_is_heading() {
+        let mut rig = rig(1);
+        rig.commands
+            .push(MixerCommand::Add(voice(1, &[1.0; 4000], 1, RATE, -6.0)))
+            .unwrap();
+        let by = |by_db: f32, frames: u32| MixerCommand::FadeBy {
+            cue: CueId::from_u128(1),
+            by_db,
+            frames,
+            curve: FadeCurve::Linear,
+        };
+        rig.commands.push(by(-14.0, 100)).unwrap();
+        let out = render(&mut rig, 150, 1);
+        assert!((out[120] - 0.1).abs() < 1e-3, "{}", out[120]);
+        // Halfway through a fade down, another relative fade starts from
+        // where the first was going, not from where it had got to.
+        rig.commands.push(by(-20.0, 200)).unwrap();
+        render(&mut rig, 100, 1);
+        rig.commands.push(by(10.0, 0)).unwrap();
+        let out = render(&mut rig, 10, 1);
+        assert!((out[5] - db_to_gain(-30.0)).abs() < 1e-4, "{}", out[5]);
     }
 
     #[test]
