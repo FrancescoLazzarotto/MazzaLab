@@ -11,11 +11,14 @@ export function FileDialog({
   connection,
   mode,
   suggestedName,
+  dirty,
   onClose,
 }: {
   connection: ShowConnection;
   mode: FileMode;
   suggestedName: string;
+  /** The open show has unsaved changes: ask before replacing it. */
+  dirty: boolean;
   onClose: () => void;
 }) {
   const { t } = useI18n();
@@ -55,7 +58,13 @@ export function FileDialog({
     return validFileName(name) ? joinPath(listing.dir, name.trim(), listing.separator) : null;
   };
 
-  const run = (path: string, discard = false) => {
+  const run = (path: string, discard = false, asked = false) => {
+    // Asked here rather than on the server's refusal, which would fail a
+    // request; the server still refuses if the show changed meanwhile.
+    if (dirty && !discard && !asked && mode !== "save-as") {
+      setAsking(path);
+      return;
+    }
     setBusy(true);
     setError(null);
     connection
@@ -80,7 +89,7 @@ export function FileDialog({
     setBusy(true);
     connection
       .save()
-      .then(() => run(path))
+      .then(() => run(path, false, true))
       .catch((reason: Error) => {
         setBusy(false);
         setError(reason.message);

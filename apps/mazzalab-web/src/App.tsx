@@ -760,7 +760,7 @@ export function App({ connection, access, onChangePasscode }: { connection: Show
           }}
         />
       )}
-      {fileDialog && <FileDialog connection={connection} mode={fileDialog} suggestedName={workspace?.name ?? ""} onClose={() => setFileDialog(null)} />}
+      {fileDialog && <FileDialog connection={connection} mode={fileDialog} suggestedName={workspace?.name ?? ""} dirty={snapshot?.dirty ?? false} onClose={() => setFileDialog(null)} />}
       {importing && list && (
         <ImportDialog fileName={importing.fileName} listName={list.name} result={importing.result} onApply={applyImport} onClose={() => setImporting(null)} />
       )}
