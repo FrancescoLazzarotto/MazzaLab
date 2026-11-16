@@ -51,6 +51,11 @@ struct Args {
     /// Do not announce the server on the local network (mDNS).
     #[arg(long)]
     no_announce: bool,
+    /// Run as the hot backup of the server at this address (e.g.
+    /// `http://10.0.0.2:53080`, with `?passcode=` if it asks for one):
+    /// follow it input by input and take over when it goes silent.
+    #[arg(long)]
+    follow: Option<String>,
 }
 
 #[tokio::main]
@@ -99,6 +104,7 @@ async fn main() -> ExitCode {
         ui_dir: args.ui_dir,
         recovered,
         trust_local: !args.passcode_local,
+        follow: args.follow.clone(),
         announce: !args.no_announce,
         ..ServerConfig::default()
     };

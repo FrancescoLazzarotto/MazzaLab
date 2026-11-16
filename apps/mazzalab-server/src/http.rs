@@ -89,6 +89,7 @@ pub fn router_with_screens(
                 // Media files are large and streamed straight to disk.
                 .layer(DefaultBodyLimit::disable()),
         )
+        .route("/api/follow", get(follow_main))
         .route("/ws", get(websocket))
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
@@ -1043,6 +1044,52 @@ async fn websocket(
     Extension(passcode): Extension<Passcode>,
 ) -> impl IntoResponse {
     ws.on_upgrade(move |socket| client(socket, state.handle, passcode))
+}
+
+/// Streams this server's input record to a backup: every line so far,
+/// then each new one, and a tick with the engine time and the state's hash.
+async fn follow_main(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
+    ws.on_upgrade(move |socket| feed_follower(socket, state.handle))
+}
+
+async fn feed_follower(socket: WebSocket, handle: ShowHandle) {
+    let (mut sink, mut stream) = socket.split();
+    let (past, mut lines) = handle.follow_stream();
+    for line in past {
+        if sink
+            .send(Message::Text(line.as_ref().into()))
+            .await
+            .is_err()
+        {
+            return;
+        }
+    }
+    let mut ticks = tokio::time::interval(crate::follow::TICK);
+    loop {
+        let outgoing = tokio::select! {
+            line = lines.recv() => match line {
+                Ok(line) => line.as_ref().to_owned(),
+                // A follower that cannot keep up is out of step for good:
+                // it reconnects and catches up from the start.
+                Err(_) => break,
+            },
+            _ = ticks.tick() => {
+                let Some(status) = handle.status().await else { break };
+                let tick = crate::follow::Tick {
+                    tick: (status.now * 1e9).round() as u64,
+                    hash: crate::follow::state_hash(&status),
+                };
+                serde_json::to_string(&tick).unwrap_or_default()
+            }
+            incoming = stream.next() => match incoming {
+                Some(Ok(Message::Close(_)) | Err(_)) | None => break,
+                Some(Ok(_)) => continue,
+            },
+        };
+        if sink.send(Message::Text(outgoing.into())).await.is_err() {
+            break;
+        }
+    }
 }
 
 /// What a WebSocket message needs.

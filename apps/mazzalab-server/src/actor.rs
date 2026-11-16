@@ -19,6 +19,7 @@ use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio::time::Instant;
 
 use crate::access::Access;
+use crate::follow::{RecordTap, Tee, Tick, state_hash};
 use crate::protocol::EventDto;
 
 /// Meter readings at or below this are silence.
@@ -277,6 +278,21 @@ enum Request {
     Diagnostics {
         reply: oneshot::Sender<Diagnostics>,
     },
+    FollowStart {
+        header: Box<mazzalab_show::Header>,
+        reply: oneshot::Sender<()>,
+    },
+    FollowEntry {
+        entry: Box<mazzalab_show::Entry>,
+        reply: oneshot::Sender<()>,
+    },
+    FollowTick {
+        tick: Tick,
+        reply: oneshot::Sender<()>,
+    },
+    TakeOver {
+        reply: oneshot::Sender<()>,
+    },
 }
 
 /// What tells the open show apart, which changes when another is opened.
@@ -289,6 +305,9 @@ struct Identity {
     passcodes: Arc<[Passcode]>,
     /// Clients on the show's own machine need no passcode.
     trust_local: bool,
+    /// This server follows another as its backup: nobody may run or change
+    /// the show here until it takes over.
+    following: bool,
 }
 
 impl Identity {
@@ -299,6 +318,7 @@ impl Identity {
             base_dir: path.and_then(folder).map(Arc::from),
             passcodes: workspace.settings.passcodes.clone().into(),
             trust_local: true,
+            following: false,
         }
     }
 }
@@ -311,6 +331,7 @@ pub struct ShowHandle {
     updates: broadcast::Sender<Update>,
     identity: Arc<RwLock<Identity>>,
     clients: Arc<std::sync::atomic::AtomicUsize>,
+    tap: Arc<RecordTap>,
 }
 
 /// Counts a connected client for as long as it is held.
@@ -366,7 +387,54 @@ impl ShowHandle {
     /// the show's own machine.
     pub fn access(&self, passcode: Option<&str>, local: bool) -> Access {
         let identity = self.identity();
-        Access::grant(&identity.passcodes, passcode, local && identity.trust_local)
+        let access = Access::grant(&identity.passcodes, passcode, local && identity.trust_local);
+        if identity.following {
+            Access {
+                control: false,
+                edit: false,
+                ..access
+            }
+        } else {
+            access
+        }
+    }
+
+    /// Whether this server is following another as its backup.
+    pub fn is_following(&self) -> bool {
+        self.identity().following
+    }
+
+    /// The record as it is written: every line so far and those to come.
+    pub fn follow_stream(&self) -> (Vec<Arc<str>>, broadcast::Receiver<Arc<str>>) {
+        self.tap.subscribe()
+    }
+
+    /// Following: the main server started (or opened) a show.
+    pub async fn follow_start(&self, header: mazzalab_show::Header) {
+        self.ask(|reply| Request::FollowStart {
+            header: Box::new(header),
+            reply,
+        })
+        .await;
+    }
+
+    /// Following: an input the main server received.
+    pub async fn follow_entry(&self, entry: mazzalab_show::Entry) {
+        self.ask(|reply| Request::FollowEntry {
+            entry: Box::new(entry),
+            reply,
+        })
+        .await;
+    }
+
+    /// Following: where the main server is.
+    pub async fn follow_tick(&self, tick: Tick) {
+        self.ask(|reply| Request::FollowTick { tick, reply }).await;
+    }
+
+    /// The main server is gone: run the show from here.
+    pub async fn take_over(&self) {
+        self.ask(|reply| Request::TakeOver { reply }).await;
     }
 
     /// Whether clients on the show's own machine need no passcode (the
@@ -564,26 +632,43 @@ pub struct Persistence {
 const RECORDS_KEPT: usize = 20;
 
 /// Starts writing the inputs of `show` to a new record next to `path`.
-fn start_record(show: &mut Show, path: Option<&Path>) -> Option<PathBuf> {
-    let path = path?;
-    let dir = folder(path).map(|folder| folder.join(LOGS_FOLDER))?;
-    let stem = path.file_stem().map_or_else(
-        || "show".to_owned(),
-        |stem| stem.to_string_lossy().into_owned(),
-    );
+/// Starts recording the inputs of `show` for followers (`tap`) and, when
+/// `to_file`, to a new record next to `path`. Returns the file.
+fn start_record(
+    show: &mut Show,
+    path: Option<&Path>,
+    to_file: bool,
+    tap: &Arc<RecordTap>,
+) -> Option<PathBuf> {
     let now = chrono::Local::now();
-    let file = dir.join(format!("{stem} {}.jsonl", now.format("%Y-%m-%d %H.%M.%S")));
-    let opened = std::fs::create_dir_all(&dir).and_then(|()| std::fs::File::create(&file));
-    match opened
-        .and_then(|out| show.record_to(Box::new(std::io::BufWriter::new(out)), &now.to_rfc3339()))
-    {
-        Ok(()) => {
-            tracing::debug!(record = %file.display(), "recording inputs");
-            prune_records(&dir, &stem);
-            Some(file)
+    let target = path.filter(|_| to_file).and_then(|path| {
+        let dir = folder(path)?.join(LOGS_FOLDER);
+        let stem = path.file_stem().map_or_else(
+            || "show".to_owned(),
+            |stem| stem.to_string_lossy().into_owned(),
+        );
+        let file = dir.join(format!("{stem} {}.jsonl", now.format("%Y-%m-%d %H.%M.%S")));
+        match std::fs::create_dir_all(&dir).and_then(|()| std::fs::File::create(&file)) {
+            Ok(out) => Some((dir, stem, file, out)),
+            Err(error) => {
+                tracing::warn!(%error, record = %file.display(), "inputs not recorded");
+                None
+            }
         }
+    });
+    let (file, out) = match target {
+        Some((dir, stem, file, out)) => {
+            prune_records(&dir, &stem);
+            let out: Box<dyn std::io::Write + Send> = Box::new(std::io::BufWriter::new(out));
+            (Some(file), Some(out))
+        }
+        None => (None, None),
+    };
+    let tee = Tee::new(out, Arc::clone(tap));
+    match show.record_to(Box::new(tee), &now.to_rfc3339()) {
+        Ok(()) => file,
         Err(error) => {
-            tracing::warn!(%error, record = %file.display(), "inputs not recorded");
+            tracing::warn!(%error, "inputs not recorded");
             None
         }
     }
@@ -631,11 +716,8 @@ pub fn spawn(
         record,
     } = persistence;
     let mut show = show;
-    let record_file = if record {
-        start_record(&mut show, path.as_deref())
-    } else {
-        None
-    };
+    let tap = RecordTap::new();
+    let record_file = start_record(&mut show, path.as_deref(), record, &tap);
     let (requests, receiver) = mpsc::channel(256);
     let (updates, _) = broadcast::channel(1024);
     let (finished_tx, finished_rx) = mpsc::unbounded_channel();
@@ -661,6 +743,7 @@ pub fn spawn(
         updates: updates.clone(),
         identity: Arc::clone(&identity),
         clients: Arc::default(),
+        tap: Arc::clone(&tap),
     };
     let show_revision = show.revision();
     let actor = Actor {
@@ -671,6 +754,9 @@ pub fn spawn(
         backups,
         record,
         record_file,
+        tap: Arc::clone(&tap),
+        catching_up: false,
+        out_of_step: 0,
         born: Instant::now(),
         // Recovered changes are already in the autosave they came from.
         autosaved: show_revision,
@@ -714,6 +800,13 @@ struct Actor {
     record: bool,
     /// Where they are recorded.
     record_file: Option<PathBuf>,
+    /// The record as it is written, for backups following this server.
+    tap: Arc<RecordTap>,
+    /// Following, before the first tick: past inputs are applied without
+    /// sounding, and time comes from the record alone.
+    catching_up: bool,
+    /// Ticks in a row whose state did not match the main server's.
+    out_of_step: u32,
     /// When the server started.
     born: Instant,
     /// The revision last written to the autosave file.
@@ -798,8 +891,11 @@ impl Actor {
                 },
                 Some(cue) = finished.recv() => {
                     self.advance();
-                    // A backend may report a cue that was stopped meanwhile.
-                    let _ = self.show.action_finished(cue);
+                    // Following, the main server says when media ends.
+                    if !self.following() {
+                        // A backend may report a cue that was stopped meanwhile.
+                        let _ = self.show.action_finished(cue);
+                    }
                 }
                 Some(notice) = notices.recv() => {
                     let _ = self.updates.send(Update::Notice(Arc::new(notice)));
@@ -836,7 +932,61 @@ impl Actor {
     }
 
     fn advance(&mut self) {
-        self.show.advance_to(self.start.elapsed());
+        // Catching up, time comes from the record alone.
+        if !self.catching_up {
+            self.show.advance_to(self.start.elapsed());
+        }
+    }
+
+    fn following(&self) -> bool {
+        self.identity
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .following
+    }
+
+    /// Following: the main server's record starts. The show it describes
+    /// replaces this one; until the first tick its past inputs are applied
+    /// in silence.
+    fn follow_start(&mut self, header: mazzalab_show::Header) {
+        let name = header.workspace.name.clone();
+        self.open(header.workspace, None, header.recovered);
+        self.identity_mut().following = true;
+        // A backup records nothing of its own while it follows.
+        self.show.stop_recording();
+        self.record_file = None;
+        self.catching_up = true;
+        self.out_of_step = 0;
+        tracing::info!(show = %name, "following the main server");
+    }
+
+    /// Following: the main server is at `tick`. This server's clock is set
+    /// to the same time, and the states compared.
+    fn follow_tick(&mut self, tick: Tick) {
+        if !self.following() {
+            return;
+        }
+        let at = Duration::from_nanos(tick.tick);
+        if self.catching_up {
+            self.show.advance_to(at);
+            // What happened before now is history: nothing of it sounds.
+            self.show.take_events();
+            self.catching_up = false;
+        }
+        // Engine time only moves forward, so a late tick just holds it.
+        self.start = Instant::now().checked_sub(at).unwrap_or(self.start);
+        self.show.advance_to(at);
+        if state_hash(&self.show.status()) == tick.hash {
+            self.out_of_step = 0;
+        } else {
+            self.out_of_step += 1;
+            if self.out_of_step == OUT_OF_STEP_TICKS {
+                let _ = self.updates.send(Update::Notice(Arc::new(Notice {
+                    level: NoticeLevel::Warning,
+                    message: "This backup is out of step with the main server.".to_owned(),
+                })));
+            }
+        }
     }
 
     fn handle(&mut self, request: Request) {
@@ -852,7 +1002,12 @@ impl Actor {
                 let _ = reply.send(self.show.handle_osc(&request));
             }
             Request::OscTrigger { address, reply } => {
-                let _ = reply.send(self.show.osc_trigger(&address));
+                let started = if self.following() {
+                    0
+                } else {
+                    self.show.osc_trigger(&address)
+                };
+                let _ = reply.send(started);
             }
             Request::Snapshot { reply } => {
                 let _ = reply.send(self.show.snapshot());
@@ -919,7 +1074,9 @@ impl Actor {
             }
             Request::MediaEnded { cue, reply } => {
                 // Several stages may say so, and the engine may know already.
-                let _ = self.show.action_finished(cue);
+                if !self.following() {
+                    let _ = self.show.action_finished(cue);
+                }
                 let _ = reply.send(());
             }
             Request::Audition { cue, reply } => {
@@ -954,6 +1111,33 @@ impl Actor {
             }
             Request::SaveAs { path, reply } => {
                 let _ = reply.send(self.save_as(path));
+            }
+            Request::FollowStart { header, reply } => {
+                self.follow_start(*header);
+                let _ = reply.send(());
+            }
+            Request::FollowEntry { entry, reply } => {
+                if self.following() {
+                    self.show.advance_to(entry.time());
+                    self.show.apply(entry.input);
+                }
+                let _ = reply.send(());
+            }
+            Request::FollowTick { tick, reply } => {
+                self.follow_tick(tick);
+                let _ = reply.send(());
+            }
+            Request::TakeOver { reply } => {
+                if self.following() {
+                    self.identity_mut().following = false;
+                    self.catching_up = false;
+                    tracing::warn!("the main server went silent; taking over");
+                    // From here on this machine records what it does.
+                    let path = self.path.clone();
+                    self.record_file =
+                        start_record(&mut self.show, path.as_deref(), self.record, &self.tap);
+                }
+                let _ = reply.send(());
             }
             Request::Diagnostics { reply } => {
                 let load = self
@@ -996,6 +1180,9 @@ impl Actor {
     /// a trigger from the controller itself.
     fn midi_in(&mut self, event: MidiEvent) {
         let _ = self.updates.send(Update::MidiIn(event));
+        if self.following() {
+            return;
+        }
         let workspace = self.show.workspace();
         let controls = &workspace.settings.midi_controls;
         let mut commands: Vec<Command> = [
@@ -1034,6 +1221,9 @@ impl Actor {
     /// Acts on a SysEx message from a MIDI input: MIDI Show Control for
     /// the show's device ID (or for every device) runs the show.
     fn sysex_in(&mut self, bytes: &[u8]) {
+        if self.following() {
+            return;
+        }
         let Some(message) = mazzalab_midi::parse_msc(bytes) else {
             return;
         };
@@ -1077,6 +1267,9 @@ impl Actor {
         let Some((before, before_rate)) = self.last_timecode.replace((now, rate)) else {
             return;
         };
+        if self.following() {
+            return;
+        }
         let forward =
             before_rate == rate && now > before && now - before <= rate.fps().ceil() as u64;
         if !forward {
@@ -1108,6 +1301,9 @@ impl Actor {
         let Some(before) = self.last_wall_clock.replace(now) else {
             return;
         };
+        if self.following() {
+            return;
+        }
         let starts: Vec<Command> = self
             .show
             .workspace()
@@ -1148,9 +1344,13 @@ impl Actor {
         }
 
         let name = workspace.name.clone();
-        let trust_local = self.identity_mut().trust_local;
+        let (trust_local, following) = {
+            let identity = self.identity_mut();
+            (identity.trust_local, identity.following)
+        };
         *self.identity_mut() = Identity {
             trust_local,
+            following,
             ..Identity::new(&workspace, path.as_deref())
         };
         self.show = if recovered {
@@ -1158,11 +1358,7 @@ impl Actor {
         } else {
             Show::new(workspace)
         };
-        self.record_file = if self.record {
-            start_record(&mut self.show, path.as_deref())
-        } else {
-            None
-        };
+        self.record_file = start_record(&mut self.show, path.as_deref(), self.record, &self.tap);
         // The new show's clock starts now; nothing of the old one carries on.
         self.start = Instant::now();
         self.path = path;
@@ -1201,9 +1397,13 @@ impl Actor {
             mazzalab_project::discard_autosave(old);
         }
         mazzalab_project::discard_autosave(&path);
-        let trust_local = self.identity_mut().trust_local;
+        let (trust_local, following) = {
+            let identity = self.identity_mut();
+            (identity.trust_local, identity.following)
+        };
         *self.identity_mut() = Identity {
             trust_local,
+            following,
             ..Identity::new(self.show.workspace(), Some(&path))
         };
         self.path = Some(path);
@@ -1360,6 +1560,8 @@ impl Actor {
         self.advance();
         self.autosave();
         let events = self.show.take_events();
+        // Catching up, past inputs make no sound.
+        let events = if self.catching_up { Vec::new() } else { events };
         if !events.is_empty() {
             for output in &mut self.outputs {
                 output.handle(&self.show, &events);
@@ -1373,7 +1575,8 @@ impl Actor {
             }
         }
 
-        if self.last_revision != Some(self.show.revision()) {
+        // Following, the main server says what it found out about media.
+        if self.last_revision != Some(self.show.revision()) && !self.following() {
             self.probe_media();
             self.measure_media();
         }
@@ -1563,6 +1766,10 @@ fn absolute(path: &Path) -> Option<PathBuf> {
 fn is_busy(status: &Status) -> bool {
     status.panicking || !status.running.is_empty()
 }
+
+/// Ticks in a row out of step before the operators are told: about a
+/// second, longer than inputs take to cross the network.
+const OUT_OF_STEP_TICKS: u32 = 4;
 
 /// The MSC device ID meaning "every device", which a show without its own
 /// ID answers to.

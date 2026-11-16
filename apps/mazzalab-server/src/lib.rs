@@ -15,6 +15,7 @@
 mod access;
 mod actor;
 mod announce;
+mod follow;
 mod http;
 mod media_manage;
 mod osc_net;
@@ -80,6 +81,10 @@ pub struct ServerConfig {
     /// Every input is recorded in `logs/` next to the show file, to replay
     /// a performance with `mazzalab replay`.
     pub record_inputs: bool,
+    /// Follow the server at this address as its hot backup, e.g.
+    /// `http://10.0.0.2:53080` (with `?passcode=` if it asks for one), and
+    /// take over when it goes silent.
+    pub follow: Option<String>,
 }
 
 impl Default for ServerConfig {
@@ -98,6 +103,7 @@ impl Default for ServerConfig {
             trust_local: true,
             announce: true,
             record_inputs: true,
+            follow: None,
         }
     }
 }
@@ -228,6 +234,9 @@ pub async fn start(
             })),
             Err(error) => tracing::warn!(%error, "could not announce the server on the network"),
         }
+    }
+    if let Some(main) = config.follow {
+        tasks.push(tokio::spawn(follow::follow(main, handle.clone())));
     }
     Ok(RunningServer {
         handle,
