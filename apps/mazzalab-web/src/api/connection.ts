@@ -17,6 +17,7 @@ import type {
   TimecodeIn,
   Waveform,
 } from "./types";
+import { ShowFileError, type FolderListing, type ShowFile } from "../showFiles";
 
 export type ConnectionState = "connecting" | "open" | "closed";
 
@@ -154,6 +155,42 @@ export class ShowConnection {
     });
     if (!response.ok) throw new Error(await errorOf(response));
     return ((await response.json()) as { shown: boolean }).shown;
+  }
+
+  /** Where the open show is on the server's machine. */
+  async showFile(): Promise<ShowFile> {
+    const response = await fetch(`${this.httpBase}/api/show`);
+    if (!response.ok) throw new Error(await errorOf(response));
+    return (await response.json()) as ShowFile;
+  }
+
+  /** The subfolders and shows of a folder of the server's machine; the open show's folder without `dir`. */
+  async showFiles(dir?: string): Promise<FolderListing> {
+    const query = dir === undefined ? "" : `?dir=${encodeURIComponent(dir)}`;
+    const response = await fetch(`${this.httpBase}/api/show/files${query}`);
+    if (!response.ok) throw new Error(await errorOf(response));
+    return (await response.json()) as FolderListing;
+  }
+
+  /**
+   * Opens or creates a show, or saves the open one under another name. A
+   * show with unsaved changes is kept unless `discard`; that comes back as
+   * a `ShowFileError` with `unsaved`.
+   */
+  async changeShow(action: "open" | "new" | "save-as", path: string, discard = false): Promise<void> {
+    const response = await fetch(`${this.httpBase}/api/show/${action}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(action === "save-as" ? { path } : { path, discard }),
+    });
+    if (response.ok) return;
+    let unsaved = false;
+    try {
+      unsaved = ((await response.clone().json()) as { unsaved?: boolean }).unsaved === true;
+    } catch {
+      // No JSON body: a plain failure.
+    }
+    throw new ShowFileError(await errorOf(response), unsaved);
   }
 
   async midiPorts(): Promise<MidiPorts> {

@@ -778,6 +778,87 @@ select.status-item {
   height: 22px;
 }
 
+/* Show file picker */
+.file-dialog {
+  height: min(480px, calc(100vh - 64px));
+}
+
+.file-dialog .dialog-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.crumbs {
+  flex: none;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0;
+}
+
+.crumb {
+  height: 22px;
+  padding: 0 5px;
+  background: transparent;
+  color: var(--text-3);
+}
+
+.crumb:not(:first-of-type)::before {
+  content: "/";
+  margin-right: 8px;
+  color: var(--text-4);
+}
+
+.crumb.current {
+  color: var(--text);
+}
+
+.file-list {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  border-top: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.file-list .empty {
+  padding: 12px 8px;
+  color: var(--text-3);
+}
+
+.file-row {
+  width: 100%;
+  justify-content: flex-start;
+  height: 28px;
+  background: transparent;
+  color: var(--text-2);
+  border-radius: 0;
+}
+
+.file-row.selected {
+  background: var(--select);
+  color: var(--text);
+}
+
+.unsaved-ask {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: var(--warn);
+}
+
+.unsaved-buttons {
+  display: flex;
+  gap: 6px;
+}
+
 /* Search and filters */
 .filter-bar {
   flex: none;

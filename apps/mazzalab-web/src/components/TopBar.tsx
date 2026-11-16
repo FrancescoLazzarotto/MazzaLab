@@ -1,6 +1,7 @@
 import type { Snapshot } from "../api/types";
 import { useI18n } from "../i18n";
 import type { Preferences } from "../preferences";
+import type { FileMode } from "./FileDialog";
 import { Icon } from "./icons";
 
 export function TopBar({
@@ -10,6 +11,7 @@ export function TopBar({
   onUndo,
   onRedo,
   onSave,
+  onFile,
   onSettings,
 }: {
   snapshot: Snapshot | null;
@@ -18,6 +20,7 @@ export function TopBar({
   onUndo: () => void;
   onRedo: () => void;
   onSave: () => void;
+  onFile: (mode: FileMode) => void;
   onSettings: () => void;
 }) {
   const { t } = useI18n();
@@ -50,6 +53,12 @@ export function TopBar({
           <Icon name="redo" />
         </button>
         <span className="divider" />
+        {editing &&
+          (["open", "new", "save-as"] as const).map((file) => (
+            <button key={file} className="icon-button" onClick={() => onFile(file)} disabled={!snapshot} title={t(file === "open" ? "file.open" : file === "new" ? "file.new" : "file.saveAs")}>
+              <Icon name={`show-${file}`} />
+            </button>
+          ))}
         <button className="icon-button" onClick={onSave} disabled={!snapshot?.dirty} title={`${t("action.save")} (Ctrl+S)`}>
           <Icon name="save" />
         </button>

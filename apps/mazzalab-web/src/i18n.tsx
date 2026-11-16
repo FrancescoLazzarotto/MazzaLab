@@ -384,6 +384,17 @@ const en = {
   "import.ignored": "Ignored",
   "import.add": "Add",
   "import.failed": "Could not read the file",
+  "file.open": "Open a show",
+  "file.new": "New show",
+  "file.saveAs": "Save as",
+  "file.openVerb": "Open",
+  "file.newVerb": "Create",
+  "file.location": "Location",
+  "file.up": "Up one folder",
+  "file.name": "Name",
+  "file.empty": "Nothing here.",
+  "file.unsaved": "The open show has unsaved changes.",
+  "file.discard": "Don't save",
 };
 
 type Key = keyof typeof en;
@@ -766,6 +777,17 @@ const it: Record<Key, string> = {
   "import.ignored": "Ignorate",
   "import.add": "Aggiungi",
   "import.failed": "Impossibile leggere il file",
+  "file.open": "Apri uno show",
+  "file.new": "Nuovo show",
+  "file.saveAs": "Salva con nome",
+  "file.openVerb": "Apri",
+  "file.newVerb": "Crea",
+  "file.location": "Percorso",
+  "file.up": "Cartella superiore",
+  "file.name": "Nome",
+  "file.empty": "Vuoto.",
+  "file.unsaved": "Lo show aperto ha modifiche non salvate.",
+  "file.discard": "Non salvare",
 };
 
 export const DICTIONARIES: Record<Language, Record<Key, string>> = { en, it };

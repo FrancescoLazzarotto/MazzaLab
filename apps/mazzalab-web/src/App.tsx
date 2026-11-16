@@ -5,6 +5,7 @@ import { ActiveCues } from "./components/ActiveCues";
 import { AudioPanel } from "./components/AudioPanel";
 import { CueCart } from "./components/CueCart";
 import { CueList, type SelectMode } from "./components/CueList";
+import { FileDialog, type FileMode } from "./components/FileDialog";
 import { FilterBar } from "./components/FilterBar";
 import { ImportDialog } from "./components/ImportDialog";
 import { PrintSheet } from "./components/PrintSheet";
@@ -58,6 +59,7 @@ export function App({ connection }: { connection: ShowConnection }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [renumbering, setRenumbering] = useState(false);
   const [printing, setPrinting] = useState(false);
+  const [fileDialog, setFileDialog] = useState<FileMode | null>(null);
   const [importing, setImporting] = useState<{ fileName: string; result: CsvImport } | null>(null);
   const importInput = useRef<HTMLInputElement>(null);
   const [renamingList, setRenamingList] = useState<Id | null>(null);
@@ -78,6 +80,22 @@ export function App({ connection }: { connection: ShowConnection }) {
   // The filter only changes what is shown; GO and the playhead follow the real list.
   const [filter, setFilter] = useState<CueFilter>(NO_FILTER);
   const filterInput = useRef<HTMLInputElement>(null);
+  // Another show was opened under us: nothing of the old one may linger.
+  const workspaceId = workspace?.id;
+  const shownWorkspace = useRef(workspaceId);
+  useEffect(() => {
+    if (shownWorkspace.current === workspaceId) return;
+    shownWorkspace.current = workspaceId;
+    setListId(null);
+    setPicked([]);
+    setAnchor(null);
+    setFilter(NO_FILTER);
+    setImporting(null);
+    setRenamingList(null);
+    setPendingList(null);
+    setRenumbering(false);
+    clipboard.current = [];
+  }, [workspaceId]);
   const visible = useMemo(() => (list ? visibleIds(list.cues, filter) : null), [list, filter]);
   const shownRows = useMemo(() => (visible ? rows.filter((row) => visible.has(row.cue.id)) : rows), [rows, visible]);
   const playhead = status?.playheads.find((entry) => entry.list === list?.id)?.cue ?? null;
@@ -322,7 +340,7 @@ export function App({ connection }: { connection: ShowConnection }) {
       .catch(() => {});
   }, [batch, importing, insertionPoint, list]);
 
-  const modal = settingsOpen || renumbering || importing !== null;
+  const modal = settingsOpen || renumbering || importing !== null || fileDialog !== null;
   useEffect(() => {
     const isTyping = (target: EventTarget | null) =>
       target instanceof HTMLElement && target.closest("input, textarea, select") !== null;
@@ -446,6 +464,7 @@ export function App({ connection }: { connection: ShowConnection }) {
         onUndo={() => run({ command: "undo" })}
         onRedo={() => run({ command: "redo" })}
         onSave={save}
+        onFile={setFileDialog}
         onSettings={() => setSettingsOpen(true)}
       />
       {!snapshot || !workspace ? (
@@ -647,6 +666,7 @@ export function App({ connection }: { connection: ShowConnection }) {
           }}
         />
       )}
+      {fileDialog && <FileDialog connection={connection} mode={fileDialog} suggestedName={workspace?.name ?? ""} onClose={() => setFileDialog(null)} />}
       {importing && list && (
         <ImportDialog fileName={importing.fileName} listName={list.name} result={importing.result} onApply={applyImport} onClose={() => setImporting(null)} />
       )}
