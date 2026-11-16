@@ -342,6 +342,36 @@ export interface Passcode {
   edit: boolean;
 }
 
+export type Severity = "error" | "warning" | "info";
+
+export type PreflightKey =
+  | "missing_media"
+  | "no_file"
+  | "no_target"
+  | "missing_target"
+  | "targets_itself"
+  | "wrong_target"
+  | "unknown_patch"
+  | "no_patches"
+  | "no_message"
+  | "no_commands"
+  | "bad_light_command"
+  | "unknown_stage"
+  | "empty_group"
+  | "not_supported"
+  | "duplicate_number"
+  | "hotkey_collision"
+  | "midi_collision"
+  | "osc_collision";
+
+/** One thing to look at before the show, from `GET /api/preflight`. */
+export interface PreflightIssue {
+  severity: Severity;
+  cue?: Id;
+  key: PreflightKey;
+  detail: string;
+}
+
 export interface WorkspaceSettings {
   /** Only editors are sent these. */
   passcodes?: Passcode[];

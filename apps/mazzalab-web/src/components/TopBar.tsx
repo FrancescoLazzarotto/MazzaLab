@@ -13,6 +13,7 @@ export function TopBar({
   onRedo,
   onSave,
   onFile,
+  onPreflight,
   onSettings,
 }: {
   snapshot: Snapshot | null;
@@ -24,6 +25,7 @@ export function TopBar({
   onRedo: () => void;
   onSave: () => void;
   onFile: (mode: FileMode) => void;
+  onPreflight: () => void;
   onSettings: () => void;
 }) {
   const { t } = useI18n();
@@ -64,6 +66,9 @@ export function TopBar({
           ))}
         <button className="icon-button" onClick={onSave} disabled={!canEdit || !snapshot?.dirty} title={`${t("action.save")} (Ctrl+S)`}>
           <Icon name="save" />
+        </button>
+        <button className="icon-button" onClick={onPreflight} disabled={!snapshot} title={t("preflight.title")}>
+          <Icon name="check" />
         </button>
         <button className="icon-button" onClick={onSettings} disabled={!snapshot} title={t("settings.title")}>
           <Icon name="settings" />

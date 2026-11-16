@@ -928,6 +928,85 @@ fieldset.bare {
   text-align: center;
 }
 
+/* Pre-show check */
+.preflight {
+  height: min(560px, calc(100vh - 64px));
+}
+
+.preflight header .icon-button:first-of-type {
+  margin-left: auto;
+}
+
+.preflight-clear {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--go);
+}
+
+.preflight-group + .preflight-group {
+  margin-top: 14px;
+}
+
+.preflight-group h3 {
+  margin: 0 0 4px;
+}
+
+.preflight-group.error h3 {
+  color: var(--danger);
+}
+
+.preflight-group.warning h3 {
+  color: var(--warn);
+}
+
+.preflight-group ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.preflight-row {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 12px;
+  width: 100%;
+  height: auto;
+  min-height: 28px;
+  padding: 4px 6px;
+  background: transparent;
+  border-bottom: 1px solid var(--hairline);
+  border-radius: 0;
+  color: var(--text-2);
+  text-align: left;
+  white-space: normal;
+}
+
+div.preflight-row {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.preflight-cue {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.preflight-number {
+  margin-right: 8px;
+  color: var(--text-3);
+}
+
+.preflight-detail {
+  margin-left: 8px;
+  color: var(--text-3);
+  overflow-wrap: anywhere;
+}
+
 /* Media browser */
 .media-actions {
   display: flex;

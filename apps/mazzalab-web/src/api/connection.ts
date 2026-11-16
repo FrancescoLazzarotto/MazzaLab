@@ -8,6 +8,7 @@ import type {
   Id,
   MidiEvent,
   MidiPorts,
+  PreflightIssue,
   Notice,
   Screens,
   ServerMessage,
@@ -241,6 +242,13 @@ export class ShowConnection {
       // No JSON body: a plain failure.
     }
     throw new ShowFileError(await errorOf(response), unsaved);
+  }
+
+  /** What would not work if GO were pressed now. */
+  async preflight(): Promise<PreflightIssue[]> {
+    const response = await this.fetchApi("/api/preflight");
+    if (!response.ok) throw new Error(await errorOf(response));
+    return ((await response.json()) as { issues: PreflightIssue[] }).issues;
   }
 
   /** The files in the show's media folder. */

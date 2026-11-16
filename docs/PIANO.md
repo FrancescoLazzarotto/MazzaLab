@@ -246,15 +246,16 @@ Parità con QLab e poi oltre.
       WebSocket) e piccoli SDK per JavaScript e Python.
 - [ ] Superfici di controllo: Stream Deck e controller MIDI con
       apprendimento ("learn") dei comandi.
-- [ ] Annuncio del server sulla rete (mDNS), così i tablet lo trovano da
-      soli.
+- [x] Annuncio del server sulla rete (mDNS: `_mazzalab._tcp` e `_osc._udp`),
+      così i tablet lo trovano da soli; `--no-announce` lo spegne.
 
 ## Fase 4 — MIDI, timecode e dispositivi di rete (L)
 
 - [x] MIDI in ingresso e in uscita (`midir`): note, CC, program change e
       SysEx in uscita; note, CC e program change in ingresso, come trigger
       dei cue e dei comandi del trasporto, con apprendimento dal controller.
-- [ ] MSC: in uscita c'è, manca in ingresso.
+- [ ] MSC: in uscita c'è; in ingresso il messaggio si legge e si traduce in
+      azioni dello show (crate MIDI), ma non è ancora collegato al server.
 - [ ] MIDI File cue sincronizzato con lo show.
 - [x] Timecode MTC e LTC in uscita, MTC e LTC in ingresso, tutti i
       formati di frame (drop frame compreso); l'LTC si legge da un canale
@@ -356,8 +357,10 @@ Parità con QLab e poi oltre.
 
 ## Fase 9 — Interoperabilità e documenti per la compagnia (M)
 
-- [ ] **Controllo pre-show**: un'unica verifica che segnala media
-      mancanti, dispositivi assenti, cue rotti, uscite non patchate.
+- [x] **Controllo pre-show**: un'unica verifica (`GET /api/preflight`, e il
+      pulsante nella barra) che segnala media mancanti, target mancanti o
+      sbagliati, patch e stage inesistenti, comandi luci illeggibili, gruppi
+      vuoti, numeri e trigger doppi. Non controlla i dispositivi audio e MIDI.
 - [ ] Stampa ed esportazione della lista cue (PDF, CSV) per direttore di
       scena e tecnici.
 - [ ] Import di liste cue da CSV e fogli di calcolo.
@@ -449,7 +452,7 @@ Voci ancora aperte qui sopra di cui esiste già un pezzo:
   Mancano il renderer nativo, edge blending e warping, NDI/Spout/Syphon e
   il Camera cue.
 - **Avvisi**: file illeggibili, patch mancanti e dispositivi assenti
-  arrivano all'operatore come notifiche; manca il controllo pre-show unico.
+  arrivano all'operatore come notifiche; il controllo pre-show unico non guarda i dispositivi.
 
 ## Fatto
 

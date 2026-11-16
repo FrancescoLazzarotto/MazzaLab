@@ -44,6 +44,7 @@ import { cuesForHotkey, hotkeyOf } from "./hotkeys";
 import { actionFor } from "./keymap";
 import { useTitleLabels } from "./a11y";
 import { MediaPanel } from "./components/MediaPanel";
+import { PreflightDialog } from "./components/PreflightDialog";
 import { mediaKind } from "./mediaLibrary";
 import { effectiveMode, type AccessReply } from "./access";
 import { Announcer } from "./components/Announcer";
@@ -69,6 +70,7 @@ export function App({ connection, access, onChangePasscode }: { connection: Show
   const [renumbering, setRenumbering] = useState(false);
   const [printing, setPrinting] = useState(false);
   const [fileDialog, setFileDialog] = useState<FileMode | null>(null);
+  const [checking, setChecking] = useState(false);
   const [importing, setImporting] = useState<{ fileName: string; result: CsvImport } | null>(null);
   const importInput = useRef<HTMLInputElement>(null);
   const [renamingList, setRenamingList] = useState<Id | null>(null);
@@ -390,7 +392,7 @@ export function App({ connection, access, onChangePasscode }: { connection: Show
       .catch(() => {});
   }, [batch, importing, insertionPoint, list]);
 
-  const modal = settingsOpen || renumbering || importing !== null || fileDialog !== null;
+  const modal = settingsOpen || renumbering || importing !== null || fileDialog !== null || checking;
   useEffect(() => {
     const isTyping = (target: EventTarget | null) =>
       target instanceof HTMLElement && target.closest("input, textarea, select") !== null;
@@ -565,6 +567,7 @@ export function App({ connection, access, onChangePasscode }: { connection: Show
         onRedo={() => run({ command: "redo" })}
         onSave={save}
         onFile={setFileDialog}
+        onPreflight={() => setChecking(true)}
         onSettings={() => setSettingsOpen(true)}
       />
       {snapshot && connectionState !== "open" && (
@@ -758,6 +761,21 @@ export function App({ connection, access, onChangePasscode }: { connection: Show
               ),
             );
           }}
+        />
+      )}
+      {checking && (
+        <PreflightDialog
+          connection={connection}
+          cues={allCues}
+          onSelect={(id) => {
+            const owner = workspace?.cue_lists.find((candidate) => findCue(candidate.cues, id));
+            if (owner) selectList(owner.id);
+            setFilter(NO_FILTER);
+            setPicked([id]);
+            setAnchor(id);
+            setChecking(false);
+          }}
+          onClose={() => setChecking(false)}
         />
       )}
       {fileDialog && <FileDialog connection={connection} mode={fileDialog} suggestedName={workspace?.name ?? ""} dirty={snapshot?.dirty ?? false} onClose={() => setFileDialog(null)} />}
