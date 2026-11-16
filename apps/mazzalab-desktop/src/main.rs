@@ -3,9 +3,9 @@
 //! The desktop app runs a full show server in-process (engine, audio, OSC
 //! and the web API, reachable by tablets on the network) and shows the
 //! operator UI in a native window pointed at that server. The File menu
-//! creates, opens and saves shows; opening another show restarts the server
-//! on it and points the window at the new server. The Video menu puts the
-//! show's stages full screen on the displays they name.
+//! creates, opens and saves shows; another show opens inside the running
+//! server, so tablets stay connected and the ports stay the same. The Video
+//! menu puts the show's stages full screen on the displays they name.
 //!
 //! Usage: `mazzalab-desktop [show.mazzalab]`. Without a path the show is
 //! `Documents/MazzaLab/Untitled.mazzalab`.
@@ -48,7 +48,6 @@ const MENU_QUIT: &str = "quit";
 /// App-wide state.
 struct Desktop {
     lang: Lang,
-    ui_dir: Option<PathBuf>,
     /// The show being run. File actions hold the lock from start to finish,
     /// so a second action started meanwhile (e.g. a double-clicked menu) is
     /// ignored instead of interleaving dialogs.
@@ -57,18 +56,20 @@ struct Desktop {
     closing: AtomicBool,
 }
 
-/// A show file and the server running it.
+/// The server running the show. Which show it is, the server knows: a
+/// browser on the network may open another one.
 struct Session {
-    show: PathBuf,
     server: RunningServer,
 }
 
 impl Session {
+    fn show(&self) -> Option<PathBuf> {
+        self.server.handle.path().map(|path| path.to_path_buf())
+    }
+
     fn name(&self) -> String {
-        self.show.file_stem().map_or_else(
-            || self.show.display().to_string(),
-            |stem| stem.to_string_lossy().into_owned(),
-        )
+        self.show()
+            .map_or_else(|| "Untitled".to_owned(), |show| show_name(&show))
     }
 
     fn url(&self) -> String {
@@ -76,7 +77,14 @@ impl Session {
     }
 
     fn title(&self) -> String {
-        format!("MazzaLab — {}", self.show.display())
+        title(self.show().as_deref())
+    }
+}
+
+fn title(show: Option<&Path>) -> String {
+    match show {
+        Some(show) => format!("MazzaLab — {}", show.display()),
+        None => "MazzaLab".to_owned(),
     }
 }
 
@@ -151,18 +159,15 @@ fn setup(app: &mut App) -> Result<(), Box<dyn Error>> {
     let lang = Lang::detect();
     let ui_dir = ui_dir(app);
     let show = initial_show(app)?;
-    let (workspace, recovered) = load(&show)?;
+    let (workspace, recovered) = mazzalab_server::read_show(&show)?;
     let screens = DesktopScreens::new(app.handle().clone());
     app.manage(Arc::clone(&screens));
     let server = tauri::async_runtime::block_on(start_server(
-        &show,
-        workspace,
-        recovered,
-        ui_dir.clone(),
-        &screens,
+        &show, workspace, recovered, ui_dir, &screens,
     ))?;
     tracing::info!(show = %show.display(), osc = %server.osc_udp, http = %server.http, "show server running");
-    let session = Session { show, server };
+    let session = Session { server };
+    follow_title(app.handle().clone(), &session);
 
     app.set_menu(menu(app.handle(), lang)?)?;
     let builder = WebviewWindowBuilder::new(
@@ -183,7 +188,6 @@ fn setup(app: &mut App) -> Result<(), Box<dyn Error>> {
     screens.set_base(Some(session.url()));
     app.manage(Desktop {
         lang,
-        ui_dir,
         session: Mutex::new(Some(session)),
         closing: AtomicBool::new(false),
     });
@@ -310,7 +314,7 @@ async fn open_show(app: AppHandle) {
     let Some(path) = pick(dialog, Pick::Open).await else {
         return;
     };
-    match load(&path) {
+    match mazzalab_server::read_show(&path) {
         Ok((workspace, recovered)) => {
             switch_to(&app, &mut session, path, workspace, recovered).await;
         }
@@ -349,7 +353,7 @@ async fn save_show(app: AppHandle) {
 /// open show. The original file keeps its last saved state.
 async fn save_show_as(app: AppHandle) {
     let desktop = app.state::<Desktop>();
-    let Ok(mut session) = desktop.session.try_lock() else {
+    let Ok(session) = desktop.session.try_lock() else {
         return;
     };
     let lang = desktop.lang;
@@ -363,17 +367,18 @@ async fn save_show_as(app: AppHandle) {
             current.name(),
             mazzalab_project::FILE_EXTENSION
         ));
-    if let Some(folder) = current.show.parent().filter(|folder| folder.is_dir()) {
+    if let Some(folder) = current
+        .show()
+        .and_then(|show| show.parent().map(Path::to_path_buf))
+        .filter(|folder| folder.is_dir())
+    {
         dialog = dialog.set_directory(folder);
     }
     let Some(path) = pick(dialog, Pick::Save).await else {
         return;
     };
-    let saved = current.server.handle.save_copy(path.clone()).await;
-    match saved.and_then(|()| load(&path)) {
-        Ok((workspace, recovered)) => {
-            switch_to(&app, &mut session, path, workspace, recovered).await;
-        }
+    match current.server.handle.save_as(path).await {
+        Ok(()) => set_title(&app, current),
         Err(error) => report(
             &app,
             lang.t(
@@ -476,12 +481,14 @@ async fn confirm_discard(app: &AppHandle, session: Option<&Session>, lang: Lang)
 /// The operator chose to throw the unsaved changes away: the autosave of
 /// them goes too, or it would bring them back next time.
 fn discard(session: &Session) -> bool {
-    mazzalab_project::discard_autosave(&session.show);
+    if let Some(show) = session.show() {
+        mazzalab_project::discard_autosave(&show);
+    }
     true
 }
 
-/// Stops the current server, starts one for `show` and points the window
-/// at it.
+/// Opens `show` in the running server: what plays stops, and every window
+/// and tablet follows the server to the new show.
 async fn switch_to(
     app: &AppHandle,
     session: &mut Option<Session>,
@@ -489,48 +496,46 @@ async fn switch_to(
     workspace: Workspace,
     recovered: bool,
 ) {
-    let desktop = app.state::<Desktop>();
-    let screens = Arc::clone(&app.state::<Arc<DesktopScreens>>());
-    // Stages come down with the old server and go up again with the new.
-    screens.set_base(None);
-    if let Some(previous) = session.take() {
-        // Waits for the ports to be released so the new server gets them.
-        previous.server.stop().await;
-    }
-    let server = match start_server(
-        &show,
-        workspace,
-        recovered,
-        desktop.ui_dir.clone(),
-        &screens,
-    )
-    .await
-    {
-        Ok(server) => server,
-        Err(error) => {
-            return report(
-                app,
-                desktop.lang.t(
-                    "The show could not be opened.",
-                    "Impossibile aprire lo show.",
-                ),
-                &error.to_string(),
-            );
-        }
+    let Some(current) = session.as_ref() else {
+        return;
     };
-    tracing::info!(show = %show.display(), osc = %server.osc_udp, http = %server.http, "show server running");
-    let next = Session { show, server };
+    current
+        .server
+        .handle
+        .open(workspace, Some(show), recovered)
+        .await;
+    set_title(app, current);
+}
+
+fn set_title(app: &AppHandle, session: &Session) {
     if let Some(window) = main_window(app) {
-        let _ = window.set_title(&next.title());
-        match next.url().parse() {
-            Ok(url) => {
-                let _ = window.navigate(url);
-            }
-            Err(error) => tracing::error!(%error, "invalid server URL"),
-        }
+        let _ = window.set_title(&session.title());
     }
-    screens.set_base(Some(next.url()));
-    *session = Some(next);
+}
+
+/// Keeps the window title on the open show, whoever opens it: a show can
+/// also be opened from a browser on the network.
+fn follow_title(app: AppHandle, session: &Session) {
+    let handle = session.server.handle.clone();
+    let mut updates = handle.subscribe();
+    spawn(async move {
+        let mut shown = handle.path();
+        loop {
+            match updates.recv().await {
+                Ok(mazzalab_server::Update::Snapshot(_)) => {}
+                Ok(_) => continue,
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+            }
+            let path = handle.path();
+            if path != shown {
+                if let Some(window) = main_window(&app) {
+                    let _ = window.set_title(&title(path.as_deref()));
+                }
+                shown = path;
+            }
+        }
+    });
 }
 
 fn main_window(app: &AppHandle) -> Option<WebviewWindow> {
@@ -598,10 +603,7 @@ fn initial_show(app: &App) -> Result<PathBuf, Box<dyn Error>> {
 }
 
 fn show_name(path: &Path) -> String {
-    path.file_stem().map_or_else(
-        || "Untitled".to_owned(),
-        |stem| stem.to_string_lossy().into_owned(),
-    )
+    mazzalab_server::show_name(path)
 }
 
 /// The built web UI: bundled as a resource in installers, or straight from
@@ -620,27 +622,6 @@ fn base_dir(show: &Path) -> PathBuf {
     show.parent()
         .filter(|parent| !parent.as_os_str().is_empty())
         .map_or_else(|| PathBuf::from("."), Path::to_path_buf)
-}
-
-/// Reads a show (an empty one when the file does not exist yet) and fills in
-/// the lengths of its audio files.
-/// Loads a show, and says whether what it loaded are the unsaved changes an
-/// earlier session left behind (a crash, a power cut) rather than the file
-/// as it was last saved. The window says so, and closing without saving
-/// goes back to the saved file.
-fn load(show: &Path) -> Result<(Workspace, bool), String> {
-    let saved = mazzalab_server::load_or_create(show);
-    let (mut workspace, recovered) = match mazzalab_server::recoverable(show) {
-        Some(autosaved) => {
-            tracing::warn!(show = %show.display(), "recovered unsaved changes from an autosave");
-            (autosaved, true)
-        }
-        None => (saved?, false),
-    };
-    for (cue, problem) in mazzalab_audio::probe_workspace(&mut workspace, &base_dir(show)) {
-        tracing::warn!(%cue, %problem, "audio file unavailable");
-    }
-    Ok((workspace, recovered))
 }
 
 async fn start_server(
