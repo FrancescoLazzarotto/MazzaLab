@@ -193,17 +193,19 @@ Parità con QLab e poi oltre.
 - [ ] Template dei cue.
 - [x] Ricerca e filtri (per tipo, colore, flag, testo in numero, nome e note).
 - [x] Gestione delle cue list: aggiungere, rinominare, eliminare, anche
-      liste cart. Manca vederne più di una insieme.
+      liste cart, e due liste affiancate (per dispositivo).
 - [ ] Inspector completo per ogni tipo di cue.
 - [ ] Browser dei media, con caricamento dei file anche da tablet.
 
 ### Viste
-- [ ] Forma d'onda con zoom, punti di inizio e fine, slice e fade
-      trascinabili, scrub e preascolto.
-- [ ] Vista timeline per i gruppi timeline, con i pre-wait modificabili
-      graficamente.
+- [x] Forma d'onda con zoom, punti di inizio e fine, slice e fade
+      trascinabili, preascolto. Manca lo scrub.
+- [x] Vista timeline per i gruppi timeline, con i pre-wait modificabili
+      graficamente (trascinando le barre).
 - [x] Cue cart: griglia di pulsanti per gli effetti a chiamata.
-- [ ] Pannello dei cue attivi con pausa, stop, fade out e livelli dal vivo.
+- [ ] Pannello dei cue attivi: pausa, stop, avanzamento e tempo residuo
+      ci sono. Mancano fade out e livelli dal vivo: servono comandi nel
+      server che non sporchino lo show.
 - [ ] Pannello impostazioni dello show: doppio GO, durata del panic, nome,
       cue di apertura e chiusura.
 
@@ -218,8 +220,11 @@ Parità con QLab e poi oltre.
 
 ### Qualità dell'interfaccia
 - [ ] Accessibilità: uso completo da tastiera, screen reader, contrasto
-      alto, ingrandimento (punto debole di molti software da palco).
-- [x] Temi chiaro, scuro e "buio di sala" a luminosità minima.
+      alto, ingrandimento (punto debole di molti software da palco). Fatti:
+      etichette sui pulsanti, annunci di GO e standby, movimento ridotto,
+      tema ad alto contrasto, anello di focus. Mancano la forma d'onda da
+      tastiera e la prova con uno screen reader vero.
+- [x] Temi chiaro, scuro, "buio di sala" a luminosità minima e alto contrasto.
 - [ ] Sistema di traduzioni aperto oltre a IT/EN.
 - [ ] Test end-to-end dell'interfaccia (Playwright) e test visivi.
 
