@@ -2,8 +2,8 @@
 
 `mazzalab-server` (and the desktop app, which embeds it) serves this API on
 the HTTP port, 53080 by default. The web UI is an ordinary client of it.
-Times are in seconds, levels in dB. There is no authentication yet: anyone
-who can reach the port can drive the show, as with OSC.
+Times are in seconds, levels in dB. A show without passcodes is open to
+anyone who can reach the port; see [Passcodes](#passcodes).
 
 ## WebSocket: `/ws`
 
@@ -94,6 +94,35 @@ the target container once the cue has been taken out of its old place.
 Errors come back as `{ "error": "…" }` with a 4xx or 5xx status. Media
 endpoints answer 409 for a show that has no file yet, since media lives
 next to the show file.
+
+## Passcodes
+
+The show's `settings.passcodes` is a list of `{ "code", "name"?, "view",
+"control", "edit" }`. While it is empty everyone may do everything. Once it
+has entries, a client on another machine has to give one: as
+`Authorization: Bearer <code>` (or `X-MazzaLab-Passcode`) on HTTP requests,
+and as `?passcode=<code>` on the `/ws` URL (and on URLs a browser cannot add
+a header to, such as `cue-media`). Clients on the server's own machine
+always have full access.
+
+- `view`: read the show, its status and the WebSocket. `control` and `edit`
+  include it.
+- `control`: run the show (GO, start, stop, pause, playheads, panic, MIDI and
+  timecode in).
+- `edit`: change the show and its settings, save, open and create shows. Only
+  clients with `edit` see `passcodes` in snapshots.
+
+`GET /api/access` never needs a passcode. It answers `{ "required", "view",
+"control", "edit" }` for the passcode that came with the request, so a client
+can tell whether to ask the operator for one. A missing or wrong passcode gets
+401, a passcode that does not allow the request 403. On the WebSocket, a
+command the passcode does not allow comes back as a `result` with the error
+`not allowed with this passcode`; the upgrade itself fails with 401 without
+`view`.
+
+The web UI asks for a passcode when `required` is true and `view` is false,
+keeps it per server in the browser, and accepts `&passcode=` on its own URL
+(stage and show-only pages included), taking it off the address bar.
 
 ## Audio settings and routing
 

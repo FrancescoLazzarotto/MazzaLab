@@ -239,7 +239,8 @@ Parità con QLab e poi oltre.
       documentazione pubblica.
 - [ ] Porta OSC in testo semplice (53535), `/udpReplyPort`, indirizzi con
       `/workspace/{id o nome}`, `/alwaysReply`.
-- [ ] Password e permessi (view, edit, control) per OSC e web.
+- [x] Password e permessi (view, edit, control) per OSC e web, con la
+      schermata del codice e i comandi disattivati nell'interfaccia.
 - [ ] **API pubblica documentata** (OpenAPI per HTTP, schema dei messaggi
       WebSocket) e piccoli SDK per JavaScript e Python.
 - [ ] Superfici di controllo: Stream Deck e controller MIDI con
