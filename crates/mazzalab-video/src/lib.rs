@@ -279,6 +279,16 @@ impl Stages {
                 EventKind::Unloaded(cue) => {
                     self.loaded.remove(&cue);
                 }
+                // Another cue fades this one away; the engine stops it after.
+                EventKind::FadingOut { cue, fade } => {
+                    let out = FadeCue {
+                        duration: fade,
+                        curve: FadeCurve::Linear,
+                        opacity: Some(0.0),
+                        ..FadeCue::default()
+                    };
+                    changed |= self.fade(cue, &out, now);
+                }
                 _ => {}
             }
         }
