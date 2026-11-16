@@ -267,3 +267,36 @@ async fn save_copy_then_stop_frees_the_ports() {
         .expect("HTTP port still taken");
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+#[tokio::test]
+async fn cues_start_on_the_osc_address_they_listen_for() {
+    let mut workspace = workspace();
+    workspace.cue_lists[0].cues[0].triggers.osc = Some("/console/scene/*".into());
+    let config = ServerConfig {
+        bind: LOCALHOST,
+        osc_port: 0,
+        udp_reply_port: None,
+        http_port: 0,
+        ..ServerConfig::default()
+    };
+    let server = mazzalab_server::start(config, workspace, |_| Vec::new())
+        .await
+        .unwrap();
+    let client = UdpSocket::bind((LOCALHOST, 0)).await.unwrap();
+    client.connect(server.osc_udp).await.unwrap();
+
+    // Not an address of the show's own: no error, since a cue took it.
+    client
+        .send(&osc("/console/scene/12", vec![OscType::Int(1)]))
+        .await
+        .unwrap();
+    client.send(&osc("/cue/1/isRunning", vec![])).await.unwrap();
+    let reply = udp_reply(&client).await;
+    assert_eq!(reply.addr, "/reply/cue/1/isRunning");
+    assert_eq!(reply_json(&reply)["data"], json!(true));
+
+    // Addresses no cue listens for are still refused.
+    client.send(&osc("/console/fader/1", vec![])).await.unwrap();
+    assert_eq!(reply_json(&udp_reply(&client).await)["status"], "error");
+    server.shutdown();
+}

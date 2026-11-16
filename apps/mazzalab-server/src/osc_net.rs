@@ -26,8 +26,21 @@ async fn process(
     message: &OscMessage,
     session: &mut Session,
 ) -> Option<OscMessage> {
+    // Cues can listen for any address, the show's own included.
+    let triggered = handle.osc_trigger(message.addr.clone()).await;
     let request = match mazzalab_osc::parse_message(message) {
         Ok(request) => request,
+        Err(_) if triggered > 0 => {
+            return session.always_reply.then(|| {
+                Reply {
+                    workspace_id: Some(handle.workspace_id().to_owned()),
+                    address: message.addr.clone(),
+                    status: ReplyStatus::Ok,
+                    data: None,
+                }
+                .to_message()
+            });
+        }
         Err(error) => {
             debug!(address = %message.addr, %error, "rejected OSC message");
             let mut reply = Reply::with_status(message.addr.clone(), ReplyStatus::Error);

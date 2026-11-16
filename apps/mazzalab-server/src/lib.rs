@@ -18,6 +18,7 @@ mod osc_net;
 mod outputs;
 pub mod protocol;
 mod screens;
+mod wall_clock;
 
 use std::io;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};

@@ -200,6 +200,10 @@ enum Request {
         request: mazzalab_osc::Request,
         reply: oneshot::Sender<Option<OscOutcome>>,
     },
+    OscTrigger {
+        address: String,
+        reply: oneshot::Sender<usize>,
+    },
     Snapshot {
         reply: oneshot::Sender<Snapshot>,
     },
@@ -344,6 +348,13 @@ impl ShowHandle {
             .flatten()
     }
 
+    /// Starts the cues whose OSC trigger matches `address`; returns how many.
+    pub async fn osc_trigger(&self, address: String) -> usize {
+        self.ask(|reply| Request::OscTrigger { address, reply })
+            .await
+            .unwrap_or(0)
+    }
+
     pub async fn snapshot(&self) -> Option<Snapshot> {
         self.ask(|reply| Request::Snapshot { reply }).await
     }
@@ -437,6 +448,7 @@ pub fn spawn(
         dmx_recheck: None,
         meters_live: false,
         last_timecode: None,
+        last_wall_clock: None,
         unreadable: HashSet::new(),
         workspace_id: handle.workspace_id.clone(),
     };
@@ -466,6 +478,8 @@ struct Actor {
     meters_live: bool,
     /// The last timecode that came in, as a frame count, and its rate.
     last_timecode: Option<(u64, Rate)>,
+    /// The local time when wall clock triggers were last looked at.
+    last_wall_clock: Option<chrono::NaiveDateTime>,
     /// Media files that could not be probed, so they are not tried again on
     /// every edit.
     unreadable: HashSet<(CueId, PathBuf)>,
@@ -528,6 +542,9 @@ impl Actor {
             }
             Request::Osc { request, reply } => {
                 let _ = reply.send(self.show.handle_osc(&request));
+            }
+            Request::OscTrigger { address, reply } => {
+                let _ = reply.send(self.show.osc_trigger(&address));
             }
             Request::Snapshot { reply } => {
                 let _ = reply.send(self.show.snapshot());
@@ -711,6 +728,31 @@ impl Actor {
         }
     }
 
+    /// Starts the cues whose time of day the clock has just gone past.
+    fn wall_clock(&mut self) {
+        let now = chrono::Local::now().naive_local();
+        let Some(before) = self.last_wall_clock.replace(now) else {
+            return;
+        };
+        let starts: Vec<Command> = self
+            .show
+            .workspace()
+            .cues()
+            .filter(|cue| {
+                cue.triggers
+                    .wall_clock
+                    .as_ref()
+                    .is_some_and(|trigger| crate::wall_clock::passed(trigger, before, now))
+            })
+            .map(|cue| Command::Start { cue: cue.id })
+            .collect();
+        for command in starts {
+            if let Err(error) = self.show.execute(command) {
+                tracing::warn!(%error, "a wall clock trigger could not be carried out");
+            }
+        }
+    }
+
     /// Where relative media paths start from.
     fn media_base(&self) -> PathBuf {
         self.base_dir
@@ -794,6 +836,7 @@ impl Actor {
 
     /// Advances the show, feeds outputs and broadcasts what changed.
     fn sync(&mut self) {
+        self.wall_clock();
         self.advance();
         self.autosave();
         let events = self.show.take_events();
