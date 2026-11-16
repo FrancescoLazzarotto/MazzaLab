@@ -2,7 +2,7 @@ use rosc::OscType;
 use thiserror::Error;
 
 /// An OSC argument reduced to the types the API cares about.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum Arg {
     Int(i64),
     Float(f64),
@@ -55,7 +55,7 @@ impl Arg {
 }
 
 /// Which cue(s) a `/cue/...` message addresses.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum CueSelector {
     /// A cue number; may contain OSC wildcards such as `*`.
     Number(String),
@@ -66,7 +66,7 @@ pub enum CueSelector {
     Playhead,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum PropertyOp {
     Get,
     Set(Arg),
@@ -74,7 +74,7 @@ pub enum PropertyOp {
     Subtract(Arg),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum CueMethod {
     Start,
     Stop,
@@ -94,7 +94,7 @@ pub enum CueMethod {
     },
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum Command {
     /// `/go`, or `/go/{cue_number}` to set the playhead and GO.
     Go {
@@ -133,7 +133,7 @@ pub enum Command {
 }
 
 /// A parsed message: an optional workspace address plus the command.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Request {
     /// Id or name from a `/workspace/{id}/...` prefix; `None` addresses
     /// every workspace listening on the port.
