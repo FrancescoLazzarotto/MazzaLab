@@ -242,8 +242,51 @@ pub struct Cue {
     pub target: Option<CueId>,
     #[serde(default, skip_serializing_if = "Triggers::is_empty")]
     pub triggers: Triggers,
+    /// What the cue does to the other sounds and pictures playing when its
+    /// action starts: fade them out and stop them, or duck them while it
+    /// plays.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub others: Option<Others>,
     #[serde(flatten)]
     pub kind: CueKind,
+}
+
+/// "Fade and stop others" or "duck others", set on a cue.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Others {
+    pub action: OthersAction,
+    #[serde(default)]
+    pub scope: OthersScope,
+    /// How long the others take to fade out, or to go down and come back.
+    #[serde(default, with = "seconds")]
+    pub fade: Duration,
+    /// How far ducked cues go down, in dB (a positive number).
+    #[serde(default = "default_duck_db")]
+    pub duck_db: f64,
+}
+
+fn default_duck_db() -> f64 {
+    10.0
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OthersAction {
+    /// The others fade to silence and stop.
+    FadeAndStop,
+    /// The others go down while this cue plays and come back after.
+    Duck,
+}
+
+/// Which other cues are affected.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OthersScope {
+    /// Those in the cue's own list.
+    #[default]
+    List,
+    /// Those in every list.
+    All,
 }
 
 impl Cue {
@@ -263,6 +306,7 @@ impl Cue {
             flagged: false,
             target: None,
             triggers: Triggers::default(),
+            others: None,
             kind,
         }
     }
