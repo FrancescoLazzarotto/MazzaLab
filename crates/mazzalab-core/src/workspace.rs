@@ -103,6 +103,22 @@ pub enum NetworkProtocol {
     PlainUdp,
     /// The message text as it is, over a TCP connection.
     PlainTcp,
+    /// An HTTP GET: the patch's `host` is the base URL, each line of the
+    /// message a path (and query) added to it.
+    HttpGet,
+    /// An HTTP POST: each line is a path, then the body.
+    HttpPost,
+    /// A WebSocket client: `host` is the `ws://` URL, each line a text
+    /// message.
+    #[serde(rename = "websocket")]
+    WebSocket,
+}
+
+impl NetworkProtocol {
+    /// Whether the patch's `host` is a URL (and its port unused).
+    pub fn uses_url(self) -> bool {
+        matches!(self, Self::HttpGet | Self::HttpPost | Self::WebSocket)
+    }
 }
 
 /// A named network destination that Network cues send to.
