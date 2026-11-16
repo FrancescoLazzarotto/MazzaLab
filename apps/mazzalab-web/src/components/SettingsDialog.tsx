@@ -5,6 +5,8 @@ import type {
   AudioSettings,
   DmxOutput,
   DmxProtocol,
+  InputDevice,
+  LtcInput,
   MidiControls,
   MidiPatch,
   NetworkPatch,
@@ -113,7 +115,15 @@ export function SettingsDialog({
               <p className="hint">{t("settings.followHint")}</p>
             </div>
           )}
-          {tab === "audio" && <AudioTab connection={connection} audio={settings.audio ?? {}} onChange={(audio) => set({ audio })} />}
+          {tab === "audio" && (
+            <AudioTab
+              connection={connection}
+              audio={settings.audio ?? {}}
+              ltc={settings.ltc_input}
+              onChange={(audio) => set({ audio })}
+              onLtc={(ltc_input) => set({ ltc_input })}
+            />
+          )}
           {tab === "network" && <NetworkTab patches={settings.network_patches ?? []} onChange={(network_patches) => set({ network_patches })} />}
           {tab === "midi" && (
             <MidiTab
@@ -156,11 +166,15 @@ export function SettingsDialog({
 function AudioTab({
   connection,
   audio,
+  ltc,
   onChange,
+  onLtc,
 }: {
   connection: ShowConnection;
   audio: AudioSettings;
+  ltc: LtcInput | undefined;
   onChange: (audio: AudioSettings) => void;
+  onLtc: (ltc: LtcInput | undefined) => void;
 }) {
   const { t } = useI18n();
   const [info, setInfo] = useState<AudioInfo | null>(null);
@@ -260,6 +274,7 @@ function AudioTab({
         )}
       </div>
       <p className="hint">{t("settings.audioHint")}</p>
+      <LtcInputFields inputs={info?.inputs ?? []} known={info !== null} ltc={ltc} onChange={onLtc} />
     </div>
   );
 }
@@ -381,6 +396,56 @@ function MidiTab({
         ))}
       </div>
     </div>
+  );
+}
+
+/** The audio input LTC comes in on, and its channel; off when none is chosen. */
+function LtcInputFields({
+  inputs,
+  known,
+  ltc,
+  onChange,
+}: {
+  inputs: InputDevice[];
+  /** Whether the inputs have been listed yet. */
+  known: boolean;
+  ltc: LtcInput | undefined;
+  onChange: (ltc: LtcInput | undefined) => void;
+}) {
+  const { t } = useI18n();
+  // "" is off, "default" the system's default input, anything else a device.
+  const value = ltc === undefined ? "" : (ltc.device ?? "default");
+  const chosen = inputs.find((input) => input.id === ltc?.device) ?? inputs.find((input) => input.is_default);
+  const missing = known && ltc?.device !== undefined && !inputs.some((input) => input.id === ltc.device);
+  const channels = Math.max(1, chosen?.max_channels ?? 2);
+  return (
+    <>
+      <h3>{t("settings.ltcIn")}</h3>
+      <div className="row">
+        <SelectField
+          label={t("settings.ltcDevice")}
+          value={value}
+          options={[
+            { value: "", label: t("settings.ltcOff") },
+            { value: "default", label: t("settings.defaultInput") },
+            ...inputs.map((input) => ({ value: input.id, label: `${input.name} — ${input.max_channels} ch` })),
+            ...(missing ? [{ value: ltc!.device!, label: t("settings.missingDevice") }] : []),
+          ]}
+          onChange={(next) =>
+            onChange(next === "" ? undefined : { device: next === "default" ? undefined : next, channel: Math.min(ltc?.channel ?? 1, channels) })
+          }
+        />
+        {ltc && (
+          <SelectField
+            label={t("settings.ltcChannel")}
+            value={String(ltc.channel ?? 1)}
+            options={Array.from({ length: Math.max(channels, ltc.channel ?? 1) }, (_, index) => ({ value: String(index + 1), label: String(index + 1) }))}
+            onChange={(channel) => onChange({ ...ltc, channel: Number(channel) })}
+          />
+        )}
+      </div>
+      <p className="hint">{t("settings.ltcHint")}</p>
+    </>
   );
 }
 

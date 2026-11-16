@@ -344,6 +344,23 @@ export interface WorkspaceSettings {
   fixture_groups?: FixtureGroup[];
   stages?: Stage[];
   midi_controls?: MidiControls;
+  /** An audio input LTC is read from; absent listens to none. */
+  ltc_input?: LtcInput;
+}
+
+/** Where linear timecode comes in: an input device (absent: the default input) and its channel, from 1. */
+export interface LtcInput {
+  device?: string;
+  channel?: number;
+}
+
+/** An audio input of the machine the server runs on. */
+export interface InputDevice {
+  id: string;
+  name: string;
+  host: string;
+  is_default: boolean;
+  max_channels: number;
 }
 
 export interface Workspace {
@@ -410,6 +427,7 @@ export interface OutputDevice {
 export interface AudioInfo {
   status: AudioStatus | null;
   devices: OutputDevice[];
+  inputs?: InputDevice[];
 }
 
 /** The MIDI ports of the machine the server runs on. */
