@@ -527,5 +527,6 @@
   "network.hint.plain_tcp": "Un messaggio per riga; \\n, \\r, \\t e \\xHH sono escape.",
   "network.hint.http_get": "Una richiesta per riga: un percorso (e query) aggiunto all'URL della patch.",
   "network.hint.http_post": "Una richiesta per riga: un percorso, poi il corpo (il JSON parte come JSON).",
-  "network.hint.websocket": "Un messaggio di testo per riga, su una connessione tenuta aperta."
+  "network.hint.websocket": "Un messaggio di testo per riga, su una connessione tenuta aperta.",
+  "settings.dmxSync": "Sync"
 }

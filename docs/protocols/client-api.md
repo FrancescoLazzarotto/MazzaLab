@@ -141,13 +141,30 @@ the cue; `level_db` and `matrix` can be changed while the cue plays.
 
 `workspace.settings.network_patches` lists the devices Network cues send
 to: `name`, `host`, `port` and `protocol` (`osc_udp`, `osc_tcp` with SLIP
-framing, `plain_udp`, `plain_tcp`). A Network cue names a patch, or uses
-the first one. Each non-empty line of its `message` is one message:
+framing, `plain_udp`, `plain_tcp`, `http_get`, `http_post`, `websocket`). For
+the last three `host` is the URL (`http://10.0.0.5:8080/api`, `ws://...`; a
+URL without a scheme is taken as `http://` or `ws://`) and `port` is not
+used. A Network cue names a patch, or uses the first one. Each non-empty
+line of its `message` is one message:
 
 - OSC: `/address arg arg …` — whole numbers are integers, numbers with a
   decimal point floats, `true` / `false` booleans, anything else (or
   anything in double quotes) a string;
-- plain: the text as bytes, with `\n`, `\r`, `\t`, `\\` and `\xHH` escapes.
+- plain: the text as bytes, with `\n`, `\r`, `\t`, `\\` and `\xHH` escapes;
+- `http_get`: a path (and query) added to the URL: `/scene/2?fade=1`;
+- `http_post`: a path, then the body: `/scene {"id": 2}` (a body starting with
+  `{` or `[` goes as `application/json`, else `text/plain`);
+- `websocket`: the text of one message, sent on a connection that is kept
+  open.
+
+HTTP is plain `http://` only: there is no TLS. A status of 400 or more is
+reported as a notice.
+
+**Fading values.** In an OSC message, an argument written `from>to`
+(`/fader/1 0.0>1.0`, `/level 0>100`) moves between the two numbers over the
+cue's `duration`, linearly, at about thirty messages a second, ending exactly on
+`to`; whole numbers on both ends stay whole. With no duration the arguments
+send `to` at once. Stopping the cue stops the fade where it got to.
 
 ## MIDI patches
 
@@ -292,7 +309,10 @@ Next to a show file, the `backups` folder holds:
 goes: `universe` (counted from 1, as cues name it), `protocol` (`art_net`
 or `sacn`), `host` (an address, optionally with a port; empty broadcasts
 Art-Net and uses the multicast group for sACN) and `net_universe`, the
-number on the wire (Art-Net counts from 0, sACN from 1).
+number on the wire (Art-Net counts from 0, sACN from 1). With `sync: true`
+an output's frames are released together: an ArtSync packet follows the
+frames (Art-Net), or the sACN data packets name sync universe 63999 and an
+E1.31 sync packet for it follows once every output's frame is out.
 
 `workspace.settings.fixtures` is the rig: each fixture has a `name`, a
 `universe` (1 if absent), the first `address` it takes and `parameters`,

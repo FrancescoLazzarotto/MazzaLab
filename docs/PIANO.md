@@ -268,8 +268,9 @@ Parità con QLab e poi oltre.
       di un ingresso audio, col frame rate riconosciuto dal segnale.
       Mancano l'inseguimento con freewheel e i comportamenti di partenza
       e arresto (skip, lookback, start all...).
-- [ ] Network cue che inviano davvero: OSC su UDP e TCP, UDP e TCP semplici
-      (fatto). Mancano HTTP, WebSocket e il fade dei valori OSC.
+- [x] Network cue che inviano davvero: OSC su UDP e TCP, UDP e TCP semplici,
+      HTTP (GET e POST, senza TLS), WebSocket, e il fade dei valori OSC
+      (`0.0>1.0` nella durata del cue).
 - [ ] **Schema aperto e versionato** per le descrizioni dei dispositivi
       (JSON Schema), con editor nell'interfaccia.
 - [ ] Libreria iniziale di dispositivi (mixer, media server, PTZ,
@@ -277,8 +278,8 @@ Parità con QLab e poi oltre.
 
 ## Fase 5 — Luci (XL)
 
-- [ ] Uscita Art-Net e sACN (E1.31) con priorità: fatta, per universo e
-      con indirizzo del nodo. Manca la sincronizzazione.
+- [x] Uscita Art-Net e sACN (E1.31) con priorità, per universo e con indirizzo
+      del nodo, con sincronizzazione (ArtSync; universo di sync 63999 per sACN).
 - [ ] Interfacce DMX USB (Enttec Open e Pro, DMXking) via `serialport`.
 - [ ] RDM: scoperta e indirizzamento delle fixture dalla rete.
 - [ ] Patch delle fixture con import di **GDTF** e della **Open Fixture
@@ -420,8 +421,8 @@ Voci ancora aperte qui sopra di cui esiste già un pezzo:
 - **Impostazioni dello show**: nome, doppio GO, panic, audio, patch di
   rete. Mancano i cue di apertura e chiusura.
 - **Modalità show/edit**: c'è il blocco delle modifiche, senza password.
-- **Network cue**: OSC su UDP e TCP, testo su UDP e TCP. Mancano HTTP,
-  WebSocket e i fade dei valori OSC.
+- **Network cue**: OSC su UDP e TCP, testo su UDP e TCP, HTTP, WebSocket e
+  i fade dei valori OSC. L'HTTP è solo in chiaro (niente TLS).
 - **Luci**: uscita Art-Net e sACN (unicast, broadcast o multicast), Light
   cue con comandi in stile console (`1 thru 10 @ 50`, `2/7 @ full`,
   `all @ out`) e tempo di fade, i look si sommano come su una console

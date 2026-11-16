@@ -653,6 +653,7 @@ function LightsTab({ outputs, onChange }: { outputs: DmxOutput[]; onChange: (out
               min={protocol === "sacn" ? 1 : 0}
               onCommit={(net_universe) => update(index, { net_universe: Math.round(net_universe) })}
             />
+            <CheckField label={t("settings.dmxSync")} checked={output.sync ?? false} onChange={(sync) => update(index, { sync: sync || undefined })} />
             <button className="icon-button quiet" title={t("action.delete")} onClick={() => onChange(outputs.filter((_, position) => position !== index))}>
               <Icon name="trash" size={14} />
             </button>

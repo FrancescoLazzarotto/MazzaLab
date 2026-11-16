@@ -330,6 +330,8 @@ export interface DmxOutput {
   host?: string;
   /** The universe on the wire: Art-Net counts from 0, sACN from 1. */
   net_universe: number;
+  /** Release every frame together with ArtSync (Art-Net), or a sync packet on universe 63999 (sACN). */
+  sync?: boolean;
 }
 
 /** A light in the rig, which light cues call by its name. */
