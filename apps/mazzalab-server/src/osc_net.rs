@@ -33,7 +33,7 @@ async fn process(
         Err(_) if triggered > 0 => {
             return session.always_reply.then(|| {
                 Reply {
-                    workspace_id: Some(handle.workspace_id().to_owned()),
+                    workspace_id: Some(handle.workspace_id().to_string()),
                     address: message.addr.clone(),
                     status: ReplyStatus::Ok,
                     data: None,
@@ -60,7 +60,7 @@ async fn process(
         force || outcome.is_query || outcome.status != ReplyStatus::Ok || session.always_reply;
     send.then(|| {
         Reply {
-            workspace_id: Some(handle.workspace_id().to_owned()),
+            workspace_id: Some(handle.workspace_id().to_string()),
             address: message.addr.clone(),
             status: outcome.status,
             data: outcome.data,

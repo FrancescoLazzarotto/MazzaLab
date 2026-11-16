@@ -96,6 +96,17 @@ impl AudioBackend {
         }
     }
 
+    /// Relative media paths start from `base_dir` from now on.
+    fn set_base_dir(&mut self, base_dir: &Path) {
+        self.base_dir = base_dir.to_path_buf();
+        if let Some(output) = &mut self.output {
+            output.set_base_dir(base_dir);
+        }
+        if let Some((_, audition)) = &mut self.audition {
+            audition.set_base_dir(base_dir);
+        }
+    }
+
     /// The audition output for `device`, opened or reopened as needed.
     fn audition_output(&mut self, device: &Option<String>) -> Option<&mut AudioOutput> {
         if self
@@ -163,6 +174,10 @@ impl AudioBackend {
 }
 
 impl Output for AudioBackend {
+    fn rebase(&mut self, base: &Path) {
+        self.set_base_dir(base);
+    }
+
     fn handle(&mut self, show: &Show, events: &[Event]) {
         let workspace = show.workspace();
         // A panic silences everything, what is being auditioned included.

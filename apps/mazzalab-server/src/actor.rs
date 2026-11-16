@@ -4,10 +4,10 @@
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, PoisonError, RwLock};
 use std::time::Duration;
 
-use mazzalab_core::{AudioCue, CueId, CueKind, SmpteFormat};
+use mazzalab_core::{AudioCue, CueId, CueKind, SmpteFormat, Workspace};
 use mazzalab_engine::{Event, EventKind};
 use mazzalab_midi::MidiEvent;
 use mazzalab_show::{Command, OscOutcome, Show, Snapshot, Status};
@@ -37,6 +37,10 @@ pub trait Output: Send {
     /// Called once at start and then whenever the show's structure or
     /// settings change, so the backend can follow edits made while it runs.
     fn sync(&mut self, _show: &Show) {}
+
+    /// Relative media paths start from `base` from now on: another show
+    /// was opened, or the show was saved somewhere else.
+    fn rebase(&mut self, _base: &Path) {}
 
     /// Peak level in dBFS of every audio output channel since the last call.
     fn meters(&mut self) -> Option<Vec<f32>> {
@@ -247,6 +251,34 @@ enum Request {
         cue: Option<CueId>,
         reply: oneshot::Sender<Result<(), String>>,
     },
+    Open {
+        workspace: Box<Workspace>,
+        path: Option<PathBuf>,
+        recovered: bool,
+        reply: oneshot::Sender<()>,
+    },
+    SaveAs {
+        path: PathBuf,
+        reply: oneshot::Sender<Result<(), String>>,
+    },
+}
+
+/// What tells the open show apart, which changes when another is opened.
+#[derive(Debug)]
+struct Identity {
+    workspace_id: Arc<str>,
+    path: Option<Arc<Path>>,
+    base_dir: Option<Arc<Path>>,
+}
+
+impl Identity {
+    fn new(workspace: &Workspace, path: Option<&Path>) -> Self {
+        Self {
+            workspace_id: workspace.id.to_string().into(),
+            path: path.map(|path| Arc::from(absolute(path).unwrap_or_else(|| path.to_path_buf()))),
+            base_dir: path.and_then(folder).map(Arc::from),
+        }
+    }
 }
 
 const GONE: &str = "the show is no longer running";
@@ -255,19 +287,51 @@ const GONE: &str = "the show is no longer running";
 pub struct ShowHandle {
     requests: mpsc::Sender<Request>,
     updates: broadcast::Sender<Update>,
-    workspace_id: Arc<str>,
-    base_dir: Option<Arc<Path>>,
+    identity: Arc<RwLock<Identity>>,
 }
 
 impl ShowHandle {
-    pub fn workspace_id(&self) -> &str {
-        &self.workspace_id
+    /// The id of the open show's workspace.
+    pub fn workspace_id(&self) -> Arc<str> {
+        Arc::clone(&self.identity().workspace_id)
     }
 
     /// The folder of the show file, which relative media paths start from.
     /// `None` for a show that has no file.
-    pub fn base_dir(&self) -> Option<&Path> {
-        self.base_dir.as_deref()
+    pub fn base_dir(&self) -> Option<Arc<Path>> {
+        self.identity().base_dir.clone()
+    }
+
+    /// The open show's file, if it has one.
+    pub fn path(&self) -> Option<Arc<Path>> {
+        self.identity().path.clone()
+    }
+
+    fn identity(&self) -> std::sync::RwLockReadGuard<'_, Identity> {
+        self.identity.read().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// Replaces the running show with `workspace`, read from `path`, on the
+    /// same sockets: clients stay connected and see the new show. Whatever
+    /// was running stops at once, as with a reset. `recovered` says the
+    /// workspace holds unsaved changes from an autosave.
+    pub async fn open(&self, workspace: Workspace, path: Option<PathBuf>, recovered: bool) {
+        self.ask(|reply| Request::Open {
+            workspace: Box::new(workspace),
+            path,
+            recovered,
+            reply,
+        })
+        .await;
+    }
+
+    /// Saves the show to another file, which becomes the show's file.
+    /// Nothing stops: relative media paths are rewritten to start from the
+    /// new folder, and the old file keeps its last saved state.
+    pub async fn save_as(&self, path: PathBuf) -> Result<(), String> {
+        self.ask(|reply| Request::SaveAs { path, reply })
+            .await
+            .unwrap_or_else(|| Err(GONE.to_owned()))
     }
 
     /// The state of the audio output, if the show has one.
@@ -422,12 +486,11 @@ pub fn spawn(
         midi: midi_tx,
         timecode: timecode_tx,
     });
-    let base_dir: Option<Arc<Path>> = path.as_deref().and_then(folder).map(Arc::from);
+    let identity = Arc::new(RwLock::new(Identity::new(show.workspace(), path.as_deref())));
     let handle = ShowHandle {
         requests,
         updates: updates.clone(),
-        workspace_id: show.workspace().id.to_string().into(),
-        base_dir: base_dir.clone(),
+        identity: Arc::clone(&identity),
     };
     let show_revision = show.revision();
     let actor = Actor {
@@ -439,7 +502,7 @@ pub fn spawn(
         // Recovered changes are already in the autosave they came from.
         autosaved: show_revision,
         autosave_due: None,
-        base_dir,
+        identity,
         outputs,
         updates,
         last_revision: None,
@@ -450,7 +513,6 @@ pub fn spawn(
         last_timecode: None,
         last_wall_clock: None,
         unreadable: HashSet::new(),
-        workspace_id: handle.workspace_id.clone(),
     };
     let task = tokio::spawn(actor.run(receiver, finished_rx, notices_rx, midi_rx, timecode_rx));
     (handle, task)
@@ -466,7 +528,8 @@ struct Actor {
     autosaved: u64,
     /// When the changes made since then are written.
     autosave_due: Option<Instant>,
-    base_dir: Option<Arc<Path>>,
+    /// Shared with every [`ShowHandle`].
+    identity: Arc<RwLock<Identity>>,
     outputs: Vec<Box<dyn Output>>,
     updates: broadcast::Sender<Update>,
     last_revision: Option<u64>,
@@ -483,7 +546,6 @@ struct Actor {
     /// Media files that could not be probed, so they are not tried again on
     /// every edit.
     unreadable: HashSet<(CueId, PathBuf)>,
-    workspace_id: Arc<str>,
 }
 
 impl Actor {
@@ -495,6 +557,10 @@ impl Actor {
         mut midi: mpsc::UnboundedReceiver<MidiEvent>,
         mut timecode: mpsc::UnboundedReceiver<(Timecode, Rate)>,
     ) {
+        let base = self.media_base();
+        for output in &mut self.outputs {
+            output.rebase(&base);
+        }
         loop {
             self.sync();
             let wake = self.next_wake();
@@ -635,6 +701,18 @@ impl Actor {
                     .find_map(|output| output.dmx_levels(true));
                 let _ = reply.send(levels);
             }
+            Request::Open {
+                workspace,
+                path,
+                recovered,
+                reply,
+            } => {
+                self.open(*workspace, path, recovered);
+                let _ = reply.send(());
+            }
+            Request::SaveAs { path, reply } => {
+                let _ = reply.send(self.save_as(path));
+            }
             Request::CueFile { cue, reply } => {
                 let file = self
                     .show
@@ -753,9 +831,94 @@ impl Actor {
         }
     }
 
+    /// Puts another show in place of the running one. The old one is
+    /// reset first and the outputs hear about it, so sound, light and
+    /// pictures stop before the new show is there.
+    fn open(&mut self, workspace: Workspace, path: Option<PathBuf>, recovered: bool) {
+        if let Some(audition) = self.last_audio.as_ref().and_then(|audio| audio.audition) {
+            tracing::debug!(%audition, "audition stopped by opening another show");
+            for output in &mut self.outputs {
+                output.audition(&self.show, None);
+            }
+        }
+        let _ = self.show.execute(Command::Reset);
+        let events = self.show.take_events();
+        if !events.is_empty() {
+            for output in &mut self.outputs {
+                output.handle(&self.show, &events);
+            }
+            let dtos: Vec<EventDto> = events.iter().map(EventDto::from).collect();
+            let _ = self.updates.send(Update::Events(Arc::new(dtos)));
+        }
+
+        let name = workspace.name.clone();
+        *self.identity_mut() = Identity::new(&workspace, path.as_deref());
+        self.show = if recovered {
+            Show::recovered(workspace)
+        } else {
+            Show::new(workspace)
+        };
+        // The new show's clock starts now; nothing of the old one carries on.
+        self.start = Instant::now();
+        self.path = path;
+        self.autosaved = self.show.revision();
+        self.autosave_due = None;
+        self.last_revision = None;
+        self.last_status = None;
+        self.last_timecode = None;
+        self.unreadable.clear();
+        let base = self.media_base();
+        for output in &mut self.outputs {
+            output.rebase(&base);
+        }
+        tracing::info!(show = %name, path = ?self.path, "show opened");
+        let _ = self.updates.send(Update::Notice(Arc::new(Notice {
+            level: NoticeLevel::Info,
+            message: format!("Opened “{name}”"),
+        })));
+    }
+
+    /// Writes the show to `path`, which becomes its file, without stopping
+    /// anything.
+    fn save_as(&mut self, path: PathBuf) -> Result<(), String> {
+        let to = folder(&path).ok_or_else(|| format!("no folder for {}", path.display()))?;
+        let from = absolute(&self.media_base()).unwrap_or_else(|| self.media_base());
+        let mut workspace = self.show.workspace().clone();
+        mazzalab_project::rebase_media(&mut workspace, &from, &to);
+        mazzalab_project::save_with_backups(&path, &workspace, self.backups)
+            .map_err(|error| error.to_string())?;
+        self.show
+            .rewrite_all(|workspace| mazzalab_project::rebase_media(workspace, &from, &to));
+        self.show.mark_saved();
+        if let Some(old) = &self.path {
+            // The old file keeps its saved state; its unsaved changes moved.
+            mazzalab_project::discard_autosave(old);
+        }
+        mazzalab_project::discard_autosave(&path);
+        *self.identity_mut() = Identity::new(self.show.workspace(), Some(&path));
+        self.path = Some(path);
+        self.autosaved = self.show.revision();
+        self.autosave_due = None;
+        for output in &mut self.outputs {
+            output.rebase(&to);
+        }
+        Ok(())
+    }
+
+    fn identity_mut(&self) -> std::sync::RwLockWriteGuard<'_, Identity> {
+        self.identity.write().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    fn workspace_id(&self) -> Arc<str> {
+        Arc::clone(&self.identity.read().unwrap_or_else(PoisonError::into_inner).workspace_id)
+    }
+
     /// Where relative media paths start from.
     fn media_base(&self) -> PathBuf {
-        self.base_dir
+        self.identity
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .base_dir
             .as_deref()
             .map_or_else(|| PathBuf::from("."), Path::to_path_buf)
     }
@@ -867,7 +1030,7 @@ impl Actor {
             let _ = self
                 .updates
                 .send(Update::Snapshot(Arc::new(self.show.snapshot())));
-            let address = format!("/update/workspace/{}", self.workspace_id);
+            let address = format!("/update/workspace/{}", self.workspace_id());
             let _ = self
                 .updates
                 .send(Update::Osc(Arc::new(vec![message(address, None)])));
@@ -987,7 +1150,7 @@ impl Actor {
     }
 
     fn cue_updates(&self, events: &[Event]) -> Vec<OscMessage> {
-        let workspace = &self.workspace_id;
+        let workspace = self.workspace_id();
         let mut cues = Vec::new();
         let mut messages = Vec::new();
         for event in events {
