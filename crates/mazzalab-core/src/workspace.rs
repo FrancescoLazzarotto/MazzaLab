@@ -184,6 +184,12 @@ pub struct DmxOutput {
     pub host: String,
     /// The universe number on the wire: Art-Net counts from 0, sACN from 1.
     pub net_universe: u16,
+    /// Hold every frame until all the outputs' frames are out and then
+    /// release them together: ArtSync for Art-Net, a sync packet on a
+    /// sync universe for sACN. Nodes and receivers that do not know
+    /// synchronization just show each frame as it comes.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub sync: bool,
 }
 
 /// A light in the rig, which Light cues call by its name.

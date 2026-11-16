@@ -18,7 +18,10 @@ mod rig;
 mod sender;
 
 pub use command::{Assignment, LightError, Patch, Slot, parse_command};
-pub use protocol::{ARTNET_PORT, SACN_PORT, artnet_dmx, sacn_data, sacn_multicast};
+pub use protocol::{
+    ARTNET_PORT, SACN_PORT, SACN_SYNC_UNIVERSE, artnet_dmx, artnet_sync, sacn_data, sacn_multicast,
+    sacn_sync,
+};
 pub use rig::Rig;
 pub use sender::{Levels, Sender};
 

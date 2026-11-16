@@ -48,6 +48,7 @@ async fn light_cues_fade_dmx_out_and_report_what_they_cannot_read() {
         protocol: DmxProtocol::ArtNet,
         host: format!("127.0.0.1:{}", node.local_addr().unwrap().port()),
         net_universe: 0,
+        sync: false,
     }];
     workspace.cue_lists[0].cues = vec![
         light("1", &["1 thru 3 @ full", "", "10 @ 50"], 0.0),
@@ -138,6 +139,7 @@ async fn light_cues_call_fixtures_and_groups_of_the_show_patch() {
         protocol: DmxProtocol::ArtNet,
         host: format!("127.0.0.1:{}", node.local_addr().unwrap().port()),
         net_universe: 0,
+        sync: false,
     }];
     workspace.settings.fixtures = vec![
         Fixture::dimmer("Front left", 1, 1),

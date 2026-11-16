@@ -9,7 +9,10 @@ use std::time::{Duration, Instant};
 use mazzalab_core::{DmxOutput, DmxProtocol};
 
 use crate::command::{Assignment, Slot};
-use crate::protocol::{ARTNET_PORT, SACN_PORT, artnet_dmx, sacn_data, sacn_multicast};
+use crate::protocol::{
+    ARTNET_PORT, SACN_PORT, SACN_SYNC_UNIVERSE, artnet_dmx, artnet_sync, sacn_data, sacn_multicast,
+    sacn_sync,
+};
 use crate::rig::Rig;
 
 /// How often levels are sent while they are moving.
@@ -184,6 +187,9 @@ impl Worker {
 
     fn send(&mut self) {
         self.sequence = self.sequence.wrapping_add(1);
+        // Where synchronization packets go, once each, after every frame is out.
+        let mut artnet_sync_to: Vec<SocketAddr> = Vec::new();
+        let mut sacn_sync_to: Vec<SocketAddr> = Vec::new();
         for (index, output) in self.outputs.iter().enumerate() {
             let frame = self.rig.frame(output.universe);
             let packet = match output.protocol {
@@ -194,6 +200,7 @@ impl Worker {
                     output.net_universe,
                     self.sequence,
                     SACN_PRIORITY,
+                    if output.sync { SACN_SYNC_UNIVERSE } else { 0 },
                     &frame,
                 ),
             };
@@ -202,6 +209,27 @@ impl Worker {
                     .send_to(&packet, address)
                     .map_err(|error| error.to_string())
             });
+            if output.sync
+                && let Ok(address) = destination(output)
+            {
+                match output.protocol {
+                    DmxProtocol::ArtNet if !artnet_sync_to.contains(&address) => {
+                        artnet_sync_to.push(address)
+                    }
+                    // sACN synchronization is multicast: to the group, unless the output is unicast.
+                    DmxProtocol::Sacn => {
+                        let to = if output.host.trim().is_empty() {
+                            SocketAddr::from((sacn_multicast(SACN_SYNC_UNIVERSE), SACN_PORT))
+                        } else {
+                            address
+                        };
+                        if !sacn_sync_to.contains(&to) {
+                            sacn_sync_to.push(to);
+                        }
+                    }
+                    DmxProtocol::ArtNet => {}
+                }
+            }
             match sent {
                 Ok(_) => {
                     self.failed.remove(&index);
@@ -213,6 +241,15 @@ impl Worker {
                     }
                 }
             }
+        }
+        for address in artnet_sync_to {
+            let _ = self.socket.send_to(&artnet_sync(), address);
+        }
+        for address in sacn_sync_to {
+            let _ = self.socket.send_to(
+                &sacn_sync(self.cid, self.sequence, SACN_SYNC_UNIVERSE),
+                address,
+            );
         }
     }
 }
@@ -228,6 +265,7 @@ mod tests {
             protocol,
             host: format!("127.0.0.1:{port}"),
             net_universe,
+            sync: false,
         }
     }
 
@@ -259,6 +297,7 @@ mod tests {
             protocol: DmxProtocol::ArtNet,
             host: host.into(),
             net_universe: 0,
+            sync: false,
         };
         assert_eq!(
             destination(&artnet("")).unwrap().to_string(),
@@ -277,6 +316,7 @@ mod tests {
             protocol: DmxProtocol::Sacn,
             host: String::new(),
             net_universe: 3,
+            sync: false,
         };
         assert_eq!(destination(&sacn).unwrap().to_string(), "239.255.0.3:5568");
     }
@@ -327,6 +367,54 @@ mod tests {
     }
 
     #[test]
+    fn outputs_with_sync_follow_their_frames_with_a_sync_packet() {
+        let (artnet, artnet_port) = receiver();
+        let (sacn, sacn_port) = receiver();
+        let sender = Sender::new(|_, _| {}).unwrap();
+        let mut art = output(DmxProtocol::ArtNet, 1, 0, artnet_port);
+        art.sync = true;
+        let mut acn = output(DmxProtocol::Sacn, 2, 7, sacn_port);
+        acn.sync = true;
+        sender.set_outputs(vec![art, acn]);
+        sender.apply(vec![parse_command("1 @ full").unwrap()], Duration::ZERO);
+
+        // ArtDmx first, then ArtSync, which carries the Art-Net sync opcode.
+        let mut order = Vec::new();
+        let mut buffer = [0_u8; 1024];
+        while order.len() < 2 {
+            let (length, _) = artnet.recv_from(&mut buffer).expect("no Art-Net packet");
+            order.push(buffer[8..10].to_vec());
+            assert!(length == 530 || length == 14);
+        }
+        assert_eq!(order, vec![vec![0x00, 0x50], vec![0x00, 0x52]]);
+
+        // sACN data names the sync universe, and a sync packet follows.
+        let data = wait_for(&sacn, |packet| packet.len() == 638);
+        assert_eq!(data[109..111], SACN_SYNC_UNIVERSE.to_be_bytes());
+        let sync = wait_for(&sacn, |packet| packet.len() == 49);
+        assert_eq!(sync[40..44], [0, 0, 0, 1]);
+        assert_eq!(sync[45..47], SACN_SYNC_UNIVERSE.to_be_bytes());
+    }
+
+    #[test]
+    fn outputs_without_sync_send_no_sync_packets() {
+        let (artnet, artnet_port) = receiver();
+        let sender = Sender::new(|_, _| {}).unwrap();
+        sender.set_outputs(vec![output(DmxProtocol::ArtNet, 1, 0, artnet_port)]);
+        sender.apply(vec![parse_command("1 @ full").unwrap()], Duration::ZERO);
+        let mut buffer = [0_u8; 1024];
+        artnet
+            .set_read_timeout(Some(Duration::from_millis(500)))
+            .unwrap();
+        let (length, _) = artnet.recv_from(&mut buffer).unwrap();
+        assert_eq!(length, 530);
+        assert!(
+            artnet.recv_from(&mut buffer).is_err(),
+            "something more came"
+        );
+    }
+
+    #[test]
     fn an_unreachable_output_is_reported_once() {
         let (errors_tx, errors) = mpsc::channel();
         let sender = Sender::new(move |output, error| {
@@ -338,6 +426,7 @@ mod tests {
             protocol: DmxProtocol::ArtNet,
             host: "no such host.invalid".into(),
             net_universe: 0,
+            sync: false,
         }]);
         sender.apply(vec![parse_command("4/1 @ full").unwrap()], Duration::ZERO);
         let (universe, _) = errors.recv_timeout(Duration::from_secs(30)).unwrap();

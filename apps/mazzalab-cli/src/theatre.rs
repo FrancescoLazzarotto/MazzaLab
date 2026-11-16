@@ -85,6 +85,7 @@ pub fn show() -> Workspace {
         protocol: DmxProtocol::ArtNet,
         host: String::new(),
         net_universe: 0,
+        sync: false,
     }];
     settings.network_patches = vec![NetworkPatch {
         name: "Sound desk".into(),

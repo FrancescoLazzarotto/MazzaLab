@@ -24,6 +24,43 @@ pub fn artnet_dmx(universe: u16, sequence: u8, data: &[u8; UNIVERSE_SIZE]) -> Ve
     packet
 }
 
+/// The universe sACN sync packets go out on, and that data packets of an
+/// output with sync on name as theirs: the last one the standard allows.
+pub const SACN_SYNC_UNIVERSE: u16 = 63_999;
+
+/// An ArtSync packet: nodes that have received ArtDmx since the last one
+/// show what they were sent, all at once.
+pub fn artnet_sync() -> Vec<u8> {
+    let mut packet = Vec::with_capacity(14);
+    packet.extend_from_slice(b"Art-Net\0");
+    packet.extend_from_slice(&0x5200_u16.to_le_bytes()); // OpSync
+    packet.extend_from_slice(&14_u16.to_be_bytes()); // protocol version
+    packet.extend_from_slice(&[0, 0]); // aux, unused
+    packet
+}
+
+/// An E1.31 synchronization packet: receivers of data packets that name
+/// `sync_universe` as their synchronization address show them now.
+pub fn sacn_sync(cid: [u8; 16], sequence: u8, sync_universe: u16) -> Vec<u8> {
+    const TOTAL: usize = 49;
+    let mut packet = Vec::with_capacity(TOTAL);
+    // Root layer.
+    packet.extend_from_slice(&0x0010_u16.to_be_bytes());
+    packet.extend_from_slice(&0x0000_u16.to_be_bytes());
+    packet.extend_from_slice(b"ASC-E1.17\0\0\0");
+    packet.extend_from_slice(&flags_and_length(TOTAL - 16));
+    packet.extend_from_slice(&0x0000_0008_u32.to_be_bytes()); // E1.31 extended
+    packet.extend_from_slice(&cid);
+    // Framing layer.
+    packet.extend_from_slice(&flags_and_length(TOTAL - 38));
+    packet.extend_from_slice(&0x0000_0001_u32.to_be_bytes()); // synchronization
+    packet.push(sequence);
+    packet.extend_from_slice(&sync_universe.to_be_bytes());
+    packet.extend_from_slice(&0_u16.to_be_bytes()); // reserved
+    debug_assert_eq!(packet.len(), TOTAL);
+    packet
+}
+
 /// The multicast group sACN receivers of a universe listen on.
 pub fn sacn_multicast(universe: u16) -> Ipv4Addr {
     let [high, low] = universe.to_be_bytes();
@@ -37,12 +74,15 @@ fn flags_and_length(length: usize) -> [u8; 2] {
 
 /// An E1.31 data packet carrying one universe (which counts from 1).
 /// `cid` identifies the sender and must stay the same for its lifetime.
+/// With a `sync_universe` other than 0 the receiver holds the data until a
+/// [`sacn_sync`] packet for that universe arrives.
 pub fn sacn_data(
     cid: [u8; 16],
     source_name: &str,
     universe: u16,
     sequence: u8,
     priority: u8,
+    sync_universe: u16,
     data: &[u8; UNIVERSE_SIZE],
 ) -> Vec<u8> {
     const TOTAL: usize = 126 + UNIVERSE_SIZE;
@@ -66,7 +106,7 @@ pub fn sacn_data(
     name[..end].copy_from_slice(&source_name.as_bytes()[..end]);
     packet.extend_from_slice(&name);
     packet.push(priority.min(200));
-    packet.extend_from_slice(&0_u16.to_be_bytes()); // no synchronization
+    packet.extend_from_slice(&sync_universe.to_be_bytes());
     packet.push(sequence);
     packet.push(0); // options
     packet.extend_from_slice(&universe.to_be_bytes());
@@ -108,7 +148,7 @@ mod tests {
     #[test]
     fn sacn_packet_layout() {
         let cid = [0xAB; 16];
-        let packet = sacn_data(cid, "MazzaLab", 258, 9, 100, &ramp());
+        let packet = sacn_data(cid, "MazzaLab", 258, 9, 100, 0, &ramp());
         assert_eq!(packet.len(), 638);
         assert_eq!(packet[..4], [0x00, 0x10, 0x00, 0x00]);
         assert_eq!(&packet[4..16], b"ASC-E1.17\0\0\0");
@@ -131,12 +171,55 @@ mod tests {
     }
 
     #[test]
+    fn sacn_data_can_name_a_sync_universe() {
+        let packet = sacn_data(
+            [0; 16],
+            "MazzaLab",
+            1,
+            0,
+            100,
+            SACN_SYNC_UNIVERSE,
+            &[0; UNIVERSE_SIZE],
+        );
+        assert_eq!(packet[109..111], SACN_SYNC_UNIVERSE.to_be_bytes());
+        let plain = sacn_data([0; 16], "MazzaLab", 1, 0, 100, 0, &[0; UNIVERSE_SIZE]);
+        assert_eq!(plain[109..111], [0, 0]);
+    }
+
+    #[test]
+    fn artnet_sync_packet_layout() {
+        let packet = artnet_sync();
+        assert_eq!(packet.len(), 14);
+        assert_eq!(&packet[..8], b"Art-Net\0");
+        assert_eq!(packet[8..10], [0x00, 0x52]); // OpSync, low byte first
+        assert_eq!(packet[10..12], [0, 14]);
+        assert_eq!(packet[12..], [0, 0]);
+    }
+
+    #[test]
+    fn sacn_sync_packet_layout() {
+        let cid = [0xCD; 16];
+        let packet = sacn_sync(cid, 5, 63_999);
+        assert_eq!(packet.len(), 49);
+        assert_eq!(packet[..4], [0x00, 0x10, 0x00, 0x00]);
+        assert_eq!(&packet[4..16], b"ASC-E1.17\0\0\0");
+        assert_eq!(packet[16..18], [0x70, 0x21]); // 0x7000 | 33
+        assert_eq!(packet[18..22], [0, 0, 0, 8]); // extended
+        assert_eq!(packet[22..38], cid);
+        assert_eq!(packet[38..40], [0x70, 0x0B]); // 0x7000 | 11
+        assert_eq!(packet[40..44], [0, 0, 0, 1]); // synchronization
+        assert_eq!(packet[44], 5);
+        assert_eq!(packet[45..47], [0xF9, 0xFF]); // 63999
+        assert_eq!(packet[47..49], [0, 0]);
+    }
+
+    #[test]
     fn sacn_details() {
         assert_eq!(sacn_multicast(1), Ipv4Addr::new(239, 255, 0, 1));
         assert_eq!(sacn_multicast(258), Ipv4Addr::new(239, 255, 1, 2));
         // Long names are cut without splitting a character.
         let long = "è".repeat(40);
-        let packet = sacn_data([0; 16], &long, 1, 0, 255, &[0; UNIVERSE_SIZE]);
+        let packet = sacn_data([0; 16], &long, 1, 0, 255, 0, &[0; UNIVERSE_SIZE]);
         assert_eq!(packet[107], 0, "the name keeps its terminating zero");
         assert!(std::str::from_utf8(&packet[44..106]).is_ok());
         assert_eq!(packet[108], 200, "priority is capped");
