@@ -28,6 +28,7 @@ import { StageField, VideoFields } from "./VideoFields";
 import { filePosition, Waveform } from "./Waveform";
 import { asAudioCue, levelRange, startingMatrix, targetChannels } from "../fadeCue";
 import { formatLufs, formatTrim, normalizeGain } from "../loudness";
+import { isOsc, messageExample, patchPlace } from "../networkPatch";
 import { OthersFields } from "./OthersFields";
 import { TimelineView } from "./TimelineView";
 
@@ -460,6 +461,7 @@ function TypeSettings({
       );
     case "network": {
       const patches = settings.network_patches ?? [];
+      const patch = cue.patch ? patches.find((candidate) => candidate.name === cue.patch) : patches[0];
       return (
         <div className="form-columns">
           <div className="form-column">
@@ -468,21 +470,23 @@ function TypeSettings({
               value={cue.patch ?? ""}
               options={[
                 { value: "", label: patches.length > 0 ? `${t("inspector.firstPatch")} (${patches[0].name})` : t("inspector.noPatches") },
-                ...patches.map((patch) => ({ value: patch.name, label: `${patch.name} — ${patch.host}:${patch.port}` })),
+                ...patches.map((patch) => ({ value: patch.name, label: `${patch.name} — ${patchPlace(patch)}` })),
                 // A patch that was renamed or removed stays visible.
                 ...(cue.patch && !patches.some((patch) => patch.name === cue.patch) ? [{ value: cue.patch, label: `${cue.patch} (?)` }] : []),
               ]}
               onChange={(patch) => set({ patch: patch || undefined })}
             />
+            {isOsc(patch?.protocol) && <TimeField label={t("inspector.duration")} value={cue.duration ?? 0} onCommit={(duration) => set({ duration })} />}
           </div>
           <div className="form-column grow">
             <TextField
               label={t("inspector.message")}
               value={cue.message}
-              placeholder={"/cue/12/start\n/eos/sub/3 0.75"}
+              placeholder={messageExample(patch?.protocol)}
               multiline
               onCommit={(message) => set({ message })}
             />
+            <p className="hint">{t(`network.hint.${patch?.protocol ?? "osc_udp"}`)}</p>
           </div>
         </div>
       );

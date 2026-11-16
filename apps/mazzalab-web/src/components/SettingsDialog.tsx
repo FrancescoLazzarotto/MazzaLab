@@ -10,7 +10,6 @@ import type {
   MidiControls,
   MidiPatch,
   NetworkPatch,
-  NetworkProtocol,
   Stage,
   Workspace,
   WorkspaceSettings,
@@ -21,6 +20,7 @@ import type { Preferences } from "../preferences";
 import { TRANSPORT_ACTIONS, type KeyMap } from "../keymap";
 import { LUFS_PRESETS, formatLufs, parseTarget, targetChoice } from "../loudness";
 import { parseDeviceId } from "../mscDevice";
+import { PROTOCOLS, usesUrl } from "../networkPatch";
 import { THEMES } from "../theme";
 import { CheckField, LevelField, NumberField, SelectField, TextField, TimeField } from "./fields";
 import { screenLabels, screensInOrder, stageUrl } from "../stage";
@@ -33,7 +33,6 @@ import { PasscodesTab } from "./PasscodesTab";
 import { PinDialog } from "./PinDialog";
 
 const BUFFER_SIZES = [64, 128, 256, 512, 1024, 2048];
-const PROTOCOLS: NetworkProtocol[] = ["osc_udp", "osc_tcp", "plain_udp", "plain_tcp"];
 type Tab = "general" | "audio" | "network" | "midi" | "lights" | "fixtures" | "video" | "passcodes" | "keys";
 
 /** Without the right to edit, only what belongs to this device. */
@@ -381,8 +380,8 @@ function NetworkTab({ patches, onChange }: { patches: NetworkPatch[]; onChange: 
       {patches.map((patch, index) => (
         <div className="row patch-row" key={index}>
           <TextField label={t("settings.patchName")} value={patch.name} onCommit={(name) => name.trim() && update(index, { name: name.trim() })} />
-          <TextField label={t("settings.host")} value={patch.host} onCommit={(host) => host.trim() && update(index, { host: host.trim() })} />
-          <NumberField label={t("settings.port")} value={patch.port} min={1} onCommit={(port) => update(index, { port: Math.min(65535, Math.round(port)) })} />
+          <TextField label={usesUrl(patch.protocol) ? t("settings.url") : t("settings.host")} value={patch.host} placeholder={usesUrl(patch.protocol) ? "http://192.168.1.20:8080/api" : undefined} onCommit={(host) => host.trim() && update(index, { host: host.trim() })} />
+          {!usesUrl(patch.protocol) && <NumberField label={t("settings.port")} value={patch.port} min={1} onCommit={(port) => update(index, { port: Math.min(65535, Math.round(port)) })} />}
           <SelectField
             label={t("settings.protocol")}
             value={patch.protocol ?? "osc_udp"}

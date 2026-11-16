@@ -303,7 +303,8 @@ export interface AudioSettings {
   normalize_lufs?: number;
 }
 
-export type NetworkProtocol = "osc_udp" | "osc_tcp" | "plain_udp" | "plain_tcp";
+/** For the last three the patch's `host` is a URL and its port is not used. */
+export type NetworkProtocol = "osc_udp" | "osc_tcp" | "plain_udp" | "plain_tcp" | "http_get" | "http_post" | "websocket";
 
 export interface NetworkPatch {
   name: string;

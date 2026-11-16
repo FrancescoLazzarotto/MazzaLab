@@ -516,5 +516,16 @@
   "settings.normalizeTarget": "Obiettivo (LUFS)",
   "inspector.loudness": "Volume",
   "inspector.trim": "Compenso",
-  "inspector.notMeasured": "non ancora misurato"
+  "inspector.notMeasured": "non ancora misurato",
+  "protocol.http_get": "HTTP GET",
+  "protocol.http_post": "HTTP POST",
+  "protocol.websocket": "WebSocket",
+  "settings.url": "URL",
+  "network.hint.osc_udp": "Un messaggio OSC per riga. Un argomento scritto da>a (0.0>1.0) passa da un numero all'altro nella durata.",
+  "network.hint.osc_tcp": "Un messaggio OSC per riga. Un argomento scritto da>a (0.0>1.0) passa da un numero all'altro nella durata.",
+  "network.hint.plain_udp": "Un messaggio per riga; \\n, \\r, \\t e \\xHH sono escape.",
+  "network.hint.plain_tcp": "Un messaggio per riga; \\n, \\r, \\t e \\xHH sono escape.",
+  "network.hint.http_get": "Una richiesta per riga: un percorso (e query) aggiunto all'URL della patch.",
+  "network.hint.http_post": "Una richiesta per riga: un percorso, poi il corpo (il JSON parte come JSON).",
+  "network.hint.websocket": "Un messaggio di testo per riga, su una connessione tenuta aperta."
 }

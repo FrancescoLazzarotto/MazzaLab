@@ -516,5 +516,16 @@
   "settings.normalizeTarget": "Target (LUFS)",
   "inspector.loudness": "Loudness",
   "inspector.trim": "Trim",
-  "inspector.notMeasured": "not measured yet"
+  "inspector.notMeasured": "not measured yet",
+  "protocol.http_get": "HTTP GET",
+  "protocol.http_post": "HTTP POST",
+  "protocol.websocket": "WebSocket",
+  "settings.url": "URL",
+  "network.hint.osc_udp": "One OSC message per line. An argument written from>to (0.0>1.0) moves between the two numbers over the duration.",
+  "network.hint.osc_tcp": "One OSC message per line. An argument written from>to (0.0>1.0) moves between the two numbers over the duration.",
+  "network.hint.plain_udp": "One message per line; \\n, \\r, \\t and \\xHH are escapes.",
+  "network.hint.plain_tcp": "One message per line; \\n, \\r, \\t and \\xHH are escapes.",
+  "network.hint.http_get": "One request per line: a path (and query) added to the patch's URL.",
+  "network.hint.http_post": "One request per line: a path, then the body (JSON is sent as JSON).",
+  "network.hint.websocket": "One text message per line, on a connection kept open."
 }
