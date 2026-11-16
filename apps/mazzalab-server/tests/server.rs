@@ -35,6 +35,7 @@ async fn server() -> RunningServer {
         osc_port: 0,
         udp_reply_port: None,
         http_port: 0,
+        announce: false,
         ..ServerConfig::default()
     };
     mazzalab_server::start(config, workspace(), |_| Vec::new())
@@ -280,6 +281,7 @@ async fn cues_start_on_the_osc_address_they_listen_for() {
         osc_port: 0,
         udp_reply_port: None,
         http_port: 0,
+        announce: false,
         ..ServerConfig::default()
     };
     let server = mazzalab_server::start(config, workspace, |_| Vec::new())

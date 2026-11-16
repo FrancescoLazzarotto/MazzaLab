@@ -49,6 +49,7 @@ async fn auditioning_plays_outside_the_show_and_clients_follow_it() {
         osc_port: 0,
         udp_reply_port: None,
         http_port: 0,
+        announce: false,
         ..ServerConfig::default()
     };
     let server = mazzalab_server::start(config, workspace, move |_| {

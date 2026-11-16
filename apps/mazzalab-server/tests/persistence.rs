@@ -28,6 +28,7 @@ async fn server(show: &Path, workspace: Workspace, recovered: bool) -> RunningSe
         autosave: Some(Duration::from_millis(40)),
         backups: 3,
         recovered,
+        announce: false,
         ..ServerConfig::default()
     };
     mazzalab_server::start(config, workspace, |_| Vec::new())

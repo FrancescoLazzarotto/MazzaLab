@@ -14,6 +14,7 @@
 
 mod access;
 mod actor;
+mod announce;
 mod http;
 mod osc_net;
 mod outputs;
@@ -71,6 +72,9 @@ pub struct ServerConfig {
     /// Clients on this machine need no passcode. Off when something on
     /// the machine relays clients from elsewhere, such as a proxy.
     pub trust_local: bool,
+    /// Announce the server on the local network (mDNS) so tablets and
+    /// control surfaces find it. Off in tests.
+    pub announce: bool,
 }
 
 impl Default for ServerConfig {
@@ -87,6 +91,7 @@ impl Default for ServerConfig {
             recovered: false,
             screens: None,
             trust_local: true,
+            announce: true,
         }
     }
 }
@@ -191,7 +196,7 @@ pub async fn start(
     let (handle, actor) = actor::spawn(show, persistence, make_outputs);
     handle.set_trust_local(config.trust_local);
     let app = router_with_screens(handle.clone(), config.ui_dir, config.screens);
-    let tasks = vec![
+    let mut tasks = vec![
         actor,
         tokio::spawn(osc_net::serve_udp(
             udp,
@@ -207,6 +212,16 @@ pub async fn start(
             }
         }),
     ];
+    if config.announce {
+        match announce::announce(config.bind, http.port(), osc_udp.port()) {
+            // Held until the server stops; dropping it says goodbye on the network.
+            Ok(announcement) => tasks.push(tokio::spawn(async move {
+                let _announcement = announcement;
+                std::future::pending::<()>().await;
+            })),
+            Err(error) => tracing::warn!(%error, "could not announce the server on the network"),
+        }
+    }
     Ok(RunningServer {
         handle,
         osc_udp,

@@ -38,6 +38,7 @@ async fn stages_are_told_what_is_up_fetch_its_file_and_report_its_end() {
         osc_port: 0,
         udp_reply_port: None,
         http_port: 0,
+        announce: false,
         ..ServerConfig::default()
     };
     let server = mazzalab_server::start(config, workspace, |_| {
@@ -157,6 +158,7 @@ async fn the_machines_screens_are_offered_only_when_it_has_some() {
         osc_port: 0,
         udp_reply_port: None,
         http_port: 0,
+        announce: false,
         ..ServerConfig::default()
     };
     let server = mazzalab_server::start(config, Workspace::new("Screens"), |_| Vec::new())

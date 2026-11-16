@@ -39,6 +39,7 @@ async fn server() -> RunningServer {
         osc_port: 0,
         udp_reply_port: None,
         http_port: 0,
+        announce: false,
         ..ServerConfig::default()
     };
     mazzalab_server::start(config, workspace, |_| Vec::new())

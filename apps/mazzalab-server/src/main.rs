@@ -48,6 +48,9 @@ struct Args {
     /// (for a server behind a proxy on the same machine).
     #[arg(long)]
     passcode_local: bool,
+    /// Do not announce the server on the local network (mDNS).
+    #[arg(long)]
+    no_announce: bool,
 }
 
 #[tokio::main]
@@ -96,6 +99,7 @@ async fn main() -> ExitCode {
         ui_dir: args.ui_dir,
         recovered,
         trust_local: !args.passcode_local,
+        announce: !args.no_announce,
         ..ServerConfig::default()
     };
     let no_audio = args.no_audio;

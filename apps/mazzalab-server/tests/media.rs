@@ -38,6 +38,7 @@ async fn server(show: Option<&Path>, workspace: Workspace, network: bool) -> Run
         osc_port: 0,
         udp_reply_port: None,
         http_port: 0,
+        announce: false,
         ..ServerConfig::default()
     };
     mazzalab_server::start(config, workspace, move |completion| {
@@ -344,6 +345,7 @@ async fn midi_cues_report_missing_patches_and_ports() {
         osc_port: 0,
         udp_reply_port: None,
         http_port: 0,
+        announce: false,
         ..ServerConfig::default()
     };
     let server = mazzalab_server::start(config, workspace, |completion| {

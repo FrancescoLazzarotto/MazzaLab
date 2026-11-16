@@ -59,6 +59,7 @@ async fn light_cues_fade_dmx_out_and_report_what_they_cannot_read() {
         osc_port: 0,
         udp_reply_port: None,
         http_port: 0,
+        announce: false,
         ..ServerConfig::default()
     };
     let server = mazzalab_server::start(config, workspace, |completion| {
@@ -160,6 +161,7 @@ async fn light_cues_call_fixtures_and_groups_of_the_show_patch() {
         osc_port: 0,
         udp_reply_port: None,
         http_port: 0,
+        announce: false,
         ..ServerConfig::default()
     };
     let server = mazzalab_server::start(config, workspace, |completion| {

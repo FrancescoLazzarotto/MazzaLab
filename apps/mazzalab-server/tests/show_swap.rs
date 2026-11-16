@@ -47,6 +47,7 @@ async fn start(path: &Path, workspace: Workspace) -> RunningServer {
         udp_reply_port: None,
         http_port: 0,
         autosave: None,
+        announce: false,
         ..ServerConfig::default()
     };
     mazzalab_server::start(config, workspace, |_| Vec::new())
