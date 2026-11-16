@@ -25,6 +25,7 @@ use tower_http::services::ServeDir;
 
 use crate::access::{Access, Need, command_need};
 use crate::actor::{NoticeLevel, ShowHandle, Update};
+use crate::media_manage;
 use crate::protocol::{ClientMessage, ServerMessage};
 use crate::screens::ScreensHandle;
 
@@ -76,6 +77,9 @@ pub fn router_with_screens(
         .route("/api/waveform", get(waveform))
         .route("/api/cue-media", get(cue_media))
         .route("/api/preflight", get(preflight))
+        .route("/api/media/missing", get(media_missing))
+        .route("/api/media/consolidate", post(consolidate_media))
+        .route("/api/media/relink", post(relink_media))
         .route("/api/screens", get(list_screens).post(show_on_screens))
         .route(
             "/api/media",
@@ -659,6 +663,208 @@ fn media_dir(handle: &ShowHandle) -> Result<PathBuf, (StatusCode, Json<Value>)> 
                 "save the show first: media is stored next to the show file",
             )
         })
+}
+
+/// A cue and the media file it names, for the answers below.
+fn file_entry(cue: CueId, file: &Path) -> Value {
+    json!({ "cue": cue, "file": media_manage::portable(file) })
+}
+
+/// The cues whose media files are not there.
+async fn media_missing(State(state): State<AppState>) -> Response {
+    let Some(base) = state.handle.base_dir() else {
+        return media_dir(&state.handle).err().map_or_else(
+            || StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+            IntoResponse::into_response,
+        );
+    };
+    let Some(snapshot) = state.handle.snapshot().await else {
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    };
+    let lost =
+        tokio::task::spawn_blocking(move || media_manage::missing(&snapshot.workspace, &base))
+            .await
+            .unwrap_or_default();
+    let missing: Vec<Value> = lost
+        .iter()
+        .map(|lost| file_entry(lost.cue, &lost.file))
+        .collect();
+    Json(json!({ "missing": missing })).into_response()
+}
+
+/// Changes the media files of cues in one step, so that one undo puts them
+/// back. `changes` holds the cue and its new path.
+async fn repoint(
+    handle: &ShowHandle,
+    workspace: &mazzalab_core::Workspace,
+    changes: &[(CueId, PathBuf)],
+) -> Result<(), (StatusCode, Json<Value>)> {
+    let commands: Vec<Command> = changes
+        .iter()
+        .filter_map(|(id, file)| {
+            let cue = workspace.find_cue(*id)?;
+            media_manage::with_file(cue, file.clone()).map(|cue| Command::UpdateCue { cue })
+        })
+        .collect();
+    if commands.is_empty() {
+        return Ok(());
+    }
+    handle
+        .execute(Command::Batch { commands })
+        .await
+        .map_err(|error| failure(StatusCode::INTERNAL_SERVER_ERROR, error))
+}
+
+/// Copies every media file that lives outside the show's media folder into
+/// it, under a numbered name if the name is taken, and points the cues at
+/// the copies.
+async fn consolidate_media(State(state): State<AppState>) -> Response {
+    let media = match media_dir(&state.handle) {
+        Ok(media) => media,
+        Err(error) => return error.into_response(),
+    };
+    let Some(base) = state.handle.base_dir() else {
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    };
+    let Some(snapshot) = state.handle.snapshot().await else {
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    };
+    let workspace = snapshot.workspace;
+    let to_copy = {
+        let (workspace, base, media) = (workspace.clone(), base.clone(), media.clone());
+        move || -> std::io::Result<Vec<(CueId, PathBuf, PathBuf)>> {
+            std::fs::create_dir_all(&media)?;
+            let mut copies: std::collections::HashMap<PathBuf, String> =
+                std::collections::HashMap::new();
+            let mut done = Vec::new();
+            for (serial, item) in media_manage::outside(&workspace, &base, &media)
+                .into_iter()
+                .enumerate()
+            {
+                let name = match copies.get(&item.source) {
+                    Some(name) => name.clone(),
+                    None => {
+                        let wanted = item
+                            .source
+                            .file_name()
+                            .and_then(|name| safe_file_name(&name.to_string_lossy()))
+                            .unwrap_or_else(|| "media".to_owned());
+                        let temp = media
+                            .join(format!(".consolidate-{}-{serial}.part", std::process::id()));
+                        std::fs::copy(&item.source, &temp)?;
+                        let name = place_upload(&media, &temp, &wanted)?;
+                        copies.insert(item.source.clone(), name.clone());
+                        name
+                    }
+                };
+                done.push((
+                    item.cue,
+                    item.file,
+                    PathBuf::from(format!("{MEDIA_FOLDER}/{name}")),
+                ));
+            }
+            Ok(done)
+        }
+    };
+    let done = match tokio::task::spawn_blocking(to_copy).await {
+        Ok(Ok(done)) => done,
+        Ok(Err(error)) => {
+            return failure(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()).into_response();
+        }
+        Err(error) => {
+            return failure(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()).into_response();
+        }
+    };
+    let changes: Vec<(CueId, PathBuf)> =
+        done.iter().map(|(cue, _, to)| (*cue, to.clone())).collect();
+    if let Err(error) = repoint(&state.handle, &workspace, &changes).await {
+        return error.into_response();
+    }
+    let copied: Vec<Value> = done
+        .iter()
+        .map(|(cue, from, to)| json!({ "cue": cue, "from": media_manage::portable(from), "file": media_manage::portable(to) }))
+        .collect();
+    Json(json!({ "copied": copied })).into_response()
+}
+
+#[derive(Deserialize)]
+struct RelinkBody {
+    /// A folder of the server's machine to look in, below it too.
+    #[serde(alias = "from_dir")]
+    search_dir: PathBuf,
+}
+
+/// Looks for the files cues miss, by name, under a folder, and points the
+/// cues at what it finds.
+async fn relink_media(State(state): State<AppState>, Json(body): Json<RelinkBody>) -> Response {
+    let Some(base) = state.handle.base_dir() else {
+        return media_dir(&state.handle).err().map_or_else(
+            || StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+            IntoResponse::into_response,
+        );
+    };
+    if !body.search_dir.is_dir() {
+        return failure(StatusCode::NOT_FOUND, "that folder cannot be read").into_response();
+    }
+    let Some(snapshot) = state.handle.snapshot().await else {
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    };
+    let workspace = snapshot.workspace;
+    let looked = {
+        let (workspace, base, root) = (workspace.clone(), base.clone(), body.search_dir);
+        move || {
+            let lost = media_manage::missing(&workspace, &base);
+            let names = lost
+                .iter()
+                .filter_map(|lost| media_manage::key_of(&lost.file))
+                .collect();
+            let found = media_manage::search(&root, &names);
+            let base_real = base.canonicalize().ok();
+            let mut relinked = Vec::new();
+            let mut not_found = Vec::new();
+            for lost in lost {
+                let hit = media_manage::key_of(&lost.file).and_then(|key| found.get(&key));
+                match hit {
+                    Some(hit) => {
+                        // Inside the show's folder, a path relative to it; elsewhere, the full one.
+                        let inside = hit
+                            .path
+                            .canonicalize()
+                            .ok()
+                            .zip(base_real.as_ref())
+                            .and_then(|(path, base)| {
+                                path.strip_prefix(base).ok().map(Path::to_path_buf)
+                            });
+                        relinked.push((
+                            lost.cue,
+                            lost.file,
+                            inside.unwrap_or_else(|| hit.path.clone()),
+                        ));
+                    }
+                    None => not_found.push((lost.cue, lost.file)),
+                }
+            }
+            (relinked, not_found)
+        }
+    };
+    let Ok((relinked, not_found)) = tokio::task::spawn_blocking(looked).await else {
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    };
+    let changes: Vec<(CueId, PathBuf)> = relinked
+        .iter()
+        .map(|(cue, _, to)| (*cue, to.clone()))
+        .collect();
+    if let Err(error) = repoint(&state.handle, &workspace, &changes).await {
+        return error.into_response();
+    }
+    Json(json!({
+        "relinked": relinked
+            .iter()
+            .map(|(cue, from, to)| json!({ "cue": cue, "from": media_manage::portable(from), "file": media_manage::portable(to) }))
+            .collect::<Vec<Value>>(),
+        "not_found": not_found.iter().map(|(cue, file)| file_entry(*cue, file)).collect::<Vec<Value>>(),
+    }))
+    .into_response()
 }
 
 /// The files in the show's media folder, as paths relative to the show.

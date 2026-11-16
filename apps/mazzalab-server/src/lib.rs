@@ -16,6 +16,7 @@ mod access;
 mod actor;
 mod announce;
 mod http;
+mod media_manage;
 mod osc_net;
 mod outputs;
 pub mod protocol;
