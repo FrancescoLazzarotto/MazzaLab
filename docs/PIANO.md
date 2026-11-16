@@ -195,7 +195,7 @@ Parità con QLab e poi oltre.
 - [x] Gestione delle cue list: aggiungere, rinominare, eliminare, anche
       liste cart, e due liste affiancate (per dispositivo).
 - [ ] Inspector completo per ogni tipo di cue.
-- [ ] Browser dei media, con caricamento dei file anche da tablet.
+- [x] Browser dei media, con caricamento dei file anche da tablet.
 
 ### Viste
 - [x] Forma d'onda con zoom, punti di inizio e fine, slice e fade
@@ -225,7 +225,8 @@ Parità con QLab e poi oltre.
       tema ad alto contrasto, anello di focus. Mancano la forma d'onda da
       tastiera e la prova con uno screen reader vero.
 - [x] Temi chiaro, scuro, "buio di sala" a luminosità minima e alto contrasto.
-- [ ] Sistema di traduzioni aperto oltre a IT/EN.
+- [x] Sistema di traduzioni aperto oltre a IT/EN: un JSON per lingua, inglese
+      come riferimento, test sulle chiavi (`docs/translating.md`).
 - [ ] Test end-to-end dell'interfaccia (Playwright) e test visivi.
 
 ## Fase 3 — Trigger, OSC e API (L)
