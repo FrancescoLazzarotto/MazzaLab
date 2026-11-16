@@ -28,5 +28,6 @@ pub use slice::{Position, Segment, SliceMarker};
 pub use validate::{Issue, validate};
 pub use workspace::{
     AudioSettings, Container, CueList, DmxOutput, DmxProtocol, Fixture, FixtureGroup, LtcInput,
-    MidiControls, MidiPatch, NetworkPatch, NetworkProtocol, Stage, Workspace, WorkspaceSettings,
+    MidiControls, MidiPatch, NetworkPatch, NetworkProtocol, Passcode, Stage, Workspace,
+    WorkspaceSettings,
 };

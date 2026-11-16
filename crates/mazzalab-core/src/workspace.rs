@@ -281,6 +281,29 @@ pub struct WorkspaceSettings {
     /// An audio input to read LTC from; `None` listens to none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ltc_input: Option<LtcInput>,
+    /// What clients on other machines may do, by passcode. Without any,
+    /// every client may do everything; the machine running the show always
+    /// may.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub passcodes: Vec<Passcode>,
+}
+
+/// A passcode and what it lets a client do. Edit and control include view.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Passcode {
+    pub code: String,
+    /// Who it is for, e.g. "Stage manager".
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub name: String,
+    /// See the show and its state.
+    #[serde(default)]
+    pub view: bool,
+    /// Run it: GO, stop, playhead, live values.
+    #[serde(default)]
+    pub control: bool,
+    /// Change it: cues, settings, saving, opening other shows.
+    #[serde(default)]
+    pub edit: bool,
 }
 
 /// Where linear timecode comes in.
@@ -313,6 +336,7 @@ impl Default for WorkspaceSettings {
             stages: Vec::new(),
             midi_controls: MidiControls::default(),
             ltc_input: None,
+            passcodes: Vec::new(),
         }
     }
 }
