@@ -66,7 +66,10 @@ async fn stages_are_told_what_is_up_fetch_its_file_and_report_its_end() {
     };
     // On connect: the stages, nothing up.
     let first = next_stage().await;
-    assert_eq!(first["stages"], json!(["Main"]));
+    assert_eq!(
+        first["stages"],
+        json!([{ "name": "Main", "width": 1920, "height": 1080 }])
+    );
     assert_eq!(first["items"], json!([]));
 
     server

@@ -11,7 +11,7 @@
 use std::collections::{BTreeMap, HashMap};
 use std::time::Duration;
 
-use mazzalab_core::{CueId, CueKind, Workspace};
+use mazzalab_core::{CueId, CueKind, FadeCue, FadeCurve, Geometry, Stage, TextStyle, Workspace};
 use mazzalab_engine::{Event, EventKind};
 use serde::Serialize;
 
@@ -35,16 +35,34 @@ pub enum Content {
     },
     Text {
         text: String,
+        style: TextStyle,
     },
 }
 
-/// An opacity on its way to another.
+/// An opacity and a geometry on their way to others.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
-pub struct OpacityFade {
+pub struct Fade {
+    /// The opacity it started from.
     pub from: f64,
+    pub from_geometry: Geometry,
     /// When it started, on the callers' clock, in seconds.
     pub started: f64,
     pub duration: f64,
+    pub curve: FadeCurve,
+}
+
+impl Fade {
+    /// How far through it is at `now`, 0 to 1, along its curve.
+    pub fn progress(&self, now: f64) -> f64 {
+        if self.duration <= 0.0 {
+            return 1.0;
+        }
+        let t = ((now - self.started) / self.duration).clamp(0.0, 1.0);
+        match self.curve {
+            FadeCurve::Linear => t,
+            FadeCurve::SCurve => t * t * (3.0 - 2.0 * t),
+        }
+    }
 }
 
 /// A cue that is up on a stage.
@@ -55,8 +73,10 @@ pub struct StageItem {
     pub layer: i32,
     /// The opacity it has, or is fading to.
     pub opacity: f64,
+    /// Where it sits, or is moving to.
+    pub geometry: Geometry,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub fade: Option<OpacityFade>,
+    pub fade: Option<Fade>,
     #[serde(flatten)]
     pub content: Content,
     /// When it started or last resumed, on the callers' clock, in seconds.
@@ -79,11 +99,16 @@ impl StageItem {
     /// Its opacity at `now`, part way through a fade.
     pub fn opacity_at(&self, now: f64) -> f64 {
         match self.fade {
-            Some(fade) if fade.duration > 0.0 && now < fade.started + fade.duration => {
-                let t = ((now - fade.started) / fade.duration).clamp(0.0, 1.0);
-                fade.from + (self.opacity - fade.from) * t
-            }
-            _ => self.opacity,
+            Some(fade) => fade.from + (self.opacity - fade.from) * fade.progress(now),
+            None => self.opacity,
+        }
+    }
+
+    /// Its geometry at `now`, part way through a fade.
+    pub fn geometry_at(&self, now: f64) -> Geometry {
+        match self.fade {
+            Some(fade) => fade.from_geometry.lerp(&self.geometry, fade.progress(now)),
+            None => self.geometry,
         }
     }
 }
@@ -94,8 +119,8 @@ pub struct StageState {
     /// The callers' clock when this was taken, so that stages can line
     /// their own clock up with it.
     pub now: f64,
-    /// Stages the show names, for clients to offer.
-    pub stages: Vec<String>,
+    /// The show's stages, with their sizes.
+    pub stages: Vec<Stage>,
     /// Lowest layer first.
     pub items: Vec<StageItem>,
 }
@@ -126,14 +151,33 @@ fn default_stage(workspace: &Workspace) -> &str {
         .map_or(DEFAULT_STAGE, |stage| stage.name.as_str())
 }
 
+/// What a Video or Text cue puts on a stage, and where.
+struct Placement {
+    stage: String,
+    layer: i32,
+    opacity: f64,
+    geometry: Geometry,
+    content: Content,
+}
+
+/// An opacity a stage can show.
+fn opacity(value: f64) -> f64 {
+    if value.is_finite() {
+        value.clamp(0.0, 1.0)
+    } else {
+        1.0
+    }
+}
+
 /// What a cue puts on a stage, and where, if it is a Video or Text cue.
-fn placement(kind: &CueKind, default: &str) -> Option<(String, i32, f64, Content)> {
+fn placement(kind: &CueKind, default: &str) -> Option<Placement> {
     match kind {
-        CueKind::Video(video) if video.file.is_some() => Some((
-            stage_name(video.stage.as_ref(), default),
-            video.layer,
-            video.opacity.clamp(0.0, 1.0),
-            Content::Video {
+        CueKind::Video(video) if video.file.is_some() => Some(Placement {
+            stage: stage_name(video.stage.as_ref(), default),
+            layer: video.layer,
+            opacity: opacity(video.opacity),
+            geometry: video.geometry.sanitized(),
+            content: Content::Video {
                 start_time: video.start_time.as_secs_f64(),
                 end_time: video.end_time.map(|end| end.as_secs_f64()),
                 looped: video.infinite_loop || video.play_count > 1,
@@ -144,15 +188,17 @@ fn placement(kind: &CueKind, default: &str) -> Option<(String, i32, f64, Content
                     1.0
                 },
             },
-        )),
-        CueKind::Text(text) => Some((
-            stage_name(text.stage.as_ref(), default),
-            text.layer,
-            1.0,
-            Content::Text {
+        }),
+        CueKind::Text(text) => Some(Placement {
+            stage: stage_name(text.stage.as_ref(), default),
+            layer: text.layer,
+            opacity: opacity(text.opacity),
+            geometry: text.geometry.sanitized(),
+            content: Content::Text {
                 text: text.text.clone(),
+                style: text.style.clone(),
             },
-        )),
+        }),
         _ => None,
     }
 }
@@ -173,13 +219,20 @@ impl Stages {
                         continue;
                     };
                     if let CueKind::Fade(fade) = &definition.kind {
-                        if let (Some(target), Some(opacity)) = (definition.target, fade.opacity) {
-                            changed |= self.fade(target, opacity, fade.duration, now);
+                        if let Some(target) = definition.target
+                            && (fade.opacity.is_some() || fade.geometry.is_some())
+                        {
+                            changed |= self.fade(target, fade, now);
                         }
                         continue;
                     }
-                    let Some((stage, layer, opacity, content)) =
-                        placement(&definition.kind, default_stage(workspace))
+                    let Some(Placement {
+                        stage,
+                        layer,
+                        opacity,
+                        geometry,
+                        content,
+                    }) = placement(&definition.kind, default_stage(workspace))
                     else {
                         continue;
                     };
@@ -193,6 +246,7 @@ impl Stages {
                             stage,
                             layer,
                             opacity,
+                            geometry,
                             fade: None,
                             content,
                             started: now,
@@ -231,17 +285,26 @@ impl Stages {
         changed
     }
 
-    /// Takes `cue` to `opacity` over `duration`, from where it is now.
-    fn fade(&mut self, cue: CueId, opacity: f64, duration: Duration, now: f64) -> bool {
+    /// Takes `cue` to the opacity and geometry a Fade cue sets, over its
+    /// duration, from where it is now. What the fade does not set stays.
+    fn fade(&mut self, cue: CueId, fade: &FadeCue, now: f64) -> bool {
         let Some(item) = self.items.get_mut(&cue) else {
             return false;
         };
         let from = item.opacity_at(now);
-        item.opacity = opacity.clamp(0.0, 1.0);
-        item.fade = (!duration.is_zero()).then_some(OpacityFade {
+        let from_geometry = item.geometry_at(now);
+        item.opacity = fade.opacity.map_or(from, opacity);
+        item.geometry = fade.geometry.map_or(from_geometry, |to| Geometry {
+            // A fade moves the picture; how it fills the stage stays.
+            fit: from_geometry.fit,
+            ..to.sanitized()
+        });
+        item.fade = (!fade.duration.is_zero()).then_some(Fade {
             from,
+            from_geometry,
             started: now,
-            duration: duration.as_secs_f64(),
+            duration: fade.duration.as_secs_f64(),
+            curve: fade.curve,
         });
         true
     }
@@ -251,7 +314,13 @@ impl Stages {
     pub fn sync(&mut self, workspace: &Workspace) -> bool {
         let mut changed = false;
         self.items.retain(|cue, item| {
-            let Some((stage, layer, opacity, content)) = workspace
+            let Some(Placement {
+                stage,
+                layer,
+                opacity,
+                geometry,
+                content,
+            }) = workspace
                 .find_cue(*cue)
                 .and_then(|definition| placement(&definition.kind, default_stage(workspace)))
             else {
@@ -265,9 +334,10 @@ impl Stages {
                 item.content = content;
                 changed = true;
             }
-            // An opacity being faded belongs to the fade.
-            if item.fade.is_none() && item.opacity != opacity {
+            // An opacity and a geometry that were faded belong to the fade.
+            if item.fade.is_none() && (item.opacity != opacity || item.geometry != geometry) {
                 item.opacity = opacity;
+                item.geometry = geometry;
                 changed = true;
             }
             true
@@ -279,14 +349,9 @@ impl Stages {
     pub fn state(&self, workspace: &Workspace, now: f64) -> StageState {
         let mut items: Vec<StageItem> = self.items.values().cloned().collect();
         items.sort_by_key(|item| item.layer);
-        let mut stages: Vec<String> = workspace
-            .settings
-            .stages
-            .iter()
-            .map(|stage| stage.name.clone())
-            .collect();
+        let mut stages = workspace.settings.stages.clone();
         if stages.is_empty() {
-            stages.push(DEFAULT_STAGE.to_owned());
+            stages.push(Stage::new(DEFAULT_STAGE));
         }
         StageState { now, stages, items }
     }
@@ -299,7 +364,7 @@ impl Stages {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mazzalab_core::{Cue, FadeCue, TextCue, VideoCue};
+    use mazzalab_core::{Cue, Fit, TextCue, VideoCue};
     use mazzalab_engine::Engine;
 
     fn secs(value: f64) -> Duration {
@@ -318,17 +383,33 @@ mod tests {
             text: "Atto primo".into(),
             stage: Some("Side".into()),
             layer: 5,
+            ..TextCue::default()
         }))
         .with_id(CueId::from_u128(2));
         let fade = Cue::new(CueKind::Fade(FadeCue {
             duration: secs(2.0),
+            curve: FadeCurve::Linear,
             opacity: Some(0.0),
             ..FadeCue::default()
         }))
         .with_id(CueId::from_u128(3))
         .with_target(CueId::from_u128(1));
+        let slide = Cue::new(CueKind::Fade(FadeCue {
+            duration: secs(4.0),
+            curve: FadeCurve::SCurve,
+            geometry: Some(Geometry {
+                fit: Fit::Stretch,
+                x: 400.0,
+                scale_x: 0.5,
+                scale_y: 0.5,
+                ..Geometry::default()
+            }),
+            ..FadeCue::default()
+        }))
+        .with_id(CueId::from_u128(4))
+        .with_target(CueId::from_u128(1));
         let mut workspace = Workspace::new("Video");
-        workspace.cue_lists[0].cues = vec![video, title, fade];
+        workspace.cue_lists[0].cues = vec![video, title, fade, slide];
         Engine::new(workspace)
     }
 
@@ -347,7 +428,7 @@ mod tests {
         engine.start(CueId::from_u128(2)).unwrap();
         assert!(step(&mut engine, &mut stages, 0.0));
         let state = stages.state(engine.workspace(), 1.0);
-        assert_eq!(state.stages, [DEFAULT_STAGE]);
+        assert_eq!(state.stages, [Stage::new(DEFAULT_STAGE)]);
         assert_eq!(state.items.len(), 2);
         let video = &state.items[0];
         assert_eq!(
@@ -359,7 +440,8 @@ mod tests {
         assert_eq!(
             state.items[1].content,
             Content::Text {
-                text: "Atto primo".into()
+                text: "Atto primo".into(),
+                style: TextStyle::default(),
             }
         );
 
@@ -408,6 +490,36 @@ mod tests {
         let json = serde_json::to_value(&item).unwrap();
         assert_eq!(json["kind"], "video");
         assert_eq!(json["fade"]["from"], 1.0);
+        // An opacity fade leaves the picture where it is.
+        assert_eq!(item.geometry, Geometry::default());
+    }
+
+    #[test]
+    fn a_fade_cue_moves_the_picture_along_its_curve() {
+        let mut engine = show();
+        let mut stages = Stages::new();
+        engine.start(CueId::from_u128(1)).unwrap();
+        step(&mut engine, &mut stages, 0.0);
+        engine.start(CueId::from_u128(4)).unwrap();
+        step(&mut engine, &mut stages, 0.0);
+        let item = stages.state(engine.workspace(), 0.0).items[0].clone();
+        // How the picture fills the stage is not something a fade moves.
+        assert_eq!(item.geometry.fit, Fit::Fit);
+        assert_eq!((item.geometry.x, item.geometry.scale_x), (400.0, 0.5));
+        assert_eq!(item.opacity, 1.0);
+        let half = item.geometry_at(2.0);
+        assert_eq!((half.x, half.scale_y), (200.0, 0.75));
+        // An S-curve starts slowly.
+        assert!(item.geometry_at(1.0).x < 100.0);
+        assert_eq!(item.geometry_at(9.0), item.geometry);
+
+        // A fade that starts part way through another starts from where that one got to.
+        engine.advance_to(secs(2.0));
+        engine.start(CueId::from_u128(3)).unwrap();
+        step(&mut engine, &mut stages, 2.0);
+        let item = stages.state(engine.workspace(), 2.0).items[0].clone();
+        assert_eq!(item.geometry, half);
+        assert_eq!(item.fade.unwrap().from_geometry, half);
     }
 
     #[test]
@@ -431,7 +543,8 @@ mod tests {
             (
                 1,
                 &Content::Text {
-                    text: "Atto secondo".into()
+                    text: "Atto secondo".into(),
+                    style: TextStyle::default(),
                 }
             )
         );
