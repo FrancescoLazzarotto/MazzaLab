@@ -75,6 +75,7 @@ pub fn router_with_screens(
         .route("/api/timecode/in", post(timecode_in))
         .route("/api/waveform", get(waveform))
         .route("/api/cue-media", get(cue_media))
+        .route("/api/preflight", get(preflight))
         .route("/api/screens", get(list_screens).post(show_on_screens))
         .route(
             "/api/media",
@@ -265,6 +266,24 @@ async fn command(
 
 async fn save(State(state): State<AppState>) -> (StatusCode, Json<Value>) {
     outcome(state.handle.save().await)
+}
+
+/// What would not work if GO were pressed now: the pre-show check of the
+/// open show, with the media looked for next to the show file.
+async fn preflight(State(state): State<AppState>) -> Response {
+    let Some(snapshot) = state.handle.snapshot().await else {
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    };
+    let base = state
+        .handle
+        .base_dir()
+        .map_or_else(|| PathBuf::from("."), |base| base.to_path_buf());
+    let issues = tokio::task::spawn_blocking(move || {
+        mazzalab_show::preflight::check(&snapshot.workspace, &base)
+    })
+    .await
+    .unwrap_or_default();
+    Json(json!({ "issues": issues })).into_response()
 }
 
 /// The open show's file and its folder.
