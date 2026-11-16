@@ -504,5 +504,10 @@
   "diagnostics.lastMinute": "nell'ultimo minuto",
   "diagnostics.callbacks": "Callback",
   "diagnostics.audio": "Audio",
-  "diagnostics.record": "Registro degli input"
+  "diagnostics.record": "Registro degli input",
+  "fade.relative": "Relativo",
+  "fade.changeBy": "Cambia di",
+  "fade.matrix": "Sfuma anche l'instradamento",
+  "fade.group": "Puntato a un group, sfuma tutti i suoni che contiene.",
+  "inspector.skipDisarmed": "Saltalo, attese comprese"
 }

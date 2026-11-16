@@ -504,5 +504,10 @@
   "diagnostics.lastMinute": "in the last minute",
   "diagnostics.callbacks": "Callbacks",
   "diagnostics.audio": "Audio",
-  "diagnostics.record": "Input record"
+  "diagnostics.record": "Input record",
+  "fade.relative": "Relative",
+  "fade.changeBy": "Change by",
+  "fade.matrix": "Fade the routing too",
+  "fade.group": "Aimed at a group, this fades every sound inside it.",
+  "inspector.skipDisarmed": "Skip it, waits included"
 }

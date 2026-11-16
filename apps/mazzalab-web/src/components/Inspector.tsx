@@ -26,6 +26,7 @@ import { GeometryFields, GeometryTab, StagePreview, TextStyleFields } from "./Ge
 import { TriggerFields } from "./TriggerFields";
 import { StageField, VideoFields } from "./VideoFields";
 import { filePosition, Waveform } from "./Waveform";
+import { asAudioCue, levelRange, startingMatrix, targetChannels } from "../fadeCue";
 import { OthersFields } from "./OthersFields";
 import { TimelineView } from "./TimelineView";
 
@@ -129,7 +130,7 @@ export function Inspector({
           />
         )}
         {current === "levels" && cue.type === "audio" && <AudioLevels cue={cue} outputs={audio?.channels ?? 2} set={set} />}
-        {current === "settings" && <TypeSettings connection={connection} cue={cue} allCues={allCues} settings={settings} set={set} editable={editable} onChild={onChange} />}
+        {current === "settings" && <TypeSettings connection={connection} cue={cue} allCues={allCues} settings={settings} set={set} editable={editable} onChild={onChange} outputs={audio?.channels ?? 2} />}
         {current === "geometry" && (cue.type === "video" || cue.type === "text") && <GeometryTab connection={connection} cue={cue} settings={settings} set={set} />}
         {current === "triggers" && <TriggerFields connection={connection} cue={cue} set={set} />}
       </fieldset>
@@ -191,6 +192,7 @@ function Basics({
         </div>
         <div className="row checks">
           <CheckField label={t("inspector.armed")} checked={cue.armed ?? true} onChange={(armed) => set({ armed })} />
+          {cue.armed === false && <CheckField label={t("inspector.skipDisarmed")} checked={cue.skip_if_disarmed ?? false} onChange={(skip_if_disarmed) => set({ skip_if_disarmed: skip_if_disarmed || undefined })} />}
           <CheckField label={t("inspector.flagged")} checked={cue.flagged ?? false} onChange={(flagged) => set({ flagged })} />
         </div>
         {(cue.type === "audio" || cue.type === "video") && <OthersFields others={cue.others} onChange={(others) => set({ others })} />}
@@ -202,7 +204,7 @@ function Basics({
   );
 }
 
-function FadeFields({ cue, set, target }: { cue: Extract<Cue, { type: "fade" }>; set: (patch: Patch) => void; target: Cue | undefined }) {
+function FadeFields({ cue, set, target, outputs }: { cue: Extract<Cue, { type: "fade" }>; set: (patch: Patch) => void; target: Cue | undefined; outputs: number }) {
   const { t } = useI18n();
   // A fade of a picture fades its opacity and moves it; one of anything else fades its level.
   const visual = target?.type === "video" || target?.type === "text";
@@ -234,7 +236,19 @@ function FadeFields({ cue, set, target }: { cue: Extract<Cue, { type: "fade" }>;
           )}
         </div>
       ) : (
-        <LevelField label={t("inspector.fadeTo")} value={cue.level_db ?? 0} onCommit={(level_db) => set({ level_db })} />
+        <>
+          <div className="row fade-level">
+            <LevelField label={cue.relative ? t("fade.changeBy") : t("inspector.fadeTo")} value={cue.level_db ?? 0} onCommit={(level_db) => set({ level_db })} {...levelRange(cue.relative ?? false)} />
+            <CheckField label={t("fade.relative")} checked={cue.relative ?? false} onChange={(relative) => set({ relative: relative || undefined })} />
+          </div>
+          <CheckField
+            label={t("fade.matrix")}
+            checked={cue.matrix !== undefined}
+            onChange={(on) => set({ matrix: on ? startingMatrix(target, targetChannels(target), Math.max(2, outputs)) : undefined })}
+          />
+          {cue.matrix !== undefined && <MatrixEditor cue={asAudioCue(cue, target)} outputs={outputs} onChange={(matrix) => set({ matrix })} />}
+          {target?.type === "group" && <p className="hint">{t("fade.group")}</p>}
+        </>
       )}
       {visual && (
         // Start a geometry fade from where the target sits, so that it moves from there.
@@ -363,6 +377,7 @@ function TypeSettings({
   set,
   editable,
   onChild,
+  outputs,
 }: {
   connection: ShowConnection;
   cue: Cue;
@@ -372,6 +387,8 @@ function TypeSettings({
   editable: boolean;
   /** A child of this cue changed, for the timeline. */
   onChild: (cue: Cue) => void;
+  /** Output channels of the audio device in use. */
+  outputs: number;
 }) {
   const { t } = useI18n();
   const numbered = flatten(allCues)
@@ -394,7 +411,7 @@ function TypeSettings({
       return (
         <div className="form-columns">
           <div className="form-column">
-            <FadeFields cue={cue} set={set} target={target} />
+            <FadeFields cue={cue} set={set} target={target} outputs={outputs} />
           </div>
           {moving && (
             <>

@@ -252,7 +252,7 @@ export type Cue = CueBase &
     | { type: "mic"; input_patch?: string; output_patch?: string }
     | { type: "camera"; input_patch?: string; stage?: string }
     | { type: "light"; commands?: string[]; duration?: number }
-    | { type: "fade"; duration?: number; curve?: FadeCurve; level_db?: number; opacity?: number; geometry?: Geometry; stop_target_when_done?: boolean }
+    | { type: "fade"; duration?: number; curve?: FadeCurve; level_db?: number; relative?: boolean; matrix?: Matrix; opacity?: number; geometry?: Geometry; stop_target_when_done?: boolean }
     | { type: "network"; patch?: string; message: string; duration?: number }
     | { type: "midi"; patch?: string; message: MidiMessage }
     | { type: "midi_file"; file?: string; rate?: number }

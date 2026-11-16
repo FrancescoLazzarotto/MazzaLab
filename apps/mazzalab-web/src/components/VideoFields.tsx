@@ -104,6 +104,7 @@ export function VideoFields({
           <TimeField label={t("inspector.startTime")} value={cue.start_time ?? 0} onCommit={(start_time) => set({ start_time })} />
           <TimeField label={t("inspector.endTime")} value={cue.end_time} optional onCommit={(end_time) => set({ end_time })} />
           <NumberField label={t("inspector.rate")} value={cue.rate ?? 1} step={0.05} min={0.05} onCommit={(rate) => set({ rate })} />
+          {!cue.infinite_loop && <NumberField label={t("inspector.playCount")} value={cue.play_count ?? 1} min={1} onCommit={(play_count) => set({ play_count: Math.round(play_count) })} />}
         </div>
         <div className="row checks">
           <CheckField label={t("inspector.loop")} checked={cue.infinite_loop ?? false} onChange={(infinite_loop) => set({ infinite_loop })} />

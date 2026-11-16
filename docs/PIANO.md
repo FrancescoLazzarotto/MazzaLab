@@ -160,11 +160,12 @@ Parità con QLab e poi oltre.
 - [x] Probe della durata anche quando un file viene cambiato dalla UI.
 
 ### Fade e dinamica
-- [ ] Fade cue completi: livelli per incrocio della matrice, fade di
-      velocità, curve personalizzate, modalità assoluta e relativa, stop
-      del cue di destinazione alla fine.
+- [x] Fade cue: livello assoluto o relativo, livelli per incrocio della
+      matrice, stop del cue di destinazione alla fine, curva lineare o a S;
+      su un group sfuma tutti i suoni dentro. Mancano i fade di velocità e le
+      curve personalizzate.
 - [x] Fade and stop others (stessa lista, tutte le liste) e duck others con
-      ripristino automatico, dall'inspector delle cue Audio e Video.
+      ripristino automatico, dall'inspector dei cue Audio e Video.
 - [ ] Normalizzazione del volume in LUFS, con analisi al caricamento.
 
 ### Misura ed effetti
