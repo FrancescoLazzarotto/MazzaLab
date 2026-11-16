@@ -116,6 +116,12 @@ pub struct Decoder {
     /// Samples since the last zero crossing.
     since: f64,
     positive: bool,
+    /// The signal's DC offset, followed slowly and taken out.
+    offset: f32,
+    /// The signal's level, as its recent peaks: a crossing counts once the
+    /// signal is a fair way past zero, so that noise around zero is not
+    /// read as transitions.
+    envelope: f32,
     /// The length of a bit, as measured so far.
     bit_length: f64,
     /// A short interval came: the first half of a one.
@@ -129,6 +135,8 @@ impl Decoder {
         Self {
             since: 0.0,
             positive: false,
+            offset: 0.0,
+            envelope: 0.0,
             // Start from 30 fps: 24 and 25 still tell longs from shorts.
             bit_length: f64::from(sample_rate) / (30.0 * BITS as f64),
             half: false,
@@ -139,9 +147,19 @@ impl Decoder {
     /// Reads samples; returns the frames whose sync word ended in them.
     pub fn feed(&mut self, samples: &[f32]) -> Vec<Frame> {
         let mut frames = Vec::new();
-        for sample in samples {
+        for &sample in samples {
             self.since += 1.0;
-            let positive = *sample > 0.0;
+            self.offset += (sample - self.offset) * 0.001;
+            let sample = sample - self.offset;
+            self.envelope = (self.envelope * 0.9995).max(sample.abs());
+            let threshold = (self.envelope * 0.3).max(0.001);
+            let positive = if sample > threshold {
+                true
+            } else if sample < -threshold {
+                false
+            } else {
+                self.positive
+            };
             if positive == self.positive {
                 continue;
             }
@@ -182,6 +200,89 @@ impl Decoder {
         Some(Frame {
             timecode,
             drop_frame: field(10, 1) == 1,
+        })
+    }
+}
+
+/// Reads timecode from a signal and tells its rate as well: how many
+/// frames come a second, measured from the samples between them, and
+/// whether they drop frame numbers, from the frames' own flag.
+#[derive(Debug, Clone)]
+pub struct Reader {
+    decoder: Decoder,
+    sample_rate: f64,
+    /// Samples read so far.
+    samples: u64,
+    /// Where the last frame ended, in samples.
+    last: Option<u64>,
+    /// Samples a frame takes, smoothed.
+    frame_length: Option<f64>,
+}
+
+impl Reader {
+    pub fn new(sample_rate: u32) -> Self {
+        Self {
+            decoder: Decoder::new(sample_rate),
+            sample_rate: f64::from(sample_rate.max(1)),
+            samples: 0,
+            last: None,
+            frame_length: None,
+        }
+    }
+
+    /// Reads samples; returns the frames whose end came in them, with the
+    /// rate they run at. The first frame waits for the second, which tells
+    /// the rate.
+    pub fn feed(&mut self, samples: &[f32]) -> Vec<(Timecode, Rate)> {
+        let mut read = Vec::new();
+        // Where a frame ends is known to the block it ended in: blocks of
+        // 64 samples tell 24 frames a second from 25 well enough.
+        let mut start = 0;
+        while start < samples.len() {
+            let end = (start + 64).min(samples.len());
+            let frames = self.decoder.feed(&samples[start..end]);
+            self.samples += (end - start) as u64;
+            for frame in frames {
+                if let Some(rate) = self.measure(frame.drop_frame) {
+                    read.push((frame.timecode, rate));
+                }
+            }
+            start = end;
+        }
+        read
+    }
+
+    /// Notes a frame ending about now and returns the rate, once known.
+    fn measure(&mut self, drop_frame: bool) -> Option<Rate> {
+        let now = self.samples;
+        let previous = self.last.replace(now);
+        if let Some(previous) = previous {
+            let length = (now - previous) as f64;
+            // A gap (the signal stopped, or skipped) starts the measure afresh.
+            let plausible = (self.sample_rate / 31.0..=self.sample_rate / 23.0).contains(&length);
+            if plausible {
+                self.frame_length = Some(match self.frame_length {
+                    Some(smoothed) => smoothed * 0.8 + length * 0.2,
+                    None => length,
+                });
+            } else {
+                self.frame_length = None;
+            }
+        }
+        let fps = self.sample_rate / self.frame_length?;
+        let base = [24_u8, 25, 30]
+            .into_iter()
+            .min_by(|a, b| {
+                (f64::from(*a) - fps)
+                    .abs()
+                    .total_cmp(&(f64::from(*b) - fps).abs())
+            })
+            .unwrap_or(30);
+        // Drop frame only exists at 29.97; anything else is read as it counts.
+        Some(if drop_frame && base == 30 {
+            Rate::FPS_29_97_DROP
+        } else {
+            Rate::new(base, false, false)
         })
     }
 }
@@ -248,6 +349,65 @@ mod tests {
             );
             // The very first frame is read too.
             assert_eq!(frames[0].timecode, start, "{rate:?}");
+        }
+    }
+
+    #[test]
+    fn a_quiet_noisy_offset_and_dull_signal_still_reads() {
+        // What comes off a long cable or a microphone: low, off centre,
+        // rounded edges and hiss.
+        let rate = Rate::FPS_25;
+        let start = Timecode::new(2, 0, 0, 0);
+        let mut encoder = Encoder::new(start, rate, 48_000, 1.0);
+        let mut decoder = Decoder::new(48_000);
+        let mut block = vec![0.0; 480];
+        let mut smooth = 0.0_f32;
+        let mut noise = 12345_u32;
+        let mut frames = Vec::new();
+        for _ in 0..100 {
+            encoder.fill(&mut block);
+            for sample in &mut block {
+                smooth += (*sample - smooth) * 0.25;
+                noise = noise.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                let hiss = (noise >> 8) as f32 / (1 << 24) as f32 - 0.5;
+                *sample = 0.05 * smooth + 0.2 + 0.01 * hiss;
+            }
+            frames.extend(decoder.feed(&block));
+        }
+        assert!(frames.len() >= 20, "{} frames", frames.len());
+        for pair in frames.windows(2) {
+            assert_eq!(rate.add(pair[0].timecode, 1), pair[1].timecode);
+        }
+    }
+
+    #[test]
+    fn the_reader_tells_the_rate_from_the_signal() {
+        for (rate, sample_rate) in [
+            (Rate::FPS_24, 48_000),
+            (Rate::FPS_25, 44_100),
+            (Rate::FPS_30, 48_000),
+            (Rate::FPS_29_97_DROP, 48_000),
+        ] {
+            let start = Timecode::new(10, 0, 0, 0);
+            let mut encoder = Encoder::new(start, rate, sample_rate, 0.5);
+            let mut reader = Reader::new(sample_rate);
+            let mut block = vec![0.0; 480];
+            let mut read = Vec::new();
+            for _ in 0..(sample_rate / 480) {
+                encoder.fill(&mut block);
+                read.extend(reader.feed(&block));
+            }
+            assert!(
+                read.len() as f64 >= rate.fps() - 3.0,
+                "{rate:?}: {}",
+                read.len()
+            );
+            assert!(
+                read.iter().all(|(_, read_rate)| *read_rate == rate),
+                "{rate:?}"
+            );
+            // The first frame only told where the measure starts.
+            assert_eq!(read[0].0, rate.add(start, 1), "{rate:?}");
         }
     }
 
