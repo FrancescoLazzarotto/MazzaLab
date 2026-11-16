@@ -60,6 +60,11 @@ pub fn router_with_screens(
         .route("/api/status", get(status))
         .route("/api/command", post(command))
         .route("/api/save", post(save))
+        .route("/api/show", get(show_file))
+        .route("/api/show/files", get(show_files))
+        .route("/api/show/open", post(open_show))
+        .route("/api/show/new", post(new_show))
+        .route("/api/show/save-as", post(save_show_as))
         .route("/api/audio", get(audio))
         .route("/api/midi", get(midi))
         .route("/api/midi/in", post(midi_in))
@@ -129,6 +134,165 @@ async fn command(
 
 async fn save(State(state): State<AppState>) -> (StatusCode, Json<Value>) {
     outcome(state.handle.save().await)
+}
+
+/// The open show's file and its folder.
+async fn show_file(State(state): State<AppState>) -> Json<Value> {
+    let path = state.handle.path();
+    Json(json!({
+        "path": path.as_deref().map(|path| path.display().to_string()),
+        "folder": path
+            .as_deref()
+            .and_then(Path::parent)
+            .map(|folder| folder.display().to_string()),
+    }))
+}
+
+#[derive(Debug, Deserialize)]
+struct FilesQuery {
+    dir: Option<PathBuf>,
+}
+
+/// A folder of the server's machine, to pick a show in: its subfolders and
+/// show files, by name. Without `dir`, the open show's folder.
+async fn show_files(State(state): State<AppState>, Query(query): Query<FilesQuery>) -> Response {
+    let dir = query
+        .dir
+        .or_else(|| state.handle.base_dir().map(|base| base.to_path_buf()))
+        .or_else(|| std::env::current_dir().ok())
+        .unwrap_or_else(|| PathBuf::from("."));
+    match tokio::task::spawn_blocking(move || list_folder(&dir)).await {
+        Ok(Ok(value)) => Json(value).into_response(),
+        Ok(Err(error)) => failure(StatusCode::NOT_FOUND, error.to_string()).into_response(),
+        Err(error) => failure(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()).into_response(),
+    }
+}
+
+fn list_folder(dir: &Path) -> std::io::Result<Value> {
+    let dir = std::path::absolute(dir)?;
+    let mut folders = Vec::new();
+    let mut shows = Vec::new();
+    for entry in std::fs::read_dir(&dir)? {
+        let Ok(entry) = entry else { continue };
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if name.starts_with('.') {
+            continue;
+        }
+        let Ok(kind) = entry.file_type() else { continue };
+        if kind.is_dir() {
+            folders.push(name);
+        } else if Path::new(&name)
+            .extension()
+            .is_some_and(|extension| extension == mazzalab_project::FILE_EXTENSION)
+        {
+            shows.push(name);
+        }
+    }
+    let order = |a: &String, b: &String| a.to_lowercase().cmp(&b.to_lowercase());
+    folders.sort_by(order);
+    shows.sort_by(order);
+    Ok(json!({
+        "dir": dir.display().to_string(),
+        "parent": dir.parent().map(|parent| parent.display().to_string()),
+        "separator": std::path::MAIN_SEPARATOR.to_string(),
+        "folders": folders,
+        "shows": shows,
+    }))
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenRequest {
+    path: PathBuf,
+    /// Throw the open show's unsaved changes away; without it, a show with
+    /// unsaved changes is not replaced.
+    #[serde(default)]
+    discard: bool,
+}
+
+/// Opens another show in place of the running one, on the same sockets.
+async fn open_show(
+    State(state): State<AppState>,
+    Json(request): Json<OpenRequest>,
+) -> (StatusCode, Json<Value>) {
+    if !request.path.is_file() {
+        return failure(
+            StatusCode::NOT_FOUND,
+            format!("no show at {}", request.path.display()),
+        );
+    }
+    replace_show(&state.handle, request, false).await
+}
+
+/// Creates an empty show file and opens it.
+async fn new_show(
+    State(state): State<AppState>,
+    Json(mut request): Json<OpenRequest>,
+) -> (StatusCode, Json<Value>) {
+    if request.path.extension().is_none() {
+        request.path.set_extension(mazzalab_project::FILE_EXTENSION);
+    }
+    if request.path.exists() {
+        return failure(
+            StatusCode::CONFLICT,
+            format!("{} already exists", request.path.display()),
+        );
+    }
+    replace_show(&state.handle, request, true).await
+}
+
+async fn replace_show(
+    handle: &ShowHandle,
+    request: OpenRequest,
+    create: bool,
+) -> (StatusCode, Json<Value>) {
+    let dirty = handle
+        .snapshot()
+        .await
+        .is_some_and(|snapshot| snapshot.dirty);
+    if dirty && !request.discard {
+        return (
+            StatusCode::CONFLICT,
+            Json(json!({ "error": "the show has unsaved changes", "unsaved": true })),
+        );
+    }
+    let path = request.path;
+    let read = tokio::task::spawn_blocking(move || {
+        if create {
+            let workspace = mazzalab_core::Workspace::new(crate::show_name(&path));
+            mazzalab_project::save(&path, &workspace).map_err(|error| error.to_string())?;
+        }
+        crate::read_show(&path).map(|read| (path, read))
+    })
+    .await;
+    match read {
+        Ok(Ok((path, (workspace, recovered)))) => {
+            if dirty && let Some(previous) = handle.path() {
+                // The changes were thrown away: their autosave goes too.
+                mazzalab_project::discard_autosave(&previous);
+            }
+            handle.open(workspace, Some(path), recovered).await;
+            (StatusCode::OK, Json(json!({ "ok": true })))
+        }
+        Ok(Err(error)) => failure(StatusCode::UNPROCESSABLE_ENTITY, error),
+        Err(error) => failure(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct SaveAsRequest {
+    path: PathBuf,
+}
+
+/// Saves the show to another file, which becomes its file.
+async fn save_show_as(
+    State(state): State<AppState>,
+    Json(request): Json<SaveAsRequest>,
+) -> (StatusCode, Json<Value>) {
+    let mut path = request.path;
+    if path.extension().is_none() {
+        path.set_extension(mazzalab_project::FILE_EXTENSION);
+    }
+    outcome(state.handle.save_as(path).await)
 }
 
 /// The audio output in use and the devices the show could use instead.

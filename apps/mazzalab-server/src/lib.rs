@@ -119,11 +119,7 @@ pub fn load_or_create(path: &Path) -> Result<Workspace, String> {
     if path.exists() {
         mazzalab_project::load(path).map_err(|error| error.to_string())
     } else {
-        let name = path.file_stem().map_or_else(
-            || "Untitled".to_owned(),
-            |stem| stem.to_string_lossy().into_owned(),
-        );
-        Ok(Workspace::new(name))
+        Ok(Workspace::new(show_name(path)))
     }
 }
 
@@ -131,6 +127,36 @@ pub fn load_or_create(path: &Path) -> Result<Workspace, String> {
 /// any: start the server on them with [`ServerConfig::recovered`] set.
 pub fn recoverable(path: &Path) -> Option<Workspace> {
     mazzalab_project::recoverable(path)
+}
+
+/// Reads a show to run it: the unsaved changes an earlier session left
+/// behind (a crash, a power cut) if there are any, the file otherwise, or
+/// an empty show when the file does not exist yet. Says whether what it
+/// read is such an autosave. The lengths of audio files are filled in.
+pub fn read_show(path: &Path) -> Result<(Workspace, bool), String> {
+    let (mut workspace, recovered) = match recoverable(path) {
+        Some(autosaved) => {
+            tracing::warn!(show = %path.display(), "recovered unsaved changes from an autosave");
+            (autosaved, true)
+        }
+        None => (load_or_create(path)?, false),
+    };
+    let base = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    for (cue, problem) in mazzalab_audio::probe_workspace(&mut workspace, base) {
+        tracing::warn!(%cue, %problem, "audio file unavailable");
+    }
+    Ok((workspace, recovered))
+}
+
+/// The name of the show in `path`: its file name without the extension.
+pub fn show_name(path: &Path) -> String {
+    path.file_stem().map_or_else(
+        || "Untitled".to_owned(),
+        |stem| stem.to_string_lossy().into_owned(),
+    )
 }
 
 /// Binds every socket and starts serving `workspace`.
