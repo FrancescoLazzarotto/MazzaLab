@@ -106,7 +106,7 @@ compilato l'interfaccia web.
 | `apps/mazzalab-web` | Interfaccia operatore (React + TypeScript) |
 | `apps/mazzalab-desktop` | App desktop (Tauri) con il server incorporato |
 | `apps/mazzalab-cli` | Strumento da riga di comando `mazzalab` |
-| `docs/` | Architettura, ADR, protocolli (in inglese) |
+| `docs/` | [Guida](docs/user-guide/README.it.md), architettura, ADR, protocolli (in inglese) |
 
 ## Contesto
 

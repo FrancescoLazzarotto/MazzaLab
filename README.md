@@ -100,7 +100,7 @@ the web UI.
 | `apps/mazzalab-web` | Operator UI (React + TypeScript) |
 | `apps/mazzalab-desktop` | Desktop app (Tauri) embedding the server |
 | `apps/mazzalab-cli` | `mazzalab` command line tool |
-| `docs/` | Architecture, ADRs, protocols ([OSC](docs/protocols/osc.md), [client API](docs/protocols/client-api.md)) |
+| `docs/` | [User guide](docs/user-guide/README.md), architecture, ADRs, protocols ([OSC](docs/protocols/osc.md), [client API](docs/protocols/client-api.md)) |
 
 ## Background
 

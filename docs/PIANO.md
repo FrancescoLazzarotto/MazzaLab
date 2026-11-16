@@ -382,7 +382,8 @@ Parità con QLab e poi oltre.
       QLab".
 
 ### Documentazione
-- [ ] Guida utente in italiano e in inglese (`docs/user-guide`).
+- [x] Guida utente in italiano e in inglese (`docs/user-guide`): descrive
+      quello che c'è oggi e va tenuta aggiornata con le funzioni nuove.
 - [ ] Show di esempio e tutorial.
 - [ ] Unificare i fine riga (LF) per evitare gli avvisi LF/CRLF su Windows.
 
