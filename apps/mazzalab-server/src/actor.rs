@@ -126,6 +126,7 @@ pub struct Completion {
     notices: mpsc::UnboundedSender<Notice>,
     midi: mpsc::UnboundedSender<MidiEvent>,
     timecode: mpsc::UnboundedSender<(Timecode, Rate)>,
+    sysex: mpsc::UnboundedSender<Vec<u8>>,
 }
 
 impl Completion {
@@ -146,6 +147,12 @@ impl Completion {
     /// the cues and works the transport controls that wait for it.
     pub fn midi_received(&self, event: MidiEvent) {
         let _ = self.midi.send(event);
+    }
+
+    /// Hands the show a SysEx message from a MIDI input, F0 to F7: MIDI
+    /// Show Control among them.
+    pub fn sysex_received(&self, bytes: &[u8]) {
+        let _ = self.sysex.send(bytes.to_vec());
     }
 
     /// Hands the show the timecode that came in: it starts the cues whose
@@ -573,11 +580,13 @@ pub fn spawn(
     let (notices_tx, notices_rx) = mpsc::unbounded_channel();
     let (midi_tx, midi_rx) = mpsc::unbounded_channel();
     let (timecode_tx, timecode_rx) = mpsc::unbounded_channel();
+    let (sysex_tx, sysex_rx) = mpsc::unbounded_channel();
     let outputs = make_outputs(Completion {
         finished: finished_tx,
         notices: notices_tx,
         midi: midi_tx,
         timecode: timecode_tx,
+        sysex: sysex_tx,
     });
     let identity = Arc::new(RwLock::new(Identity::new(
         show.workspace(),
@@ -611,7 +620,16 @@ pub fn spawn(
         last_wall_clock: None,
         unreadable: HashSet::new(),
     };
-    let task = tokio::spawn(actor.run(receiver, finished_rx, notices_rx, midi_rx, timecode_rx));
+    let task = tokio::spawn(actor.run(
+        receiver,
+        Inputs {
+            finished: finished_rx,
+            notices: notices_rx,
+            midi: midi_rx,
+            timecode: timecode_rx,
+            sysex: sysex_rx,
+        },
+    ));
     (handle, task)
 }
 
@@ -648,14 +666,14 @@ struct Actor {
 }
 
 impl Actor {
-    async fn run(
-        mut self,
-        mut requests: mpsc::Receiver<Request>,
-        mut finished: mpsc::UnboundedReceiver<CueId>,
-        mut notices: mpsc::UnboundedReceiver<Notice>,
-        mut midi: mpsc::UnboundedReceiver<MidiEvent>,
-        mut timecode: mpsc::UnboundedReceiver<(Timecode, Rate)>,
-    ) {
+    async fn run(mut self, mut requests: mpsc::Receiver<Request>, inputs: Inputs) {
+        let Inputs {
+            mut finished,
+            mut notices,
+            mut midi,
+            mut timecode,
+            mut sysex,
+        } = inputs;
         let base = self.media_base();
         for output in &mut self.outputs {
             output.rebase(&base);
@@ -686,6 +704,10 @@ impl Actor {
                 Some((value, rate)) = timecode.recv() => {
                     self.advance();
                     self.timecode_in(value, rate);
+                }
+                Some(bytes) = sysex.recv() => {
+                    self.advance();
+                    self.sysex_in(&bytes);
                 }
                 () = tokio::time::sleep_until(wake) => {}
             }
@@ -865,6 +887,40 @@ impl Actor {
             if let Err(error) = self.show.execute(command) {
                 tracing::warn!(%error, "a MIDI trigger could not be carried out");
             }
+        }
+    }
+
+    /// Acts on a SysEx message from a MIDI input: MIDI Show Control for
+    /// the show's device ID (or for every device) runs the show.
+    fn sysex_in(&mut self, bytes: &[u8]) {
+        let Some(message) = mazzalab_midi::parse_msc(bytes) else {
+            return;
+        };
+        let workspace = self.show.workspace();
+        let device = workspace.settings.msc_device_id.unwrap_or(ALL_MSC_DEVICES);
+        let Some(action) = mazzalab_midi::action_for(&message, device, workspace) else {
+            return;
+        };
+        use mazzalab_midi::MscAction;
+        let command = match action {
+            MscAction::Go => Command::Go { list: None },
+            MscAction::Start(cue) => Command::Start { cue },
+            MscAction::Pause(cue) => Command::Pause { cue },
+            MscAction::PauseAll => Command::PauseAll,
+            MscAction::Resume(cue) => Command::Resume { cue },
+            MscAction::ResumeAll => Command::ResumeAll,
+            MscAction::StopAll => Command::StopAll,
+            MscAction::Stop(cue) => Command::Stop { cue },
+            MscAction::Reset => Command::Reset,
+            MscAction::SetPlayhead(cue) => Command::SetPlayhead {
+                list: None,
+                cue: Some(cue),
+            },
+            MscAction::PlayheadNext => Command::PlayheadNext { list: None },
+            MscAction::PlayheadPrevious => Command::PlayheadPrevious { list: None },
+        };
+        if let Err(error) = self.show.execute(command) {
+            tracing::warn!(%error, "an MSC command could not be carried out");
         }
     }
 
@@ -1322,6 +1378,19 @@ fn absolute(path: &Path) -> Option<PathBuf> {
 
 fn is_busy(status: &Status) -> bool {
     status.panicking || !status.running.is_empty()
+}
+
+/// The MSC device ID meaning "every device", which a show without its own
+/// ID answers to.
+const ALL_MSC_DEVICES: u8 = 0x7F;
+
+/// What the backends hand the actor, besides requests.
+struct Inputs {
+    finished: mpsc::UnboundedReceiver<CueId>,
+    notices: mpsc::UnboundedReceiver<Notice>,
+    midi: mpsc::UnboundedReceiver<MidiEvent>,
+    timecode: mpsc::UnboundedReceiver<(Timecode, Rate)>,
+    sysex: mpsc::UnboundedReceiver<Vec<u8>>,
 }
 
 /// How often the audio state is looked at while a cue is auditioned, which

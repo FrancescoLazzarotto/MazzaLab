@@ -399,9 +399,10 @@ impl MidiBackend {
         .ok();
         let incoming = completion.clone();
         let clock = completion.clone();
+        let control = completion.clone();
         // One decoder for every input: a show follows one timecode source.
         let decoder = std::sync::Mutex::new(mazzalab_timecode::mtc::Decoder::new());
-        let listener = mazzalab_midi::Listener::start_with_timecode(
+        let listener = mazzalab_midi::Listener::start_with_sysex(
             move |_, event| incoming.midi_received(event),
             move |_, bytes| {
                 let decoded = decoder
@@ -412,6 +413,7 @@ impl MidiBackend {
                     clock.timecode_received(timecode, rate);
                 }
             },
+            move |_, bytes| control.sysex_received(bytes),
         )
         .map_err(|error| tracing::error!(%error, "MIDI triggers are disabled"))
         .ok();
