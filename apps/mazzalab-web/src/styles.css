@@ -1914,6 +1914,17 @@ button.audition.active {
   font-variant-numeric: tabular-nums;
 }
 
+.wave-scroll {
+  display: block;
+  margin-top: 4px;
+}
+
+.wave-zoom {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+}
+
 .waveform-length {
   color: var(--text-2);
 }

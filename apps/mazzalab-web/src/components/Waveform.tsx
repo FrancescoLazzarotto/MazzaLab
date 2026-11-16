@@ -4,6 +4,8 @@ import type { AudioCue, RunningCue, SliceMarker, Waveform as WaveformData } from
 import { formatTime } from "../format";
 import { useI18n } from "../i18n";
 import { addMarker, firstReach, locate, markers, segments } from "../slices";
+import { bucketsFor, dragFade, panView, pinchView, timeToX, wholeFile, xToTime, zoomLevel, zoomView, type View } from "../waveView";
+import { Icon } from "./icons";
 
 const BUCKETS = 1600;
 /** How close, in pixels, the pointer has to be to grab a trim handle. */
@@ -14,7 +16,11 @@ const RULER = 16;
 const RULER_STEPS = [0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 1800, 3600];
 
 /** A trim handle, or a slice marker by its time when the drag began. */
-type Handle = "start" | "end" | { marker: number };
+type Handle = "start" | "end" | "fadeIn" | "fadeOut" | { marker: number };
+
+const isFade = (handle: Handle | undefined | null): handle is "fadeIn" | "fadeOut" => handle === "fadeIn" || handle === "fadeOut";
+/** How far below the ruler the fade handles sit, in pixels. */
+const FADE_BAND = 14;
 
 const isMarker = (handle: Handle | undefined | null): handle is { marker: number } => typeof handle === "object" && handle !== null;
 const sameHandle = (a: Handle | null | undefined, b: Handle | null | undefined) =>
@@ -78,7 +84,7 @@ export function Waveform({
   /** Where the cue is loaded to, in seconds from the start of its pre-wait. */
   loadedAt: number | undefined;
   editable: boolean;
-  onChange: (patch: { start_time?: number; end_time?: number; slices?: SliceMarker[] }) => void;
+  onChange: (patch: { start_time?: number; end_time?: number; slices?: SliceMarker[]; fade_in?: number; fade_out?: number }) => void;
   /** The waveform was clicked: load the cue to that time. */
   onLoad: (time: number) => void;
 }) {
@@ -91,16 +97,28 @@ export function Waveform({
   const [draft, setDraft] = useState<{ handle: Handle; time: number } | null>(null);
   const [hover, setHover] = useState<Handle | null>(null);
   const grab = useRef<{ handle: Handle; moved: boolean } | null>(null);
+  /** The stretch of the file on screen; the whole file until zoomed. */
+  const [view, setView] = useState<View>({ start: 0, span: 1 });
+  const [zoomed, setZoomed] = useState(false);
+  const touches = useRef(new Map<number, number>());
+  const pinch = useRef<{ began: View; xs: [number, number]; ids: [number, number] } | null>(null);
 
   const { id, file } = cue;
+  const knownDuration = data?.duration ?? cue.media_duration ?? 0;
+  const buckets = bucketsFor(BUCKETS, zoomed ? zoomLevel(view, knownDuration) : 1);
   useEffect(() => {
     setData(null);
     setError(null);
+    setZoomed(false);
+    setView(wholeFile(cue.media_duration ?? 0));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, file]);
+  useEffect(() => {
     if (!file) return;
     const abort = new AbortController();
     setLoading(true);
     connection
-      .waveform(id, BUCKETS, abort.signal)
+      .waveform(id, buckets, abort.signal)
       .then((waveform) => setData(waveform))
       .catch((reason: unknown) => {
         if (!abort.signal.aborted) setError(reason instanceof Error ? reason.message : String(reason));
@@ -109,9 +127,14 @@ export function Waveform({
         if (!abort.signal.aborted) setLoading(false);
       });
     return () => abort.abort();
-  }, [connection, id, file]);
+  }, [connection, id, file, buckets]);
 
-  const duration = data?.duration ?? cue.media_duration ?? 0;
+  const duration = knownDuration;
+  // Until the file is known, or zoomed, the view is all of it.
+  const shownView: View = zoomed ? view : wholeFile(duration);
+  const fades = isFade(draft?.handle)
+    ? dragFade(draft.handle, draft.time, cue.start_time ?? 0, cue.end_time ?? duration, cue.fade_in ?? 0, cue.fade_out ?? 0)
+    : { fade_in: cue.fade_in ?? 0, fade_out: cue.fade_out ?? 0 };
   const start = draft?.handle === "start" ? draft.time : (cue.start_time ?? 0);
   const end = draft?.handle === "end" ? draft.time : (cue.end_time ?? duration);
   // The cue as drawn: with the handle being dragged where it is now.
@@ -163,7 +186,7 @@ export function Waveform({
         load: color("--warn", "#dba93c"),
       };
 
-      const x = (time: number) => (duration > 0 ? (time / duration) * width : 0);
+      const x = (time: number) => (duration > 0 ? timeToX(time, shownView, width) : 0);
       const top = RULER;
       const middle = top + (height - top) / 2;
       const half = (height - top) / 2 - 3;
@@ -172,11 +195,11 @@ export function Waveform({
       context.fillStyle = colors.line;
       context.fillRect(0, top - 1, width, 1);
       if (duration > 0) {
-        const step = rulerStep(duration, width);
+        const step = rulerStep(shownView.span, width);
         context.font = '10px "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif';
         context.textBaseline = "middle";
         context.textAlign = "left";
-        for (let time = 0; time < duration; time += step) {
+        for (let time = Math.floor(shownView.start / step) * step; time < Math.min(duration, shownView.start + shownView.span); time += step) {
           const position = Math.round(x(time));
           context.fillStyle = colors.tick;
           context.fillRect(position, top - 5, 1, 5);
@@ -195,8 +218,8 @@ export function Waveform({
         const startX = x(start);
         const endX = x(end);
         for (let column = 0; column < width; column++) {
-          const first = Math.floor((column / width) * count);
-          const last = Math.max(first + 1, Math.floor(((column + 1) / width) * count));
+          const first = Math.max(0, Math.floor((xToTime(column, shownView, width) / duration) * count));
+          const last = Math.max(first + 1, Math.floor((xToTime(column + 1, shownView, width) / duration) * count));
           let low = 127;
           let high = -127;
           for (let bucket = first; bucket < last && bucket < count; bucket++) {
@@ -213,8 +236,8 @@ export function Waveform({
       if (duration > 0) {
         // Built-in fades, as the gain they apply over the played part.
         const length = Math.max(0, end - start);
-        const fadeIn = Math.min(cue.fade_in ?? 0, length);
-        const fadeOut = Math.min(cue.fade_out ?? 0, length);
+        const fadeIn = Math.min(fades.fade_in, length);
+        const fadeOut = Math.min(fades.fade_out, length);
         if (fadeIn > 0 || fadeOut > 0) {
           const ceiling = top + 3;
           const floor = height - 2;
@@ -226,6 +249,16 @@ export function Waveform({
           context.lineTo(x(end - fadeOut), ceiling);
           context.lineTo(x(end), fadeOut > 0 ? floor : ceiling);
           context.stroke();
+        }
+        // Fade handles: small squares on the fade's ceiling, to drag along it.
+        for (const [handle, time] of [
+          ["fadeIn", start + fadeIn],
+          ["fadeOut", end - fadeOut],
+        ] as const) {
+          const position = x(time);
+          if (position < -4 || position > width + 4) continue;
+          context.fillStyle = draft?.handle === handle || hover === handle ? colors.active : colors.fade;
+          context.fillRect(Math.round(position) - 3, top + 1, 7, 7);
         }
         // Slice markers, dashed, with how often each slice plays.
         if (cuts.length > 0) {
@@ -258,7 +291,9 @@ export function Waveform({
           ["start", start],
           ["end", end],
         ] as const) {
-          const position = Math.min(width - 1, Math.max(0, Math.round(x(time))));
+          const raw = x(time);
+          if (raw < -1 || raw > width) continue;
+          const position = Math.min(width - 1, Math.max(0, Math.round(raw)));
           context.fillStyle = draft?.handle === handle || hover === handle ? colors.active : colors.handle;
           context.fillRect(position, 0, 1, height);
           const direction = handle === "start" ? 1 : -1;
@@ -299,20 +334,60 @@ export function Waveform({
       observer.disconnect();
       if (frame) cancelAnimationFrame(frame);
     };
-  }, [data, duration, start, end, cue, draft, hover, playing, loadedAt, shown, cuts]);
+  }, [data, duration, start, end, cue, draft, hover, playing, loadedAt, shown, cuts, shownView, fades]);
 
   const timeAt = (event: { clientX: number }) => {
     const element = canvas.current;
     if (!element || duration <= 0) return 0;
     const bounds = element.getBoundingClientRect();
-    return Math.min(duration, Math.max(0, ((event.clientX - bounds.left) / bounds.width) * duration));
+    return Math.min(duration, Math.max(0, xToTime(event.clientX - bounds.left, shownView, bounds.width)));
   };
-  const handleAt = (event: { clientX: number }): Handle | null => {
+
+  const zoomBy = (factor: number, anchor?: number) => {
+    if (duration <= 0) return;
+    const base = zoomed ? view : wholeFile(duration);
+    const next = zoomView(base, duration, factor, anchor ?? base.start + base.span / 2);
+    setView(next);
+    setZoomed(next.span < duration - 1e-6);
+  };
+
+  // The wheel zooms around the pointer; with Shift, or sideways, it scrolls.
+  // Native listener: React's wheel events cannot be cancelled.
+  useEffect(() => {
+    const element = canvas.current;
+    if (!element || duration <= 0) return;
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const bounds = element.getBoundingClientRect();
+      setView((current) => {
+        const base = zoomedRef.current ? current : wholeFile(duration);
+        const sideways = event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY);
+        const next = sideways
+          ? panView(base, duration, ((event.deltaX || event.deltaY) / bounds.width) * base.span)
+          : zoomView(base, duration, Math.exp(-event.deltaY * (event.ctrlKey ? 0.01 : 0.0025)), xToTime(event.clientX - bounds.left, base, bounds.width));
+        zoomedRef.current = next.span < duration - 1e-6;
+        setZoomed(zoomedRef.current);
+        return next;
+      });
+    };
+    element.addEventListener("wheel", onWheel, { passive: false });
+    return () => element.removeEventListener("wheel", onWheel);
+  }, [duration]);
+  const zoomedRef = useRef(zoomed);
+  zoomedRef.current = zoomed;
+
+  const handleAt = (event: { clientX: number; clientY: number }): Handle | null => {
     const element = canvas.current;
     if (!element || duration <= 0) return null;
     const bounds = element.getBoundingClientRect();
     const position = event.clientX - bounds.left;
-    const distance = (time: number) => Math.abs((time / duration) * bounds.width - position);
+    const distance = (time: number) => Math.abs(timeToX(time, shownView, bounds.width) - position);
+    // Just under the ruler the fade handles win over the trim lines.
+    const down = event.clientY - bounds.top;
+    if (down >= RULER && down <= RULER + FADE_BAND) {
+      const [toIn, toOut] = [distance(start + fades.fade_in), distance(end - fades.fade_out)];
+      if (Math.min(toIn, toOut) <= GRAB) return toIn <= toOut ? "fadeIn" : "fadeOut";
+    }
     const [toStart, toEnd] = [distance(start), distance(end)];
     // Markers sit inside the region, so they win over a trim that is as close.
     const marker = cuts.reduce<SliceMarker | null>((best, cut) => (distance(cut.time) <= GRAB && (!best || distance(cut.time) < distance(best.time)) ? cut : best), null);
@@ -320,7 +395,7 @@ export function Waveform({
     if (Math.min(toStart, toEnd) > GRAB) return null;
     // When both handles are within reach, take the one the pointer is
     // outside of, so that neither gets stuck behind the other.
-    if (toStart <= GRAB && toEnd <= GRAB) return position <= (start / duration) * bounds.width ? "start" : "end";
+    if (toStart <= GRAB && toEnd <= GRAB) return position <= timeToX(start, shownView, bounds.width) ? "start" : "end";
     return toStart < toEnd ? "start" : "end";
   };
 
@@ -328,6 +403,7 @@ export function Waveform({
   const dragTime = (handle: Handle, time: number) => {
     const fixedStart = cue.start_time ?? 0;
     const fixedEnd = cue.end_time ?? duration;
+    if (isFade(handle)) return Math.min(duration, Math.max(0, time));
     if (isMarker(handle)) return Math.min(fixedEnd - 0.01, Math.max(fixedStart + 0.01, time));
     return handle === "start" ? Math.min(time, fixedEnd - 0.01) : Math.max(time, fixedStart + 0.01);
   };
@@ -349,6 +425,16 @@ export function Waveform({
         className={hover || draft ? "trimming" : undefined}
         onPointerDown={(event) => {
           if (duration <= 0) return;
+          // A second finger turns the touch into a pinch.
+          touches.current.set(event.pointerId, event.clientX);
+          if (touches.current.size === 2) {
+            const [a, b] = [...touches.current.entries()].sort((p, q) => p[1] - q[1]);
+            const left = event.currentTarget.getBoundingClientRect().left;
+            grab.current = null;
+            setDraft(null);
+            pinch.current = { began: zoomed ? view : wholeFile(duration), xs: [a[1] - left, b[1] - left], ids: [a[0], b[0]] };
+            return;
+          }
           const time = timeAt(event);
           // Alt-click cuts a slice there.
           if (event.altKey) {
@@ -364,9 +450,22 @@ export function Waveform({
           }
           event.currentTarget.setPointerCapture(event.pointerId);
           grab.current = { handle, moved: false };
-          setDraft({ handle, time: isMarker(handle) ? handle.marker : handle === "start" ? start : end });
+          setDraft({
+            handle,
+            time: isMarker(handle) ? handle.marker : handle === "fadeIn" ? start + fades.fade_in : handle === "fadeOut" ? end - fades.fade_out : handle === "start" ? start : end,
+          });
         }}
         onPointerMove={(event) => {
+          if (touches.current.has(event.pointerId)) touches.current.set(event.pointerId, event.clientX);
+          const pinching = pinch.current;
+          if (pinching) {
+            const bounds = event.currentTarget.getBoundingClientRect();
+            const now = pinching.ids.map((pointer) => (touches.current.get(pointer) ?? 0) - bounds.left) as [number, number];
+            const next = pinchView(pinching.began, duration, pinching.xs, now, bounds.width);
+            setView(next);
+            setZoomed(next.span < duration - 1e-6);
+            return;
+          }
           if (!interactive) return;
           // The grab is kept outside React state, so that a move right after
           // the press is not lost before the next render.
@@ -380,13 +479,21 @@ export function Waveform({
           setDraft({ handle: held.handle, time: dragTime(held.handle, timeAt(event)) });
         }}
         onPointerUp={(event) => {
+          touches.current.delete(event.pointerId);
+          if (pinch.current) {
+            if (touches.current.size < 2) pinch.current = null;
+            return;
+          }
           const held = grab.current;
           grab.current = null;
           setDraft(null);
           // A click on a handle without moving it changes nothing.
           if (!held?.moved) return;
           const time = Math.round(dragTime(held.handle, timeAt(event)) * 1000) / 1000;
-          if (isMarker(held.handle)) {
+          if (isFade(held.handle)) {
+            const next = dragFade(held.handle, time, cue.start_time ?? 0, cue.end_time ?? duration, cue.fade_in ?? 0, cue.fade_out ?? 0);
+            if (next.fade_in !== (cue.fade_in ?? 0) || next.fade_out !== (cue.fade_out ?? 0)) onChange(next);
+          } else if (isMarker(held.handle)) {
             const from = held.handle.marker;
             const others = (cue.slices ?? []).filter((marker) => marker.time !== from);
             const kept = (cue.slices ?? []).find((marker) => marker.time === from);
@@ -401,9 +508,40 @@ export function Waveform({
           else onChange({ end_time: time >= duration - 0.005 ? undefined : time });
         }}
         onPointerLeave={() => setHover(null)}
+        onPointerCancel={(event) => {
+          touches.current.delete(event.pointerId);
+          pinch.current = null;
+          grab.current = null;
+          setDraft(null);
+        }}
       />
+      {zoomed && duration > 0 && (
+        <input
+          type="range"
+          className="wave-scroll"
+          aria-label={t("waveform.scroll")}
+          min={0}
+          max={Math.max(0, duration - view.span)}
+          step="any"
+          value={view.start}
+          onChange={(event) => setView({ start: Number(event.target.value), span: view.span })}
+        />
+      )}
       <div className="waveform-foot">
         <span>{summary}</span>
+        {duration > 0 && (
+          <span className="wave-zoom">
+            <button className="icon-button quiet" onClick={() => zoomBy(1 / 2)} disabled={!zoomed} title={t("waveform.zoomOut")} aria-label={t("waveform.zoomOut")}>
+              <Icon name="zoom-out" size={13} />
+            </button>
+            <button className="icon-button quiet" onClick={() => zoomBy(2)} title={t("waveform.zoomIn")} aria-label={t("waveform.zoomIn")}>
+              <Icon name="zoom-in" size={13} />
+            </button>
+            <button className="icon-button quiet" onClick={() => zoomBy(1e-6)} disabled={!zoomed} title={t("waveform.fit")} aria-label={t("waveform.fit")}>
+              <Icon name="zoom-fit" size={13} />
+            </button>
+          </span>
+        )}
         {duration > 0 && (
           <span>
             {formatTime(start)} – {formatTime(end)} <span className="waveform-length">({formatTime(Math.max(0, end - start))})</span>
