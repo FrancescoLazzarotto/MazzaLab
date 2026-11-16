@@ -114,11 +114,98 @@ pub struct Triggers {
     /// timecode running forward reaches it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timecode: Option<String>,
+    /// An OSC address that starts the cue when a message to it arrives,
+    /// with `*` and `?` matching any characters, e.g. `/scene/*/go`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub osc: Option<String>,
+    /// A time of day that starts the cue.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wall_clock: Option<WallClockTrigger>,
 }
 
 impl Triggers {
     pub fn is_empty(&self) -> bool {
-        self.hotkey.is_none() && self.midi.is_none() && self.timecode.is_none()
+        self.hotkey.is_none()
+            && self.midi.is_none()
+            && self.timecode.is_none()
+            && self.osc.is_none()
+            && self.wall_clock.is_none()
+    }
+}
+
+/// A day of the week.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Weekday {
+    Monday,
+    Tuesday,
+    Wednesday,
+    Thursday,
+    Friday,
+    Saturday,
+    Sunday,
+}
+
+impl Weekday {
+    /// Monday first, as ISO 8601 counts them.
+    pub const ALL: [Self; 7] = [
+        Self::Monday,
+        Self::Tuesday,
+        Self::Wednesday,
+        Self::Thursday,
+        Self::Friday,
+        Self::Saturday,
+        Self::Sunday,
+    ];
+
+    /// The day `days` after a Monday (0 is Monday, 6 Sunday).
+    pub fn from_monday(days: u32) -> Self {
+        Self::ALL[(days % 7) as usize]
+    }
+}
+
+/// A time of day, on the show machine's clock, that starts a cue: an
+/// installation that opens at ten, a preshow loop at half past seven.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WallClockTrigger {
+    /// `HH:MM` or `HH:MM:SS`, 24-hour.
+    pub time: String,
+    /// The days it starts the cue on; none means every day.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub days: Vec<Weekday>,
+}
+
+impl WallClockTrigger {
+    /// Its time as seconds after midnight, if it reads as a time.
+    pub fn seconds(&self) -> Option<u32> {
+        let mut parts = self.time.trim().split(':');
+        let mut next = |limit: u32| -> Option<u32> {
+            let part = parts.next()?;
+            if part.is_empty() || part.len() > 2 || !part.bytes().all(|b| b.is_ascii_digit()) {
+                return None;
+            }
+            part.parse().ok().filter(|value| *value < limit)
+        };
+        let hours = next(24)?;
+        let minutes = next(60)?;
+        let seconds = match parts.next() {
+            None => 0,
+            Some(part) => {
+                if part.len() != 2 || !part.bytes().all(|b| b.is_ascii_digit()) {
+                    return None;
+                }
+                part.parse::<u32>().ok().filter(|value| *value < 60)?
+            }
+        };
+        if parts.next().is_some() {
+            return None;
+        }
+        Some(hours * 3600 + minutes * 60 + seconds)
+    }
+
+    /// Whether it starts the cue on `day`.
+    pub fn on(&self, day: Weekday) -> bool {
+        self.days.is_empty() || self.days.contains(&day)
     }
 }
 

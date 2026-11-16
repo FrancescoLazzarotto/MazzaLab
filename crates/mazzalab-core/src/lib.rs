@@ -20,7 +20,7 @@ pub use cue::{
     ActionLength, AudioCue, CameraCue, ContinueMode, Cue, CueColor, CueKind, FadeCue, FadeCurve,
     GroupCue, GroupMode, LightCue, LoadCue, MicCue, MidiCue, MidiFileCue, MidiMessage, MidiTrigger,
     MidiTriggerKind, NetworkCue, ScriptCue, SmpteFormat, TargetCue, TextCue, TimecodeCue,
-    TimecodeSignal, Triggers, VideoCue, WaitCue,
+    TimecodeSignal, Triggers, VideoCue, WaitCue, WallClockTrigger, Weekday,
 };
 pub use geometry::{DEFAULT_TEXT_SIZE, Fit, Geometry, TextAlign, TextStyle};
 pub use id::{CueId, WorkspaceId};

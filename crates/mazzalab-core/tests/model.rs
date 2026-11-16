@@ -223,3 +223,30 @@ fn tree_edits_insert_remove_and_locate() {
     assert!(workspace.find_cue(group).is_some());
     assert_eq!(workspace.cues().count(), 5);
 }
+
+#[test]
+fn wall_clock_triggers_read_their_time_and_days() {
+    use mazzalab_core::{WallClockTrigger, Weekday};
+    let at = |time: &str| WallClockTrigger {
+        time: time.into(),
+        days: Vec::new(),
+    };
+    assert_eq!(at("19:30").seconds(), Some(19 * 3600 + 30 * 60));
+    assert_eq!(at("07:05:09").seconds(), Some(7 * 3600 + 5 * 60 + 9));
+    assert_eq!(at(" 0:00 ").seconds(), Some(0));
+    for wrong in ["24:00", "12:60", "12", "12:30:5", "1:2:3:4", "ab:cd", ""] {
+        assert_eq!(at(wrong).seconds(), None, "{wrong}");
+    }
+    assert!(at("10:00").on(Weekday::Sunday));
+    let weekend = WallClockTrigger {
+        time: "10:00".into(),
+        days: vec![Weekday::Saturday, Weekday::Sunday],
+    };
+    assert!(weekend.on(Weekday::Sunday) && !weekend.on(Weekday::Monday));
+    assert_eq!(Weekday::from_monday(6), Weekday::Sunday);
+    let json = serde_json::to_value(&weekend).unwrap();
+    assert_eq!(
+        json,
+        serde_json::json!({ "time": "10:00", "days": ["saturday", "sunday"] })
+    );
+}
