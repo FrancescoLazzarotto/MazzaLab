@@ -29,7 +29,8 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::time::Duration;
 
 use mazzalab_core::{
-    ActionLength, ContinueMode, Cue, CueId, CueKind, FadeCue, GroupMode, Workspace,
+    ActionLength, ContinueMode, Cue, CueId, CueKind, FadeCue, GroupMode, Others, OthersAction,
+    OthersScope, Workspace,
 };
 use thiserror::Error;
 
@@ -40,13 +41,13 @@ const MAX_CHAIN_DEPTH: u32 = 1024;
 const DEFAULT_SEED: u64 = 0x9E37_79B9_7F4A_7C15;
 
 /// Something that happened at a given engine time.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Event {
     pub at: Duration,
     pub kind: EventKind,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum EventKind {
     /// The cue was started; its pre-wait (if any) is running.
     Triggered(CueId),
@@ -82,6 +83,24 @@ pub enum EventKind {
     /// A looping cue was told to stop looping: it plays the pass it is in
     /// to the end and then completes.
     Devamped(CueId),
+    /// Another cue faded this one out ("fade and stop others"): backends
+    /// fade it to nothing over `fade`; the engine stops it then.
+    FadingOut {
+        cue: CueId,
+        fade: Duration,
+    },
+    /// Another cue ducks this one: backends take it `by_db` down from where
+    /// it is, over `fade`. A later event replaces the amount.
+    Ducked {
+        cue: CueId,
+        by_db: f64,
+        fade: Duration,
+    },
+    /// Nothing ducks the cue any more: it comes back up over `fade`.
+    Unducked {
+        cue: CueId,
+        fade: Duration,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
@@ -199,6 +218,8 @@ pub struct Engine {
     settling: HashSet<CueId>,
     /// While a panic fade is running, cues do not continue automatically.
     panic_until: Option<Duration>,
+    /// The cues ducked, and by whom: the ducking cue, how far, how fast.
+    ducks: BTreeMap<CueId, Vec<(CueId, f64, Duration)>>,
     chain_depth: u32,
     rng: u64,
     events: Vec<Event>,
@@ -228,6 +249,7 @@ impl Engine {
             last_go: None,
             settling: HashSet::new(),
             panic_until: None,
+            ducks: BTreeMap::new(),
             chain_depth: 0,
             rng: DEFAULT_SEED,
             events: Vec::new(),
@@ -840,6 +862,7 @@ impl Engine {
             ActionLength::Instant
         };
         let control = if armed { Control::of(&cue.kind) } else { None };
+        let others = if armed { cue.others } else { None };
         // A Target cue points its own target at another cue.
         let retarget = match (&cue.kind, armed) {
             (CueKind::Target(retarget), true) => Some(retarget.assigned_number.clone()),
@@ -847,6 +870,9 @@ impl Engine {
         };
 
         self.emit(EventKind::ActionStarted { cue: id, armed });
+        if let Some(others) = others {
+            self.act_on_others(id, others);
+        }
         if continue_mode == ContinueMode::AutoContinue {
             self.schedule(
                 post_wait.saturating_sub(into),
@@ -1001,6 +1027,7 @@ impl Engine {
         let Some(run) = self.runs.remove(&id) else {
             return;
         };
+        self.end_ducks(id);
         self.timers
             .retain(|timer| !(timer.cue == id && timer.kind != TimerKind::Continue));
         self.emit(EventKind::ActionCompleted(id));
@@ -1034,6 +1061,115 @@ impl Engine {
         if let Some(group) = run.owner {
             self.check_group(group);
         }
+    }
+
+    /// "Fade and stop others" or "duck others" for a cue whose action just
+    /// started: the sounds and pictures playing in its scope, not the cue
+    /// itself nor the groups it is in.
+    fn act_on_others(&mut self, id: CueId, others: Others) {
+        let list = self.locations.get(&id).map(|location| location.list);
+        let mut enclosing = HashSet::new();
+        let mut parent = self.locations.get(&id).and_then(|location| location.parent);
+        while let Some(group) = parent {
+            enclosing.insert(group);
+            parent = self
+                .locations
+                .get(&group)
+                .and_then(|location| location.parent);
+        }
+        let affected: Vec<(CueId, Option<CueId>)> = self
+            .runs
+            .iter()
+            .filter(|(cue, _)| **cue != id && !enclosing.contains(cue))
+            .filter(|(cue, _)| {
+                others.scope == OthersScope::All
+                    || self.locations.get(cue).map(|location| location.list) == list
+            })
+            .filter(|(cue, _)| {
+                self.cue(**cue)
+                    .is_some_and(|cue| matches!(cue.kind, CueKind::Audio(_) | CueKind::Video(_)))
+            })
+            .map(|(cue, run)| (*cue, run.owner))
+            .collect();
+        for (cue, owner) in affected {
+            match others.action {
+                OthersAction::FadeAndStop => {
+                    let already = self
+                        .timers
+                        .iter()
+                        .any(|timer| timer.cue == cue && timer.kind == TimerKind::PanicStop);
+                    if already {
+                        continue;
+                    }
+                    if others.fade.is_zero() {
+                        self.stop_cue(cue);
+                    } else {
+                        self.emit(EventKind::FadingOut {
+                            cue,
+                            fade: others.fade,
+                        });
+                        self.schedule(others.fade, cue, owner, TimerKind::PanicStop);
+                    }
+                }
+                OthersAction::Duck => {
+                    let by = others.duck_db.max(0.0);
+                    let duckers = self.ducks.entry(cue).or_default();
+                    let before = deepest(duckers);
+                    duckers.retain(|(ducker, _, _)| *ducker != id);
+                    duckers.push((id, by, others.fade));
+                    let after = deepest(duckers);
+                    if before != Some(after.unwrap_or_default()) {
+                        self.emit(EventKind::Ducked {
+                            cue,
+                            by_db: after.unwrap_or_default(),
+                            fade: others.fade,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    /// A cue's run ended: it is no longer ducked, and what it ducked comes
+    /// back up (or down less, when something else still ducks it).
+    fn end_ducks(&mut self, id: CueId) {
+        self.ducks.remove(&id);
+        let released: Vec<CueId> = self
+            .ducks
+            .iter()
+            .filter(|(_, duckers)| duckers.iter().any(|(ducker, _, _)| *ducker == id))
+            .map(|(cue, _)| *cue)
+            .collect();
+        for cue in released {
+            let Some(duckers) = self.ducks.get_mut(&cue) else {
+                continue;
+            };
+            let fade = duckers
+                .iter()
+                .find(|(ducker, _, _)| *ducker == id)
+                .map_or(Duration::ZERO, |(_, _, fade)| *fade);
+            let before = deepest(duckers);
+            duckers.retain(|(ducker, _, _)| *ducker != id);
+            match deepest(duckers) {
+                None => {
+                    self.ducks.remove(&cue);
+                    self.emit(EventKind::Unducked { cue, fade });
+                }
+                Some(after) if Some(after) != before => {
+                    self.emit(EventKind::Ducked {
+                        cue,
+                        by_db: after,
+                        fade,
+                    });
+                }
+                Some(_) => {}
+            }
+        }
+    }
+
+    /// How ducked a cue is: the deepest of what ducks it.
+    pub fn duck_of(&self, cue: CueId) -> Option<f64> {
+        self.ducks.get(&cue).and_then(|duckers| deepest(duckers))
     }
 
     fn continue_after(&mut self, id: CueId, owner: Option<CueId>) {
@@ -1073,6 +1209,7 @@ impl Engine {
             .find(|timer| timer.cue == id)
             .and_then(|timer| timer.owner);
         let run = self.runs.remove(&id);
+        self.end_ducks(id);
         let timers_before = self.timers.len();
         self.timers.retain(|timer| timer.cue != id);
         let had_timers = self.timers.len() != timers_before;
@@ -1162,4 +1299,9 @@ fn index_cues(
         index_cues(cue.children(), list, list_index, Some(cue.id), path, out);
         path.pop();
     }
+}
+
+/// The deepest duck in `duckers`, if any.
+fn deepest(duckers: &[(CueId, f64, Duration)]) -> Option<f64> {
+    duckers.iter().map(|(_, by, _)| *by).max_by(f64::total_cmp)
 }
