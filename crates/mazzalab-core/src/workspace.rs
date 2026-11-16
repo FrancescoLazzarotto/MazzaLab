@@ -210,10 +210,35 @@ pub struct FixtureGroup {
 }
 
 /// A screen the show puts video and text on: any client that opens the
-/// stage by name shows it.
+/// stage by name shows it, scaled to fit.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Stage {
     pub name: String,
+    /// Its size in pixels, which cue geometry and text sizes are measured
+    /// in; usually the projector's resolution.
+    #[serde(default = "default_stage_width")]
+    pub width: u32,
+    #[serde(default = "default_stage_height")]
+    pub height: u32,
+}
+
+impl Stage {
+    /// A stage of the usual size, 1920 by 1080.
+    pub fn new(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            width: default_stage_width(),
+            height: default_stage_height(),
+        }
+    }
+}
+
+fn default_stage_width() -> u32 {
+    1920
+}
+
+fn default_stage_height() -> u32 {
+    1080
 }
 
 /// Workspace-wide behaviour settings.

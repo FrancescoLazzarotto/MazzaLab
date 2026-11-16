@@ -9,6 +9,7 @@
 //! used unchanged by the engine, the file format, network remotes and UIs.
 
 mod cue;
+mod geometry;
 mod id;
 mod slice;
 pub mod time;
@@ -21,6 +22,7 @@ pub use cue::{
     MidiTriggerKind, NetworkCue, ScriptCue, SmpteFormat, TargetCue, TextCue, TimecodeCue,
     TimecodeSignal, Triggers, VideoCue, WaitCue,
 };
+pub use geometry::{DEFAULT_TEXT_SIZE, Fit, Geometry, TextAlign, TextStyle};
 pub use id::{CueId, WorkspaceId};
 pub use slice::{Position, Segment, SliceMarker};
 pub use validate::{Issue, validate};

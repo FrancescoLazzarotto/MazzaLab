@@ -3,6 +3,7 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
+use crate::geometry::{Geometry, TextStyle};
 use crate::id::CueId;
 use crate::slice::SliceMarker;
 use crate::time::{option_seconds, seconds};
@@ -534,6 +535,8 @@ pub struct VideoCue {
         skip_serializing_if = "Option::is_none"
     )]
     pub media_duration: Option<Duration>,
+    #[serde(default, skip_serializing_if = "Geometry::is_default")]
+    pub geometry: Geometry,
 }
 
 impl Default for VideoCue {
@@ -551,17 +554,37 @@ impl Default for VideoCue {
             hold_at_end: false,
             audio_output_patch: None,
             media_duration: None,
+            geometry: Geometry::default(),
         }
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TextCue {
     pub text: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stage: Option<String>,
     #[serde(default)]
     pub layer: i32,
+    #[serde(default = "default_opacity", skip_serializing_if = "is_unit")]
+    pub opacity: f64,
+    #[serde(default, skip_serializing_if = "TextStyle::is_default")]
+    pub style: TextStyle,
+    #[serde(default, skip_serializing_if = "Geometry::is_default")]
+    pub geometry: Geometry,
+}
+
+impl Default for TextCue {
+    fn default() -> Self {
+        Self {
+            text: String::new(),
+            stage: None,
+            layer: 0,
+            opacity: 1.0,
+            style: TextStyle::default(),
+            geometry: Geometry::default(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
@@ -610,6 +633,9 @@ pub struct FadeCue {
     /// Target opacity, when the fade affects video.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub opacity: Option<f64>,
+    /// Target geometry, when the fade moves a picture or a text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub geometry: Option<Geometry>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub stop_target_when_done: bool,
 }
