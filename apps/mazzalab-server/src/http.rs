@@ -1,19 +1,21 @@
 //! HTTP + WebSocket API for web clients, and static hosting of the web UI.
 
+use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::SystemTime;
 
 use axum::body::Body;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::extract::{DefaultBodyLimit, Query, State};
-use axum::http::StatusCode;
+use axum::extract::{ConnectInfo, DefaultBodyLimit, Query, Request, State};
+use axum::http::{HeaderMap, Method, StatusCode};
+use axum::middleware::Next;
 use axum::response::{Html, IntoResponse, Response};
 use axum::routing::{get, post};
-use axum::{Json, Router};
+use axum::{Extension, Json, Router};
 use futures_util::{SinkExt, StreamExt};
 use mazzalab_core::CueId;
-use mazzalab_show::Command;
+use mazzalab_show::{Command, Snapshot};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use tokio::io::AsyncWriteExt;
@@ -21,6 +23,7 @@ use tokio::sync::broadcast::error::RecvError;
 use tower_http::cors::CorsLayer;
 use tower_http::services::ServeDir;
 
+use crate::access::{Access, Need, command_need};
 use crate::actor::{NoticeLevel, ShowHandle, Update};
 use crate::protocol::{ClientMessage, ServerMessage};
 use crate::screens::ScreensHandle;
@@ -56,6 +59,7 @@ pub fn router_with_screens(
         screens,
     };
     let api = Router::new()
+        .route("/api/access", get(access))
         .route("/api/snapshot", get(snapshot))
         .route("/api/status", get(status))
         .route("/api/command", post(command))
@@ -80,6 +84,10 @@ pub fn router_with_screens(
                 .layer(DefaultBodyLimit::disable()),
         )
         .route("/ws", get(websocket))
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            authorize,
+        ))
         .with_state(state);
     let router = match ui_dir {
         Some(dir) => {
@@ -91,6 +99,121 @@ pub fn router_with_screens(
     router.layer(CorsLayer::permissive())
 }
 
+/// The passcode a request carries: `Authorization: Bearer`, an
+/// `X-MazzaLab-Passcode` header, or `?passcode=` (all a WebSocket from a
+/// browser can send).
+fn passcode(headers: &HeaderMap, query: Option<&str>) -> Option<String> {
+    let header = |name: &str| headers.get(name).and_then(|value| value.to_str().ok());
+    header("authorization")
+        .and_then(|value| value.strip_prefix("Bearer "))
+        .or_else(|| header("x-mazzalab-passcode"))
+        .map(str::to_owned)
+        .or_else(|| {
+            query?
+                .split('&')
+                .filter_map(|pair| pair.split_once('='))
+                .find(|(key, _)| *key == "passcode")
+                .map(|(_, value)| decode_query(value))
+        })
+        .filter(|code| !code.is_empty())
+}
+
+/// Undoes the percent-encoding of a query value.
+fn decode_query(value: &str) -> String {
+    let bytes = value.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        let hex = |at: usize| bytes.get(at).and_then(|byte| (*byte as char).to_digit(16));
+        match bytes[index] {
+            b'+' => out.push(b' '),
+            b'%' if hex(index + 1).is_some() && hex(index + 2).is_some() => {
+                let high = hex(index + 1).unwrap_or_default();
+                let low = hex(index + 2).unwrap_or_default();
+                out.push((high * 16 + low) as u8);
+                index += 2;
+            }
+            byte => out.push(byte),
+        }
+        index += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+/// What a request for `path` needs before its handler looks closer.
+fn route_need(method: &Method, path: &str) -> Need {
+    match (method, path) {
+        (_, "/api/access") => Need::Nothing,
+        (&Method::GET, _) => Need::View,
+        // Each command is checked on its own.
+        (_, "/api/command") => Need::View,
+        (_, "/api/midi/in" | "/api/timecode/in" | "/api/screens") => Need::Control,
+        _ => Need::Edit,
+    }
+}
+
+/// Checks every API request against the show's passcodes and hands the
+/// handler what the client may do. The UI's own files are open to all, so
+/// a browser can ask for a passcode.
+async fn authorize(State(state): State<AppState>, mut request: Request, next: Next) -> Response {
+    let path = request.uri().path().to_owned();
+    if !(path.starts_with("/api/") || path == "/ws") {
+        return next.run(request).await;
+    }
+    // Requests built in-process (tests, the desktop app) have no peer.
+    let local = request
+        .extensions()
+        .get::<ConnectInfo<SocketAddr>>()
+        .is_none_or(|ConnectInfo(peer)| peer.ip().is_loopback());
+    let code = passcode(request.headers(), request.uri().query());
+    let access = state.handle.access(code.as_deref(), local);
+    if !access.allows(route_need(request.method(), &path)) {
+        return denied(access);
+    }
+    request.extensions_mut().insert(access);
+    request.extensions_mut().insert(Passcode(code, local));
+    next.run(request).await
+}
+
+/// The passcode a client gave and whether it is local, so a long-lived
+/// connection is checked again as the show's passcodes change.
+#[derive(Debug, Clone)]
+struct Passcode(Option<String>, bool);
+
+/// 401 to a client that has no access at all (no passcode, or a wrong
+/// one), 403 to one that may not do this.
+fn denied(access: Access) -> Response {
+    if access.view {
+        failure(StatusCode::FORBIDDEN, "not allowed with this passcode").into_response()
+    } else {
+        failure(StatusCode::UNAUTHORIZED, "a passcode is needed").into_response()
+    }
+}
+
+/// What the client may do, and whether the show asks for a passcode.
+async fn access(
+    State(state): State<AppState>,
+    Extension(access): Extension<Access>,
+) -> Json<Value> {
+    Json(json!({
+        "required": state.handle.has_passcodes(),
+        "view": access.view,
+        "control": access.control,
+        "edit": access.edit,
+    }))
+}
+
+/// The snapshot as a client may see it: passcodes are for editors only.
+fn visible(snapshot: &Snapshot, access: Access) -> std::borrow::Cow<'_, Snapshot> {
+    if access.edit || snapshot.workspace.settings.passcodes.is_empty() {
+        std::borrow::Cow::Borrowed(snapshot)
+    } else {
+        let mut snapshot = snapshot.clone();
+        snapshot.workspace.settings.passcodes.clear();
+        std::borrow::Cow::Owned(snapshot)
+    }
+}
+
 async fn placeholder() -> Html<&'static str> {
     Html(
         "<!doctype html><title>MazzaLab</title><h1>MazzaLab server is running</h1>\
@@ -98,10 +221,14 @@ async fn placeholder() -> Html<&'static str> {
     )
 }
 
-async fn snapshot(State(state): State<AppState>) -> impl IntoResponse {
+async fn snapshot(
+    State(state): State<AppState>,
+    Extension(access): Extension<Access>,
+) -> impl IntoResponse {
     match state.handle.snapshot().await {
         Some(snapshot) => {
-            Json(serde_json::to_value(snapshot).unwrap_or(Value::Null)).into_response()
+            Json(serde_json::to_value(visible(&snapshot, access)).unwrap_or(Value::Null))
+                .into_response()
         }
         None => StatusCode::SERVICE_UNAVAILABLE.into_response(),
     }
@@ -127,9 +254,13 @@ fn failure(status: StatusCode, error: impl Into<String>) -> (StatusCode, Json<Va
 
 async fn command(
     State(state): State<AppState>,
+    Extension(access): Extension<Access>,
     Json(command): Json<Command>,
-) -> (StatusCode, Json<Value>) {
-    outcome(state.handle.execute(command).await)
+) -> Response {
+    if !access.allows(command_need(&command)) {
+        return denied(access);
+    }
+    outcome(state.handle.execute(command).await).into_response()
 }
 
 async fn save(State(state): State<AppState>) -> (StatusCode, Json<Value>) {
@@ -671,11 +802,26 @@ async fn upload_media(
     }
 }
 
-async fn websocket(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| client(socket, state.handle))
+async fn websocket(
+    ws: WebSocketUpgrade,
+    State(state): State<AppState>,
+    Extension(passcode): Extension<Passcode>,
+) -> impl IntoResponse {
+    ws.on_upgrade(move |socket| client(socket, state.handle, passcode))
 }
 
-async fn client(socket: WebSocket, handle: ShowHandle) {
+/// What a WebSocket message needs.
+fn message_need(message: &ClientMessage) -> Need {
+    match message {
+        ClientMessage::Command { command, .. } => command_need(command),
+        ClientMessage::Save { .. } | ClientMessage::Audition { .. } => Need::Edit,
+        ClientMessage::StageEnded { .. } => Need::View,
+    }
+}
+
+async fn client(socket: WebSocket, handle: ShowHandle, Passcode(code, local): Passcode) {
+    // Checked again on every message: the show's passcodes may change.
+    let access = || handle.access(code.as_deref(), local);
     let (mut sink, mut stream) = socket.split();
     let mut updates = handle.subscribe();
 
@@ -686,7 +832,7 @@ async fn client(socket: WebSocket, handle: ShowHandle) {
     let initial = match (handle.snapshot().await, handle.status().await) {
         (Some(snapshot), Some(status)) => vec![
             send(&ServerMessage::Snapshot {
-                snapshot: &snapshot,
+                snapshot: &visible(&snapshot, access()),
             }),
             send(&ServerMessage::Status { status: &status }),
         ],
@@ -719,7 +865,10 @@ async fn client(socket: WebSocket, handle: ShowHandle) {
         let outgoing = tokio::select! {
             incoming = stream.next() => match incoming {
                 Some(Ok(Message::Text(text))) => {
-                    let (id, result) = match serde_json::from_str::<ClientMessage>(text.as_str()) {
+                    let parsed = serde_json::from_str::<ClientMessage>(text.as_str());
+                    let allowed = parsed.as_ref().map_or(true, |message| access().allows(message_need(message)));
+                    let (id, result) = match parsed {
+                        Ok(message) if !allowed => (message.id(), Err("not allowed with this passcode".to_owned())),
                         Ok(ClientMessage::Command { id, command }) => (id, handle.execute(*command).await),
                         Ok(ClientMessage::Save { id }) => (id, handle.save().await),
                         Ok(ClientMessage::Audition { id, cue }) => (id, handle.audition(cue).await),
@@ -735,7 +884,7 @@ async fn client(socket: WebSocket, handle: ShowHandle) {
                 Some(Ok(_)) => continue,
             },
             update = updates.recv() => match update {
-                Ok(Update::Snapshot(snapshot)) => send(&ServerMessage::Snapshot { snapshot: &snapshot }),
+                Ok(Update::Snapshot(snapshot)) => send(&ServerMessage::Snapshot { snapshot: &visible(&snapshot, access()) }),
                 Ok(Update::Status(status)) => send(&ServerMessage::Status { status: &status }),
                 Ok(Update::Events(events)) => send(&ServerMessage::Events { events: &events }),
                 Ok(Update::Meters(peaks)) => send(&ServerMessage::Meters { peaks: &peaks }),
@@ -748,7 +897,7 @@ async fn client(socket: WebSocket, handle: ShowHandle) {
                 Ok(Update::Osc(_)) => continue,
                 // Too slow to keep up: resynchronise with a fresh snapshot.
                 Err(RecvError::Lagged(_)) => match handle.snapshot().await {
-                    Some(snapshot) => send(&ServerMessage::Snapshot { snapshot: &snapshot }),
+                    Some(snapshot) => send(&ServerMessage::Snapshot { snapshot: &visible(&snapshot, access()) }),
                     None => break,
                 },
                 Err(RecvError::Closed) => break,

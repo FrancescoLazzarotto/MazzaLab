@@ -44,6 +44,10 @@ struct Args {
     /// there are any, instead of the show file as it was last saved.
     #[arg(long)]
     recover: bool,
+    /// Ask clients on this machine for a passcode too, as for any other
+    /// (for a server behind a proxy on the same machine).
+    #[arg(long)]
+    passcode_local: bool,
 }
 
 #[tokio::main]
@@ -91,6 +95,7 @@ async fn main() -> ExitCode {
         http_port: args.http_port,
         ui_dir: args.ui_dir,
         recovered,
+        trust_local: !args.passcode_local,
         ..ServerConfig::default()
     };
     let no_audio = args.no_audio;

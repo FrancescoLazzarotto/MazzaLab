@@ -12,6 +12,7 @@
 //!
 //! The desktop app embeds this crate; `mazzalab-server` runs it headless.
 
+mod access;
 mod actor;
 mod http;
 mod osc_net;
@@ -30,6 +31,7 @@ use mazzalab_show::Show;
 use tokio::net::{TcpListener, UdpSocket};
 use tokio::task::JoinHandle;
 
+pub use access::{Access, Need};
 pub use actor::{
     AudioStatus, Completion, DmxLevel, Notice, NoticeLevel, Output, ShowHandle, TimecodeIn, Update,
 };
@@ -66,6 +68,9 @@ pub struct ServerConfig {
     /// The machine's displays, to put stages on full screen; `None` on a
     /// server without any.
     pub screens: Option<ScreensHandle>,
+    /// Clients on this machine need no passcode. Off when something on
+    /// the machine relays clients from elsewhere, such as a proxy.
+    pub trust_local: bool,
 }
 
 impl Default for ServerConfig {
@@ -81,6 +86,7 @@ impl Default for ServerConfig {
             backups: 10,
             recovered: false,
             screens: None,
+            trust_local: true,
         }
     }
 }
@@ -183,6 +189,7 @@ pub async fn start(
         backups: config.backups,
     };
     let (handle, actor) = actor::spawn(show, persistence, make_outputs);
+    handle.set_trust_local(config.trust_local);
     let app = router_with_screens(handle.clone(), config.ui_dir, config.screens);
     let tasks = vec![
         actor,
@@ -193,6 +200,8 @@ pub async fn start(
         )),
         tokio::spawn(osc_net::serve_tcp(tcp, handle.clone())),
         tokio::spawn(async move {
+            // Clients on the show's own machine need no passcode.
+            let app = app.into_make_service_with_connect_info::<SocketAddr>();
             if let Err(error) = axum::serve(http_listener, app).await {
                 tracing::error!(%error, "HTTP server stopped");
             }

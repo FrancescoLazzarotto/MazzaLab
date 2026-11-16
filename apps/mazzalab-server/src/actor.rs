@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, PoisonError, RwLock};
 use std::time::Duration;
 
-use mazzalab_core::{AudioCue, CueId, CueKind, SmpteFormat, Workspace};
+use mazzalab_core::{AudioCue, CueId, CueKind, Passcode, SmpteFormat, Workspace};
 use mazzalab_engine::{Event, EventKind};
 use mazzalab_midi::MidiEvent;
 use mazzalab_show::{Command, OscOutcome, Show, Snapshot, Status};
@@ -18,6 +18,7 @@ use serde::Serialize;
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio::time::Instant;
 
+use crate::access::Access;
 use crate::protocol::EventDto;
 
 /// Meter readings at or below this are silence.
@@ -269,6 +270,10 @@ struct Identity {
     workspace_id: Arc<str>,
     path: Option<Arc<Path>>,
     base_dir: Option<Arc<Path>>,
+    /// The show's passcodes, so access is checked without asking the actor.
+    passcodes: Arc<[Passcode]>,
+    /// Clients on the show's own machine need no passcode.
+    trust_local: bool,
 }
 
 impl Identity {
@@ -277,6 +282,8 @@ impl Identity {
             workspace_id: workspace.id.to_string().into(),
             path: path.map(|path| Arc::from(absolute(path).unwrap_or_else(|| path.to_path_buf()))),
             base_dir: path.and_then(folder).map(Arc::from),
+            passcodes: workspace.settings.passcodes.clone().into(),
+            trust_local: true,
         }
     }
 }
@@ -300,6 +307,27 @@ impl ShowHandle {
     /// `None` for a show that has no file.
     pub fn base_dir(&self) -> Option<Arc<Path>> {
         self.identity().base_dir.clone()
+    }
+
+    /// What a client that gave `passcode` may do; `local` clients run on
+    /// the show's own machine.
+    pub fn access(&self, passcode: Option<&str>, local: bool) -> Access {
+        let identity = self.identity();
+        Access::grant(&identity.passcodes, passcode, local && identity.trust_local)
+    }
+
+    /// Whether clients on the show's own machine need no passcode (the
+    /// default). A server behind a proxy on the same machine turns it off.
+    pub fn set_trust_local(&self, trust: bool) {
+        self.identity
+            .write()
+            .unwrap_or_else(PoisonError::into_inner)
+            .trust_local = trust;
+    }
+
+    /// Whether the show asks clients for a passcode.
+    pub fn has_passcodes(&self) -> bool {
+        !self.identity().passcodes.is_empty()
     }
 
     /// The open show's file, if it has one.
@@ -855,7 +883,11 @@ impl Actor {
         }
 
         let name = workspace.name.clone();
-        *self.identity_mut() = Identity::new(&workspace, path.as_deref());
+        let trust_local = self.identity_mut().trust_local;
+        *self.identity_mut() = Identity {
+            trust_local,
+            ..Identity::new(&workspace, path.as_deref())
+        };
         self.show = if recovered {
             Show::recovered(workspace)
         } else {
@@ -898,7 +930,11 @@ impl Actor {
             mazzalab_project::discard_autosave(old);
         }
         mazzalab_project::discard_autosave(&path);
-        *self.identity_mut() = Identity::new(self.show.workspace(), Some(&path));
+        let trust_local = self.identity_mut().trust_local;
+        *self.identity_mut() = Identity {
+            trust_local,
+            ..Identity::new(self.show.workspace(), Some(&path))
+        };
         self.path = Some(path);
         self.autosaved = self.show.revision();
         self.autosave_due = None;
@@ -1034,6 +1070,10 @@ impl Actor {
         let structure_changed = self.last_revision != Some(revision);
         if structure_changed {
             self.last_revision = Some(revision);
+            let passcodes = &self.show.workspace().settings.passcodes;
+            if *self.identity_mut().passcodes != passcodes[..] {
+                self.identity_mut().passcodes = passcodes.clone().into();
+            }
             for output in &mut self.outputs {
                 output.sync(&self.show);
             }

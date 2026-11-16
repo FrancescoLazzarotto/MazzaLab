@@ -11,13 +11,28 @@ use tokio::net::{TcpListener, TcpStream, UdpSocket};
 use tokio::sync::broadcast::error::RecvError;
 use tracing::{debug, warn};
 
+use crate::access::osc_need;
 use crate::actor::{ShowHandle, Update};
 
-/// Per-client OSC preferences.
+/// Per-client OSC state.
 #[derive(Debug, Default)]
 struct Session {
     updates: bool,
     always_reply: bool,
+    /// The passcode given with `/connect`, checked against the show's
+    /// passcodes on every message.
+    passcode: Option<String>,
+    /// The client runs on the show's own machine: no passcode needed.
+    local: bool,
+}
+
+impl Session {
+    fn new(peer: SocketAddr) -> Self {
+        Self {
+            local: peer.ip().is_loopback(),
+            ..Self::default()
+        }
+    }
 }
 
 /// Runs one OSC message through the show and builds the reply, if one is due.
@@ -48,13 +63,34 @@ async fn process(
             return Some(reply.to_message());
         }
     };
-    let outcome = handle.osc(request).await?;
+    let access = handle.access(session.passcode.as_deref(), session.local);
+    let need = osc_need(&request.command);
+    if !access.allows(need) {
+        debug!(address = %message.addr, "OSC message refused: no permission");
+        let mut reply = Reply::with_status(message.addr.clone(), ReplyStatus::Denied);
+        reply.workspace_id = Some(handle.workspace_id().to_string());
+        return Some(reply.to_message());
+    }
+    let mut outcome = handle.osc(request).await?;
     let mut force = false;
     match &outcome.session {
         Some(SessionRequest::Updates(on)) => session.updates = *on,
         Some(SessionRequest::AlwaysReply(on)) => session.always_reply = *on,
         Some(SessionRequest::Thump) => force = true,
-        Some(SessionRequest::Connect { .. } | SessionRequest::Disconnect) | None => {}
+        Some(SessionRequest::Connect { passcode }) => {
+            // Answered as QLab does: "ok" and what the passcode allows, or
+            // "badpass".
+            let granted = handle.access(passcode.as_deref(), session.local);
+            force = true;
+            outcome.data = Some(serde_json::Value::String(if granted.view {
+                session.passcode.clone_from(passcode);
+                format!("ok:{}", granted.describe())
+            } else {
+                "badpass".to_owned()
+            }));
+        }
+        Some(SessionRequest::Disconnect) => session.passcode = None,
+        None => {}
     }
     let send =
         force || outcome.is_query || outcome.status != ReplyStatus::Ok || session.always_reply;
@@ -93,7 +129,9 @@ pub async fn serve_udp(socket: UdpSocket, handle: ShowHandle, reply_port: Option
                         continue;
                     }
                 };
-                let session = sessions.entry(reply_to).or_default();
+                let session = sessions
+                    .entry(reply_to)
+                    .or_insert_with(|| Session::new(from));
                 for message in messages {
                     if let Some(bytes) = process(&handle, &message, session)
                         .await
@@ -107,7 +145,11 @@ pub async fn serve_udp(socket: UdpSocket, handle: ShowHandle, reply_port: Option
             update = updates.recv() => match update {
                 Ok(Update::Osc(messages)) => {
                     let packets: Vec<Vec<u8>> = messages.iter().filter_map(encode).collect();
-                    for (address, _) in sessions.iter().filter(|(_, session)| session.updates) {
+                    let visible = |session: &Session| {
+                        session.updates
+                            && handle.access(session.passcode.as_deref(), session.local).view
+                    };
+                    for (address, _) in sessions.iter().filter(|(_, session)| visible(session)) {
                         for packet in &packets {
                             let _ = socket.send_to(packet, address).await;
                         }
@@ -125,17 +167,17 @@ pub async fn serve_tcp(listener: TcpListener, handle: ShowHandle) {
         match listener.accept().await {
             Ok((stream, peer)) => {
                 debug!(%peer, "OSC TCP client connected");
-                tokio::spawn(tcp_connection(stream, handle.clone()));
+                tokio::spawn(tcp_connection(stream, peer, handle.clone()));
             }
             Err(error) => warn!(%error, "OSC TCP accept failed"),
         }
     }
 }
 
-async fn tcp_connection(stream: TcpStream, handle: ShowHandle) {
+async fn tcp_connection(stream: TcpStream, peer: SocketAddr, handle: ShowHandle) {
     let (mut reader, mut writer) = stream.into_split();
     let mut decoder = slip::Decoder::new();
-    let mut session = Session::default();
+    let mut session = Session::new(peer);
     let mut updates = handle.subscribe();
     let mut buffer = [0_u8; 8192];
     loop {
@@ -160,7 +202,10 @@ async fn tcp_connection(stream: TcpStream, handle: ShowHandle) {
                 }
             }
             update = updates.recv() => match update {
-                Ok(Update::Osc(messages)) if session.updates => {
+                Ok(Update::Osc(messages))
+                    if session.updates
+                        && handle.access(session.passcode.as_deref(), session.local).view =>
+                {
                     for bytes in messages.iter().filter_map(encode) {
                         if writer.write_all(&slip::encode(&bytes)).await.is_err() {
                             return;

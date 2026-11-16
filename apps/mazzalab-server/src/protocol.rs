@@ -76,6 +76,18 @@ pub enum ClientMessage {
     },
 }
 
+impl ClientMessage {
+    /// The id the answer carries.
+    pub fn id(&self) -> u64 {
+        match self {
+            Self::Command { id, .. }
+            | Self::Save { id }
+            | Self::Audition { id, .. }
+            | Self::StageEnded { id, .. } => *id,
+        }
+    }
+}
+
 /// An engine event in client form, times in seconds.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct EventDto {
