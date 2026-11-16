@@ -301,13 +301,18 @@ where
     T: SizedSample + FromSample<f32>,
 {
     let channels = usize::from(config.channels).max(1);
+    let rate = config.sample_rate;
     // Pre-allocated so the callback never allocates.
     let block = (16_384 / channels) * channels;
     let mut scratch = vec![0.0_f32; block];
+    let meters = mixer
+        .as_ref()
+        .map(|mixer| std::sync::Arc::clone(mixer.meters()));
     device
         .build_output_stream(
             config,
             move |data: &mut [T], _: &cpal::OutputCallbackInfo| {
+                let started = meters.as_ref().map(|meters| meters.load.start());
                 for chunk in data.chunks_mut(block) {
                     let buffer = &mut scratch[..chunk.len()];
                     match &mut mixer {
@@ -317,6 +322,9 @@ where
                     for (out, sample) in chunk.iter_mut().zip(buffer.iter()) {
                         *out = T::from_sample(sample.clamp(-1.0, 1.0));
                     }
+                }
+                if let (Some(meters), Some(started)) = (&meters, started) {
+                    meters.load.end(started, data.len() / channels, rate);
                 }
             },
             |error| tracing::warn!(%error, "audio stream error"),

@@ -20,6 +20,7 @@
 mod decode;
 mod device;
 mod input;
+mod load;
 mod ltc;
 mod mixer;
 mod waveform;
@@ -41,6 +42,7 @@ use thiserror::Error;
 pub use decode::{MediaInfo, probe};
 pub use device::{DeviceInfo, DeviceRequest, OutputDevice, output_devices};
 pub use input::{InputDevice, LtcInput, LtcInputInfo, input_devices};
+pub use load::AudioLoad;
 pub use mixer::Meters;
 pub use waveform::{Waveform, waveform};
 
@@ -234,6 +236,12 @@ impl AudioOutput {
 
     pub fn set_master_db(&mut self, db: f32) {
         self.send(MixerCommand::Master(db));
+    }
+
+    /// How hard the audio thread has worked since the previous call, and
+    /// how many of its callbacks came late since the device opened.
+    pub fn take_load(&self) -> AudioLoad {
+        self.meters.load.take()
     }
 
     /// Peak level in dBFS of every output channel since the previous call.

@@ -232,6 +232,8 @@ impl Routes {
 #[derive(Debug)]
 pub struct Meters {
     peaks: Vec<AtomicU32>,
+    /// How hard the audio thread works.
+    pub(crate) load: crate::load::CallbackLoad,
 }
 
 impl Meters {
@@ -240,6 +242,7 @@ impl Meters {
             peaks: (0..channels.min(MAX_OUTPUTS))
                 .map(|_| AtomicU32::new(0))
                 .collect(),
+            load: crate::load::CallbackLoad::new(),
         }
     }
 
@@ -583,6 +586,11 @@ pub(crate) struct Mixer {
 }
 
 impl Mixer {
+    /// The meters the mixer writes, shared with the device callback.
+    pub(crate) fn meters(&self) -> &Arc<Meters> {
+        &self.meters
+    }
+
     pub(crate) fn new(
         commands: Consumer<MixerCommand>,
         events: Producer<MixerEvent>,
