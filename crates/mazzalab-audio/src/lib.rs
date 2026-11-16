@@ -14,10 +14,12 @@
 //!   fades and the routing matrix, and sums every voice without allocating
 //!   or locking;
 //! * [`AudioOutput`] turns engine events (start, stop, pause, fade, panic)
-//!   into mixer commands.
+//!   into mixer commands;
+//! * [`LtcInput`] reads linear timecode from a channel of an input.
 
 mod decode;
 mod device;
+mod input;
 mod ltc;
 mod mixer;
 mod waveform;
@@ -38,6 +40,7 @@ use thiserror::Error;
 
 pub use decode::{MediaInfo, probe};
 pub use device::{DeviceInfo, DeviceRequest, OutputDevice, output_devices};
+pub use input::{InputDevice, LtcInput, LtcInputInfo, input_devices};
 pub use mixer::Meters;
 pub use waveform::{Waveform, waveform};
 
