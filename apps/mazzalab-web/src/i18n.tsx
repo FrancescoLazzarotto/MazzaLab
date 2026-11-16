@@ -373,6 +373,17 @@ const en = {
   "filter.flagged": "Flagged only",
   "filter.clear": "Clear the filter",
   "filter.noMatch": "No cue matches.",
+  "list.export": "Export as CSV",
+  "list.import": "Import from CSV",
+  "list.print": "Print the cue sheet",
+  "sheet.type": "Type",
+  "sheet.continue": "Continue",
+  "sheet.notes": "Notes",
+  "import.title": "Import cues",
+  "import.read": "Columns read",
+  "import.ignored": "Ignored",
+  "import.add": "Add",
+  "import.failed": "Could not read the file",
 };
 
 type Key = keyof typeof en;
@@ -744,6 +755,17 @@ const it: Record<Key, string> = {
   "filter.flagged": "Solo con flag",
   "filter.clear": "Azzera il filtro",
   "filter.noMatch": "Nessun cue corrisponde.",
+  "list.export": "Esporta in CSV",
+  "list.import": "Importa da CSV",
+  "list.print": "Stampa il foglio dei cue",
+  "sheet.type": "Tipo",
+  "sheet.continue": "Continua",
+  "sheet.notes": "Note",
+  "import.title": "Importa cue",
+  "import.read": "Colonne lette",
+  "import.ignored": "Ignorate",
+  "import.add": "Aggiungi",
+  "import.failed": "Impossibile leggere il file",
 };
 
 export const DICTIONARIES: Record<Language, Record<Key, string>> = { en, it };

@@ -827,6 +827,124 @@ select.status-item {
   font-size: 11px;
 }
 
+.tabs-end {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.import-summary {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+}
+
+.import-summary dt {
+  margin-top: 8px;
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.import-summary dt:first-child {
+  margin-top: 0;
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+.import-summary dd {
+  margin: 0;
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+
+.import-summary .import-count {
+  color: var(--text);
+  font-size: 15px;
+}
+
+/* The cue sheet exists only on paper. */
+.print-sheet {
+  display: none;
+}
+
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 12mm;
+  }
+
+  html,
+  body,
+  #root {
+    height: auto;
+    overflow: visible;
+    background: #fff;
+  }
+
+  .app,
+  .overlay,
+  .toasts {
+    display: none !important;
+  }
+
+  .print-sheet {
+    display: block;
+    color: #000;
+    font-size: 10pt;
+  }
+
+  .print-sheet header {
+    display: flex;
+    align-items: baseline;
+    gap: 12pt;
+    margin-bottom: 8pt;
+    padding-bottom: 4pt;
+    border-bottom: 1pt solid #000;
+  }
+
+  .print-sheet h1 {
+    margin: 0;
+    font-size: 14pt;
+  }
+
+  .print-sheet table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .print-sheet thead {
+    display: table-header-group;
+  }
+
+  .print-sheet th {
+    padding: 2pt 6pt;
+    border-bottom: 0.75pt solid #000;
+    font-size: 8pt;
+    font-weight: 600;
+    text-align: left;
+    text-transform: lowercase;
+  }
+
+  .print-sheet td {
+    padding: 3pt 6pt;
+    border-bottom: 0.25pt solid #999;
+    vertical-align: top;
+  }
+
+  .print-sheet tr {
+    break-inside: avoid;
+  }
+
+  .print-sheet td.time {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .print-sheet tr.flagged td:first-child {
+    font-weight: 700;
+  }
+}
+
 /* Cue list */
 .cue-list {
   flex: 1;

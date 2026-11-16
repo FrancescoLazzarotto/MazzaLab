@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState, type CSSProperties, type DragEvent } from "react";
 import type { Cue, Id, RunningCue } from "../api/types";
-import { actionLength, displayName, fileName, findCue, flatten, midiSummary, needsTarget, problemOf, typeLabel, type Drop } from "../cues";
+import { actionLength, displayName, findCue, flatten, problemOf, typeLabel, type Drop } from "../cues";
+import { targetLabel } from "../cueExport";
 import { formatTime } from "../format";
 import { useI18n } from "../i18n";
 import { loopsUntilDevamped } from "../slices";
-import { FORMAT_LABELS } from "../timecode";
 import { CueIcon, Icon } from "./icons";
 
 const DRAG_TYPE = "application/x-mazzalab-cues";
@@ -119,20 +119,6 @@ export function CueList({
   };
 
   const exists = (id: Id) => findCue(allCues, id) !== undefined;
-  const targetLabel = (cue: Cue): string => {
-    if (cue.type === "audio" || cue.type === "video") return cue.file ? fileName(cue.file) : "";
-    if (cue.type === "midi") return midiSummary(cue.message);
-    if (cue.type === "timecode") return `${(cue.signal ?? "mtc").toUpperCase()} ${cue.start} · ${FORMAT_LABELS[cue.format ?? "fps30_non_drop"]}`;
-    if (cue.type === "network") return cue.message.split(/\r?\n/)[0];
-    if (cue.type === "light") {
-      const lines = cue.commands ?? [];
-      return lines.length > 1 ? `${lines[0]}  +${lines.length - 1}` : (lines[0] ?? "");
-    }
-    if (!needsTarget(cue.type) || !cue.target) return "";
-    const target = findCue(allCues, cue.target);
-    return target ? `${target.number ?? "–"}  ${displayName(target)}` : "?";
-  };
-
   return (
     <div
       className={`cue-list${drop?.where === "end" ? " drop-end" : ""}`}
@@ -235,7 +221,7 @@ export function CueList({
                     {cue.notes && <span className="notes-text">{cue.notes}</span>}
                   </span>
                 </td>
-                <td className="col-target">{targetLabel(cue)}</td>
+                <td className="col-target">{targetLabel(cue, allCues)}</td>
                 <td className="col-time">
                   <TimeCell text={run?.phase === "pre_wait" ? formatTime(run.elapsed) : cue.pre_wait ? formatTime(cue.pre_wait) : ""} progress={preProgress} />
                 </td>

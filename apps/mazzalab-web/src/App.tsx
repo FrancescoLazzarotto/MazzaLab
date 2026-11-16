@@ -6,6 +6,10 @@ import { AudioPanel } from "./components/AudioPanel";
 import { CueCart } from "./components/CueCart";
 import { CueList, type SelectMode } from "./components/CueList";
 import { FilterBar } from "./components/FilterBar";
+import { ImportDialog } from "./components/ImportDialog";
+import { PrintSheet } from "./components/PrintSheet";
+import { buildCsv, parseCueCsv, type CsvImport } from "./cueExport";
+import { downloadText, safeFileName } from "./download";
 import { DmxPanel } from "./components/DmxPanel";
 import { StageMonitor } from "./components/StageMonitor";
 import { slotLabels } from "./fixtures";
@@ -53,6 +57,9 @@ export function App({ connection }: { connection: ShowConnection }) {
   const [preferences, setPreferencesState] = useState<Preferences>(loadPreferences);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [renumbering, setRenumbering] = useState(false);
+  const [printing, setPrinting] = useState(false);
+  const [importing, setImporting] = useState<{ fileName: string; result: CsvImport } | null>(null);
+  const importInput = useRef<HTMLInputElement>(null);
   const [renamingList, setRenamingList] = useState<Id | null>(null);
   const [pendingList, setPendingList] = useState<string | null>(null);
   const clipboard = useRef<Cue[]>([]);
@@ -290,7 +297,32 @@ export function App({ connection }: { connection: ShowConnection }) {
   }, [pendingList, workspace]);
   const toggleCue = useCallback((cue: Id) => run({ command: running.has(cue) ? "stop" : "start", cue }), [run, running]);
 
-  const modal = settingsOpen || renumbering;
+  const exportCsv = useCallback(() => {
+    if (!list || !workspace) return;
+    downloadText(`${safeFileName(`${workspace.name} - ${list.name}`)}.csv`, buildCsv(list.cues, allCues));
+  }, [allCues, list, workspace]);
+  const chooseImport = useCallback(
+    (file: File) => {
+      file
+        .text()
+        .then((text) => setImporting({ fileName: file.name, result: parseCueCsv(text) }))
+        .catch(() => {});
+    },
+    [],
+  );
+  const applyImport = useCallback(() => {
+    if (!list || !importing) return;
+    const cues = importing.result.cues;
+    setImporting(null);
+    batch(insertCommands(list.cues, list.id, cues, insertionPoint()))
+      .then(() => {
+        setPicked(cues.map((cue) => cue.id));
+        setAnchor(cues[0]?.id ?? null);
+      })
+      .catch(() => {});
+  }, [batch, importing, insertionPoint, list]);
+
+  const modal = settingsOpen || renumbering || importing !== null;
   useEffect(() => {
     const isTyping = (target: EventTarget | null) =>
       target instanceof HTMLElement && target.closest("input, textarea, select") !== null;
@@ -498,6 +530,21 @@ export function App({ connection }: { connection: ShowConnection }) {
                     <Icon name="trash" size={13} />
                   </button>
                 )}
+                {!list?.cart && (
+                  <span className="tabs-end">
+                    {editable && (
+                      <button className="icon-button quiet" onClick={() => importInput.current?.click()} title={t("list.import")}>
+                        <Icon name="import" size={13} />
+                      </button>
+                    )}
+                    <button className="icon-button quiet" onClick={exportCsv} title={t("list.export")}>
+                      <Icon name="export" size={13} />
+                    </button>
+                    <button className="icon-button quiet" onClick={() => setPrinting(true)} title={t("list.print")}>
+                      <Icon name="print" size={13} />
+                    </button>
+                  </span>
+                )}
               </nav>
             )}
             {list?.cart ? (
@@ -599,6 +646,23 @@ export function App({ connection }: { connection: ShowConnection }) {
             );
           }}
         />
+      )}
+      {importing && list && (
+        <ImportDialog fileName={importing.fileName} listName={list.name} result={importing.result} onApply={applyImport} onClose={() => setImporting(null)} />
+      )}
+      <input
+        ref={importInput}
+        type="file"
+        accept=".csv,.tsv,.txt,text/csv"
+        hidden
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          if (file) chooseImport(file);
+        }}
+      />
+      {printing && list && workspace && (
+        <PrintSheet show={workspace.name} listName={list.name} cues={list.cues} allCues={allCues} onDone={() => setPrinting(false)} />
       )}
       <StatusBar
         cueCount={rows.length}
