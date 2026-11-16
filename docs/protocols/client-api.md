@@ -150,21 +150,37 @@ messages in the same form.
 ## Stages
 
 Video and Text cues go up on stages. `workspace.settings.stages` names
-them (`name`); without any there is one called `Main`, and a cue that
-names no `stage` goes to the first. A stage is any client that renders
-the `stage` message: the web UI does so at `/?stage=Name` (add `&monitor`
+them (`name`, and `width` and `height` in pixels, 1920 by 1080 when
+absent); without any there is one called `Main`, and a cue that names no
+`stage` goes to the first. A stage is any client that renders the
+`stage` message: the web UI does so at `/?stage=Name` (add `&monitor`
 for a silent copy), so a projector can be a browser on any machine of
-the network.
+the network. The message's `stages` lists them with their sizes.
 
-Each item has the `cue`, its `stage`, `layer` and `opacity` (the value it
-is fading to, with `fade`: `from`, `started`, `duration` while it fades),
-`started` and `offset` (it was `offset` seconds into its action at
-`started`, on the server's clock), `paused`, and its `kind`: `video`
-(`start_time`, `end_time`, `looped`, `hold`, `rate`) or `text` (`text`).
-A stage lines its clock up with `now`, plays the cue's file from
+A stage is drawn in its own pixels and scaled to the screen that shows
+it. A cue's `geometry` places it there: `fit` (`fit`, `fill`, `stretch`
+or `native`: how a picture fills the stage before it is moved), `x` and
+`y` (from the stage's centre to the picture's, right and down positive),
+`scale_x` and `scale_y`, `rotation` (degrees, clockwise) and
+`crop_top`, `crop_right`, `crop_bottom`, `crop_left` (fractions of the
+picture). Absent values are at their defaults. A Text cue also has an
+`opacity` and a `style`: `font`, `size` (stage pixels), `color`
+(`#rrggbb`), `align` (`left`, `center`, `right`), `bold`, `italic`,
+`line_height`, `width` (where lines wrap) and `background` (a box behind
+the text, `#rrggbb` or `#rrggbbaa`).
+
+Each item has the `cue`, its `stage`, `layer`, `opacity` and `geometry`
+(the values it has or is going to, with `fade`: `from`, `from_geometry`,
+`started`, `duration` and `curve` while it fades), `started` and
+`offset` (it was `offset` seconds into its action at `started`, on the
+server's clock), `paused`, and its `kind`: `video` (`start_time`,
+`end_time`, `looped`, `hold`, `rate`) or `text` (`text`, `style`). A
+stage lines its clock up with `now`, plays the cue's file from
 `/api/cue-media`, and sends `stage_ended` when a file it plays reaches its
 end: a cue whose length the show did not know then completes. A Fade cue
-with an `opacity` fades the Video cue it targets.
+with an `opacity` or a `geometry` fades the Video or Text cue it targets
+there along its `curve`, from wherever it is; a fade does not change the
+target's `fit`.
 
 ## Timecode
 

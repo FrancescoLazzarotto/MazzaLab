@@ -278,13 +278,19 @@ Parità con QLab e poi oltre.
       decodificato su GPU, decodifica hardware (NVDEC, VideoToolbox,
       D3D11VA, VAAPI).
 - [ ] Sincronia audio/video frame-accurata sull'orologio audio.
-- [ ] Fade di opacità e geometria; effetti in WGSL (sfocatura, colore,
-      keystone e simili).
+- [x] Fade di opacità e geometria, lineari o a S, da dove il cue si trova.
+- [ ] Effetti in WGSL (sfocatura, colore, keystone e simili).
 
 ### Cue
 - [x] Video cue e Text cue su stage, con layer, opacità, fade di opacità,
-      trim, velocità, loop e fermo sull'ultimo fotogramma. Mancano font e
-      stili del testo, la geometria e il Camera cue.
+      trim, velocità, loop e fermo sull'ultimo fotogramma.
+- [x] Geometria: adattamento allo stage, posizione, scala, rotazione e
+      ritaglio, in pixel dello stage (ogni stage ha una risoluzione), con
+      un'anteprima nell'inspector in cui trascinare l'immagine.
+- [x] Stile del testo: carattere, dimensione, colore, allineamento,
+      grassetto, corsivo, interlinea, larghezza a capo, riquadro dietro.
+- [ ] Testo ricco (stili diversi nello stesso cue), rotazione 3D, Camera
+      cue.
 
 ### Proiezione
 - [ ] Edge blending con gamma, warping (prospettiva, lineare, Bézier,
@@ -410,12 +416,14 @@ Voci ancora aperte qui sopra di cui esiste già un pezzo:
   ripetizioni o in loop fino al devamp; il Devamp chiude il passaggio in
   corso e passa alla slice successiva senza buchi, al campione (verificato
   sulla scheda audio), o chiude il cue nell'ultima.
-- **Video**: cue Video e Testo su stage nominati, a layer, con opacità e
-  fade di opacità, pausa, ripresa, carico a un punto e fine segnalata
-  dallo stage; ogni browser che apre `/?stage=Nome` è un proiettore, e il
-  pannello laterale mostra lo stage dal vivo. L'audio dei video esce dal
-  browser dello stage. Mancano il renderer nativo, edge blending e
-  warping, la geometria, NDI/Spout/Syphon e il Camera cue.
+- **Video**: cue Video e Testo su stage nominati, a layer, con opacità,
+  geometria (adattamento, posizione, scala, rotazione, ritaglio) e fade
+  di entrambe, pausa, ripresa, carico a un punto e fine segnalata dallo
+  stage; il testo ha carattere, colore, allineamento e riquadro. Ogni
+  browser che apre `/?stage=Nome` è un proiettore, e il pannello laterale
+  mostra lo stage dal vivo. L'audio dei video esce dal browser dello
+  stage. Mancano il renderer nativo, edge blending e warping,
+  NDI/Spout/Syphon e il Camera cue.
 - **Avvisi**: file illeggibili, patch mancanti e dispositivi assenti
   arrivano all'operatore come notifiche; manca il controllo pre-show unico.
 
