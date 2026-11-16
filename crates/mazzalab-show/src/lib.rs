@@ -481,6 +481,18 @@ impl Show {
         changed
     }
 
+    /// Rewrites the workspace, and every version undo and redo would bring
+    /// back, the same way: for media paths that must start from another
+    /// folder once the show is saved somewhere else. This is not an edit:
+    /// it leaves undo history and the saved state alone.
+    pub fn rewrite_all(&mut self, rewrite: impl Fn(&mut Workspace)) {
+        self.engine.edit_workspace(&rewrite);
+        for workspace in self.undo.iter_mut().chain(self.redo.iter_mut()) {
+            rewrite(workspace);
+        }
+        self.revision += 1;
+    }
+
     fn list_of(&self, cue: CueId) -> Result<CueId, ShowError> {
         self.workspace()
             .list_of(cue)
