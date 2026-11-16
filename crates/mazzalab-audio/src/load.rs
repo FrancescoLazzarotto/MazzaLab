@@ -61,8 +61,12 @@ impl CallbackLoad {
 
     /// Called at the end of a callback that rendered `frames` at `rate`.
     pub(crate) fn end(&self, started: Instant, frames: usize, rate: u32) {
+        self.end_at(started, Instant::now(), frames, rate);
+    }
+
+    fn end_at(&self, started: Instant, ended: Instant, frames: usize, rate: u32) {
         let budget = (frames as f64 * 1e9 / f64::from(rate.max(1))) as u64;
-        let busy = started.elapsed().as_nanos() as u64;
+        let busy = ended.saturating_duration_since(started).as_nanos() as u64;
         let since = started.saturating_duration_since(self.epoch).as_nanos() as u64 + 1;
         let previous = self.last_start.swap(since, Ordering::Relaxed);
         let previous_budget = self.last_budget.swap(budget, Ordering::Relaxed);
@@ -106,24 +110,26 @@ mod tests {
 
     #[test]
     fn load_is_time_spent_over_audio_rendered_and_gaps_are_late() {
+        // Instants made up rather than slept, so a busy machine cannot
+        // change the outcome.
         let load = CallbackLoad::new();
-        // 480 frames at 48 kHz: 10 ms of audio.
-        for _ in 0..3 {
-            let started = load.start();
-            std::thread::sleep(Duration::from_millis(2));
-            load.end(started, 480, 48_000);
-            std::thread::sleep(Duration::from_millis(8));
+        let base = load.epoch + Duration::from_millis(1);
+        let ms = Duration::from_millis;
+        // 480 frames at 48 kHz: 10 ms of audio, each rendered in 2 ms, one
+        // every 10 ms.
+        for index in 0..3 {
+            let started = base + ms(10 * index);
+            load.end_at(started, started + ms(2), 480, 48_000);
         }
         let reading = load.take();
         assert_eq!(reading.callbacks, 3);
-        assert!(reading.load > 0.1 && reading.load < 1.0, "{reading:?}");
-        assert!(reading.peak >= reading.load);
+        assert!((reading.load - 0.2).abs() < 1e-3, "{reading:?}");
+        assert!((reading.peak - 0.2).abs() < 1e-3, "{reading:?}");
         assert_eq!(reading.late, 0, "{reading:?}");
 
         // A callback 50 ms after one that lasted 10 ms: too late.
-        std::thread::sleep(Duration::from_millis(50));
-        let started = load.start();
-        load.end(started, 480, 48_000);
+        let started = base + ms(70);
+        load.end_at(started, started + ms(1), 480, 48_000);
         assert_eq!(load.take().late, 1);
         // Read again with nothing rendered: no load.
         assert_eq!(load.take().load, 0.0);
