@@ -219,8 +219,9 @@ Parità con QLab e poi oltre.
 
 ## Fase 3 — Trigger, OSC e API (L)
 
-- [ ] Trigger dei cue: tasti rapidi, MIDI, timecode, orario (con
-      calendario), messaggi OSC in ingresso, "second trigger".
+- [x] Trigger dei cue: tasti rapidi, MIDI, timecode, orario (con i giorni
+      della settimana), messaggi OSC in ingresso, in una scheda Trigger.
+- [ ] "Second trigger" e calendario con date.
 - [x] `load` e `preview` sui cue.
 - [ ] **OSC completo**: coprire i circa 1.100 metodi documentati da QLab,
       in ordine di uso reale, con test di conformità basati sulla
@@ -413,8 +414,9 @@ Voci ancora aperte qui sopra di cui esiste già un pezzo:
   l'inseguimento (chase).
 - **Trigger dei cue**: tasti rapidi e messaggi MIDI per cue, con
   apprendimento dal controller; GO, stop, panic e playhead comandabili via
-  MIDI; trigger da timecode. Mancano orario e OSC come trigger, e Stream
-  Deck.
+  MIDI; trigger da timecode, da un indirizzo OSC qualsiasi (con `*` e
+  `?`) e dall'orario, nei giorni scelti. Mancano il second trigger, il
+  calendario con date e Stream Deck.
 - **Slice e Devamp**: un cue audio si divide in slice, ognuna con le sue
   ripetizioni o in loop fino al devamp; il Devamp chiude il passaggio in
   corso e passa alla slice successiva senza buchi, al campione (verificato

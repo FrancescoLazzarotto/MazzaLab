@@ -149,6 +149,18 @@ velocity 0 counts as a note off. `workspace.settings.midi_controls` ties
 `go`, `stop_all`, `panic`, `playhead_next` and `playhead_previous` to
 messages in the same form.
 
+A cue's `triggers.osc` is an OSC address that starts it when a message to
+it arrives on the show's OSC port (UDP or TCP); `*` and `?` in it match
+any characters, so `/scene/*/go` answers `/scene/12/go`. A message that a
+cue takes is not refused even when it is not one of the show's own
+addresses.
+
+A cue's `triggers.wall_clock` starts it at a time of day on the show
+machine's clock: `time` (`HH:MM` or `HH:MM:SS`) and `days` (`monday` …
+`sunday`; none means every day). It fires as the clock goes past the
+time; a machine that was asleep then, or a clock set back, starts
+nothing.
+
 ## Stages
 
 Video and Text cues go up on stages. `workspace.settings.stages` names
