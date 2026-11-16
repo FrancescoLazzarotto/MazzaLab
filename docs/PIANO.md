@@ -242,10 +242,11 @@ Parità con QLab e poi oltre.
       SysEx.
 - [ ] MSC in ingresso e in uscita.
 - [ ] MIDI File cue sincronizzato con lo show.
-- [x] Timecode MTC e LTC in uscita, MTC in ingresso, tutti i formati di
-      frame (drop frame compreso). Mancano LTC in ingresso (serve
-      l'ingresso audio), inseguimento con freewheel e i comportamenti di
-      partenza e arresto (skip, lookback, start all...).
+- [x] Timecode MTC e LTC in uscita, MTC e LTC in ingresso, tutti i
+      formati di frame (drop frame compreso); l'LTC si legge da un canale
+      di un ingresso audio, col frame rate riconosciuto dal segnale.
+      Mancano l'inseguimento con freewheel e i comportamenti di partenza
+      e arresto (skip, lookback, start all...).
 - [ ] Network cue che inviano davvero: OSC su UDP e TCP, UDP, TCP, HTTP,
       WebSocket; fade dei valori OSC.
 - [ ] **Schema aperto e versionato** per le descrizioni dei dispositivi
@@ -410,8 +411,9 @@ Voci ancora aperte qui sopra di cui esiste già un pezzo:
   un'uscita della scheda audio (verificato sulla scheda), in tutti i
   formati, drop frame compreso; l'MTC in ingresso si vede nella barra di
   stato e fa partire i cue col trigger timecode quando ci passa sopra in
-  avanti (un salto non fa partire niente). Mancano LTC in ingresso e
-  l'inseguimento (chase).
+  avanti (un salto non fa partire niente); lo stesso vale per l'LTC letto
+  da un ingresso audio, con il frame rate riconosciuto dal segnale.
+  Manca l'inseguimento (chase).
 - **Trigger dei cue**: tasti rapidi e messaggi MIDI per cue, con
   apprendimento dal controller; GO, stop, panic e playhead comandabili via
   MIDI; trigger da timecode, da un indirizzo OSC qualsiasi (con `*` e

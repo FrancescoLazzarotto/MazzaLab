@@ -85,7 +85,7 @@ the target container once the cue has been taken out of its old place.
 | `POST /api/screens` | `{ "shown": true }` puts stages on the displays they name, full screen, `false` takes them down; 404 without displays |
 | `POST /api/timecode/in` | feeds the show `timecode` (`HH:MM:SS:FF`) at a `format` (`fps25`...) as if it had come in, to try timecode triggers without a source |
 | `POST /api/midi/in` | feeds the show a MIDI message (`kind`, `channel`, `number`, `value`) as if it had arrived on an input, to try triggers without the controller |
-| `GET /api/audio` | `status` (as in the `audio` message, or `null` without an audio backend) and `devices`: every output device with `id`, `name`, `host`, `is_default`, `max_channels`, `sample_rates`, `default_sample_rate` |
+| `GET /api/audio` | `status` (as in the `audio` message, or `null` without an audio backend) and `devices`: every output device with `id`, `name`, `host`, `is_default`, `max_channels`, `sample_rates`, `default_sample_rate`; and `inputs`, every input device with `id`, `name`, `host`, `is_default`, `max_channels` |
 | `GET /api/midi` | the MIDI ports of the server's machine: `outputs` and `inputs`, by name |
 | `GET /api/waveform?cue=ID&buckets=N` | the outline of an audio cue's file: `duration`, `channels`, `sample_rate`, and `peaks`, a minimum and a maximum (-127…127) for each of N slices. Cached per file |
 | `GET /api/media` | the files in the show's `media` folder |
@@ -210,7 +210,10 @@ comes out of the audio device's `output` (from 1) at `level_db`. Pausing
 holds it, resuming locates the receiver again and runs on. A cue loaded
 to a time starts that much further on.
 
-MTC arriving on any MIDI input is followed. A cue's `triggers.timecode`
+MTC arriving on any MIDI input is followed, and so is LTC on the audio
+input `workspace.settings.ltc_input` names (`device`, an input's `id`
+from `/api/audio`, absent for the default input, and `channel` from 1);
+its rate is read from the signal itself. A cue's `triggers.timecode`
 starts it when incoming timecode, running forward, passes that frame; a
 jump (a locate, a source looping back) starts nothing, so a show can be
 rewound over its triggers.
