@@ -14,7 +14,9 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 mazzalab-audio.workspace = true
 mazzalab-core.workspace = true
+mazzalab-engine.workspace = true
 mazzalab-project.workspace = true
+mazzalab-show.workspace = true
 mazzalab-server = { path = "../mazzalab-server" }
 sys-locale = "0.3"
 tauri = { version = "2", features = [] }

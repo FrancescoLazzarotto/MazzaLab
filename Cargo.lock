@@ -2253,8 +2253,10 @@ version = "0.1.0"
 dependencies = [
  "mazzalab-audio",
  "mazzalab-core",
+ "mazzalab-engine",
  "mazzalab-project",
  "mazzalab-server",
+ "mazzalab-show",
  "sys-locale",
  "tauri",
  "tauri-build",

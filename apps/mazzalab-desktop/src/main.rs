@@ -4,7 +4,8 @@
 //! and the web API, reachable by tablets on the network) and shows the
 //! operator UI in a native window pointed at that server. The File menu
 //! creates, opens and saves shows; opening another show restarts the server
-//! on it and points the window at the new server.
+//! on it and points the window at the new server. The Video menu puts the
+//! show's stages full screen on the displays they name.
 //!
 //! Usage: `mazzalab-desktop [show.mazzalab]`. Without a path the show is
 //! `Documents/MazzaLab/Untitled.mazzalab`.
@@ -12,16 +13,20 @@
 // Release builds on Windows should not open a console window.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod screens;
+
 use std::error::Error;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use mazzalab_core::Workspace;
 use mazzalab_server::{
     AudioBackend, Completion, LightingBackend, LogOutput, MidiBackend, NetworkBackend, Output,
-    RunningServer, ServerConfig, StageBackend,
+    RunningServer, ScreensHandle, ServerConfig, StageBackend,
 };
-use tauri::menu::{Menu, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
+use screens::{DesktopScreens, MENU_SCREENS, StageScreens};
+use tauri::menu::{CheckMenuItemBuilder, Menu, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::{
     App, AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent, Wry,
 };
@@ -116,6 +121,7 @@ fn main() {
                 MENU_OPEN => spawn(open_show(app)),
                 MENU_SAVE => spawn(save_show(app)),
                 MENU_SAVE_AS => spawn(save_show_as(app)),
+                MENU_SCREENS => app.state::<Arc<DesktopScreens>>().toggle(),
                 MENU_QUIT => {
                     if let Some(window) = app.get_webview_window(MAIN_WINDOW) {
                         let _ = window.close();
@@ -125,6 +131,10 @@ fn main() {
             }
         })
         .on_window_event(|window, event| {
+            // Stage windows just close; the main window asks first.
+            if window.label() != MAIN_WINDOW {
+                return;
+            }
             if let WindowEvent::CloseRequested { api, .. } = event {
                 let app = window.app_handle().clone();
                 if !app.state::<Desktop>().closing.load(Ordering::SeqCst) {
@@ -142,13 +152,20 @@ fn setup(app: &mut App) -> Result<(), Box<dyn Error>> {
     let ui_dir = ui_dir(app);
     let show = initial_show(app)?;
     let (workspace, recovered) = load(&show)?;
-    let server =
-        tauri::async_runtime::block_on(start_server(&show, workspace, recovered, ui_dir.clone()))?;
+    let screens = DesktopScreens::new(app.handle().clone());
+    app.manage(Arc::clone(&screens));
+    let server = tauri::async_runtime::block_on(start_server(
+        &show,
+        workspace,
+        recovered,
+        ui_dir.clone(),
+        &screens,
+    ))?;
     tracing::info!(show = %show.display(), osc = %server.osc_udp, http = %server.http, "show server running");
     let session = Session { show, server };
 
     app.set_menu(menu(app.handle(), lang)?)?;
-    WebviewWindowBuilder::new(
+    let builder = WebviewWindowBuilder::new(
         app,
         MAIN_WINDOW,
         WebviewUrl::External(session.url().parse()?),
@@ -158,8 +175,12 @@ fn setup(app: &mut App) -> Result<(), Box<dyn Error>> {
     .min_inner_size(900.0, 600.0)
     // The UI reorders cues and imports files with the browser's own drag
     // and drop, which the native handler would otherwise swallow.
-    .disable_drag_drop_handler()
-    .build()?;
+    .disable_drag_drop_handler();
+    // Every webview of the app must be started with the same arguments.
+    #[cfg(windows)]
+    let builder = builder.additional_browser_args(screens::BROWSER_ARGS);
+    builder.build()?;
+    screens.set_base(Some(session.url()));
     app.manage(Desktop {
         lang,
         ui_dir,
@@ -184,6 +205,17 @@ fn menu(app: &AppHandle, lang: Lang) -> tauri::Result<Menu<Wry>> {
         lang.t("Quit MazzaLab", "Esci da MazzaLab"),
         "CmdOrCtrl+Q",
     )?;
+
+    let video = SubmenuBuilder::new(app, lang.t("Video", "Video"))
+        .item(
+            &CheckMenuItemBuilder::with_id(
+                MENU_SCREENS,
+                lang.t("Show Stages on Screens", "Mostra gli stage sugli schermi"),
+            )
+            .accelerator("CmdOrCtrl+Shift+D")
+            .build(app)?,
+        )
+        .build()?;
 
     let file = SubmenuBuilder::new(app, lang.t("File", "File"))
         .item(&item(
@@ -224,13 +256,13 @@ fn menu(app: &AppHandle, lang: Lang) -> tauri::Result<Menu<Wry>> {
             .item(&PredefinedMenuItem::select_all(app, None)?)
             .build()?;
         MenuBuilder::new(app)
-            .items(&[&application, &file.build()?, &edit])
+            .items(&[&application, &file.build()?, &edit, &video])
             .build()
     }
     #[cfg(not(target_os = "macos"))]
     {
         let file = file.separator().item(&quit).build()?;
-        MenuBuilder::new(app).item(&file).build()
+        MenuBuilder::new(app).items(&[&file, &video]).build()
     }
 }
 
@@ -361,6 +393,12 @@ async fn close(app: AppHandle) {
     };
     if confirm_discard(&app, session.as_ref(), desktop.lang).await {
         desktop.closing.store(true, Ordering::SeqCst);
+        // Stage windows would keep the app running.
+        for (label, window) in app.webview_windows() {
+            if label != MAIN_WINDOW {
+                let _ = window.destroy();
+            }
+        }
         if let Some(window) = app.get_webview_window(MAIN_WINDOW) {
             let _ = window.close();
         }
@@ -452,11 +490,22 @@ async fn switch_to(
     recovered: bool,
 ) {
     let desktop = app.state::<Desktop>();
+    let screens = Arc::clone(&app.state::<Arc<DesktopScreens>>());
+    // Stages come down with the old server and go up again with the new.
+    screens.set_base(None);
     if let Some(previous) = session.take() {
         // Waits for the ports to be released so the new server gets them.
         previous.server.stop().await;
     }
-    let server = match start_server(&show, workspace, recovered, desktop.ui_dir.clone()).await {
+    let server = match start_server(
+        &show,
+        workspace,
+        recovered,
+        desktop.ui_dir.clone(),
+        &screens,
+    )
+    .await
+    {
         Ok(server) => server,
         Err(error) => {
             return report(
@@ -480,6 +529,7 @@ async fn switch_to(
             Err(error) => tracing::error!(%error, "invalid server URL"),
         }
     }
+    screens.set_base(Some(next.url()));
     *session = Some(next);
 }
 
@@ -598,10 +648,13 @@ async fn start_server(
     workspace: Workspace,
     recovered: bool,
     ui_dir: Option<PathBuf>,
+    screens: &Arc<DesktopScreens>,
 ) -> Result<RunningServer, Box<dyn Error>> {
     let base_dir = base_dir(show);
+    let stage_screens = Arc::clone(screens);
     let outputs = move |completion: Completion| -> Vec<Box<dyn Output>> {
         vec![
+            Box::new(StageScreens(Arc::clone(&stage_screens))),
             Box::new(LogOutput),
             Box::new(NetworkBackend::new(completion.clone())),
             Box::new(MidiBackend::new(completion.clone())),
@@ -614,6 +667,9 @@ async fn start_server(
         show_path: Some(show.to_path_buf()),
         ui_dir,
         recovered,
+        screens: Some(ScreensHandle(
+            Arc::clone(screens) as Arc<dyn mazzalab_server::Screens>
+        )),
         ..ServerConfig::default()
     };
 
