@@ -13,11 +13,25 @@ export type GroupMode =
   | "start_random"
   | "playlist";
 
+export type OthersAction = "fade_and_stop" | "duck";
+export type OthersScope = "list" | "all";
+
+/** What a cue does to the others already playing when it starts. */
+export interface Others {
+  action: OthersAction;
+  scope: OthersScope;
+  /** Seconds the others take to fade out, or to go down and come back. */
+  fade: number;
+  /** How far ducked cues go down, in dB (positive). */
+  duck_db: number;
+}
+
 interface CueBase {
   id: Id;
   number?: string;
   name?: string;
   notes?: string;
+  others?: Others;
   color?: CueColor;
   pre_wait?: number;
   post_wait?: number;
@@ -387,6 +401,8 @@ export interface WorkspaceSettings {
   midi_controls?: MidiControls;
   /** An audio input LTC is read from; absent listens to none. */
   ltc_input?: LtcInput;
+  /** The device ID (0-127) answered to for incoming MIDI Show Control; absent answers only to all (127). */
+  msc_device_id?: number;
 }
 
 /** Where linear timecode comes in: an input device (absent: the default input) and its channel, from 1. */
@@ -517,6 +533,9 @@ export type EngineEvent = { at: number } & (
   | { kind: "action_started"; cue: Id; armed: boolean }
   | { kind: "panicking"; cue: Id; fade: number }
   | { kind: "playhead_moved"; list: Id; cue: Id | null }
+  | { kind: "fading_out"; cue: Id; fade: number }
+  | { kind: "ducked"; cue: Id; by_db: number; fade: number }
+  | { kind: "unducked"; cue: Id; fade: number }
 );
 
 export type ServerMessage =

@@ -46,6 +46,7 @@ import { useTitleLabels } from "./a11y";
 import { MediaPanel } from "./components/MediaPanel";
 import { PreflightDialog } from "./components/PreflightDialog";
 import { mediaKind } from "./mediaLibrary";
+import { NO_OTHERS, applyOthersEvents, type OthersState } from "./others";
 import { effectiveMode, type AccessReply } from "./access";
 import { Announcer } from "./components/Announcer";
 import { resolveSplit, showInPane, toggleSplit } from "./panes";
@@ -71,6 +72,8 @@ export function App({ connection, access, onChangePasscode }: { connection: Show
   const [printing, setPrinting] = useState(false);
   const [fileDialog, setFileDialog] = useState<FileMode | null>(null);
   const [checking, setChecking] = useState(false);
+  const [others, setOthers] = useState<OthersState>(NO_OTHERS);
+  useEffect(() => connection.onEvents((events) => setOthers((current) => applyOthersEvents(current, events))), [connection]);
   const [importing, setImporting] = useState<{ fileName: string; result: CsvImport } | null>(null);
   const importInput = useRef<HTMLInputElement>(null);
   const [renamingList, setRenamingList] = useState<Id | null>(null);
@@ -122,6 +125,7 @@ export function App({ connection, access, onChangePasscode }: { connection: Show
     setPendingList(null);
     setRenumbering(false);
     clipboard.current = [];
+    setOthers(NO_OTHERS);
   }, [workspaceId]);
   const visible = useMemo(() => (list ? visibleIds(list.cues, filter) : null), [list, filter]);
   const shownRows = useMemo(() => (visible ? rows.filter((row) => visible.has(row.cue.id)) : rows), [rows, visible]);
@@ -724,6 +728,7 @@ export function App({ connection, access, onChangePasscode }: { connection: Show
             )}
             <ActiveCues
               disabled={!canControl}
+              others={others}
               running={status?.running ?? []}
               cues={allCues}
               onPause={(cue) => run({ command: "pause", cue })}

@@ -26,6 +26,7 @@ import { GeometryFields, GeometryTab, StagePreview, TextStyleFields } from "./Ge
 import { TriggerFields } from "./TriggerFields";
 import { StageField, VideoFields } from "./VideoFields";
 import { filePosition, Waveform } from "./Waveform";
+import { OthersFields } from "./OthersFields";
 import { TimelineView } from "./TimelineView";
 
 const COLORS: CueColor[] = ["red", "orange", "yellow", "green", "blue", "purple", "grey"];
@@ -192,6 +193,7 @@ function Basics({
           <CheckField label={t("inspector.armed")} checked={cue.armed ?? true} onChange={(armed) => set({ armed })} />
           <CheckField label={t("inspector.flagged")} checked={cue.flagged ?? false} onChange={(flagged) => set({ flagged })} />
         </div>
+        {(cue.type === "audio" || cue.type === "video") && <OthersFields others={cue.others} onChange={(others) => set({ others })} />}
       </div>
       <div className="form-column grow">
         <TextField label={t("inspector.notes")} value={cue.notes ?? ""} multiline onCommit={(notes) => set({ notes })} />

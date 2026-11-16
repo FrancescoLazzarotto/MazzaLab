@@ -19,6 +19,7 @@ import { LANGUAGE_OPTIONS, useI18n } from "../i18n";
 import { AUTO } from "../locales/resolve";
 import type { Preferences } from "../preferences";
 import { TRANSPORT_ACTIONS, type KeyMap } from "../keymap";
+import { parseDeviceId } from "../mscDevice";
 import { THEMES } from "../theme";
 import { CheckField, LevelField, NumberField, SelectField, TextField, TimeField } from "./fields";
 import { screenLabels, screensInOrder, stageUrl } from "../stage";
@@ -168,6 +169,8 @@ export function SettingsDialog({
               controls={settings.midi_controls ?? {}}
               onChange={(midi_patches) => set({ midi_patches })}
               onControls={(midi_controls) => set({ midi_controls })}
+              mscDevice={settings.msc_device_id}
+              onMscDevice={(msc_device_id) => set({ msc_device_id })}
             />
           )}
           {tab === "lights" && <LightsTab outputs={settings.dmx_outputs ?? []} onChange={(dmx_outputs) => set({ dmx_outputs })} />}
@@ -361,14 +364,19 @@ function MidiTab({
   connection,
   patches,
   controls,
+  mscDevice,
   onChange,
   onControls,
+  onMscDevice,
 }: {
   connection: ShowConnection;
   patches: MidiPatch[];
   controls: MidiControls;
+  /** The device ID MIDI Show Control is answered to; none answers to all only. */
+  mscDevice: number | undefined;
   onChange: (patches: MidiPatch[]) => void;
   onControls: (controls: MidiControls) => void;
+  onMscDevice: (id: number | undefined) => void;
 }) {
   const { t } = useI18n();
   const [outputs, setOutputs] = useState<string[] | null>(null);
@@ -420,6 +428,15 @@ function MidiTab({
         </button>
       </div>
       {outputs !== null && outputs.length === 0 && <p className="hint warn">{t("settings.noMidiOutputs")}</p>}
+      <h3>{t("settings.msc")}</h3>
+      <div className="row">
+        <TextField
+          label={t("settings.mscDevice")}
+          value={mscDevice === undefined ? "" : String(mscDevice)}
+          placeholder={t("settings.mscAll")}
+          onCommit={(text) => onMscDevice(parseDeviceId(text))}
+        />
+      </div>
       <h3>{t("settings.midiControls")}</h3>
       <div className="midi-controls">
         {MIDI_CONTROLS.map((name) => (

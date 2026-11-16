@@ -2,12 +2,14 @@ import type { Cue, Id, RunningCue } from "../api/types";
 import { displayName, findCue } from "../cues";
 import { formatTime } from "../format";
 import { useI18n } from "../i18n";
+import { NO_OTHERS, duckLabel, type OthersState } from "../others";
 import { CueIcon, Icon } from "./icons";
 
 export function ActiveCues({
   running,
   cues,
   disabled = false,
+  others = NO_OTHERS,
   onPause,
   onResume,
   onStop,
@@ -15,6 +17,8 @@ export function ActiveCues({
   running: RunningCue[];
   cues: Cue[];
   disabled?: boolean;
+  /** Which cues another cue is ducking or fading out. */
+  others?: OthersState;
   onPause: (cue: Id) => void;
   onResume: (cue: Id) => void;
   onStop: (cue: Id) => void;
@@ -41,6 +45,8 @@ export function ActiveCues({
                   <CueIcon type={cue.type} size={14} />
                   <span className="active-number">{cue.number ?? "–"}</span>
                   <span className="active-title">{displayName(cue)}</span>
+                  {others.ducked.has(run.cue) && <span className="badge ducked">{duckLabel(others.ducked.get(run.cue) ?? 0)}</span>}
+                  {others.fading.has(run.cue) && <span className="badge fading">{t("others.fading")}</span>}
                 </span>
                 <span className="active-buttons">
                   {run.paused ? (

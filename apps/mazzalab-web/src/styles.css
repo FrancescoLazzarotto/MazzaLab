@@ -928,6 +928,23 @@ fieldset.bare {
   text-align: center;
 }
 
+/* Fade and stop others, duck others */
+.others-mark {
+  display: inline-flex;
+  color: var(--text-3);
+}
+
+.badge {
+  margin-left: 6px;
+  padding: 0 5px;
+  border: 1px solid var(--hairline);
+  border-radius: 3px;
+  color: var(--warn);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 /* Pre-show check */
 .preflight {
   height: min(560px, calc(100vh - 64px));

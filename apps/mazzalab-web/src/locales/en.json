@@ -456,5 +456,18 @@
   "preflight.key.duplicate_number": "Number used by more than one cue",
   "preflight.key.hotkey_collision": "Same hotkey as",
   "preflight.key.midi_collision": "Same MIDI trigger as",
-  "preflight.key.osc_collision": "Same OSC address as"
+  "preflight.key.osc_collision": "Same OSC address as",
+  "others.title": "Others, when this starts",
+  "others.off": "Leave them",
+  "others.fade_and_stop": "Fade out and stop",
+  "others.duck": "Duck them",
+  "others.scope": "Which",
+  "others.list": "This cue list",
+  "others.all": "Every list",
+  "others.fade": "Fade time",
+  "others.duckDb": "Duck by dB",
+  "others.fading": "fading out",
+  "settings.msc": "MIDI Show Control in",
+  "settings.mscDevice": "Device ID (0-127)",
+  "settings.mscAll": "All devices only"
 }

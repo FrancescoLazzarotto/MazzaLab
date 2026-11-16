@@ -230,6 +230,11 @@ export function CueList({
                     </span>
                     <span className="name-text">{cell("name", displayName(cue))}</span>
                     {cue.triggers?.hotkey && <kbd className="hotkey-badge">{cue.triggers.hotkey}</kbd>}
+                    {cue.others && (
+                      <span className="others-mark" title={`${t(`others.${cue.others.action}`)} · ${t(`others.${cue.others.scope}`)}`}>
+                        <Icon name={cue.others.action === "duck" ? "others-duck" : "others-stop"} size={12} />
+                      </span>
+                    )}
                     {cue.notes && <span className="notes-text">{cue.notes}</span>}
                   </span>
                 </td>

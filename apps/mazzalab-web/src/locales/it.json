@@ -456,5 +456,18 @@
   "preflight.key.duplicate_number": "Numero usato da più cue",
   "preflight.key.hotkey_collision": "Stesso hotkey di",
   "preflight.key.midi_collision": "Stesso trigger MIDI di",
-  "preflight.key.osc_collision": "Stesso indirizzo OSC di"
+  "preflight.key.osc_collision": "Stesso indirizzo OSC di",
+  "others.title": "Gli altri, quando parte",
+  "others.off": "Lasciali",
+  "others.fade_and_stop": "Sfuma e ferma",
+  "others.duck": "Abbassali (duck)",
+  "others.scope": "Quali",
+  "others.list": "Questa cue list",
+  "others.all": "Tutte le liste",
+  "others.fade": "Tempo di sfumo",
+  "others.duckDb": "Abbassa di dB",
+  "others.fading": "in sfumo",
+  "settings.msc": "MIDI Show Control in ingresso",
+  "settings.mscDevice": "Device ID (0-127)",
+  "settings.mscAll": "Solo a tutti i device"
 }

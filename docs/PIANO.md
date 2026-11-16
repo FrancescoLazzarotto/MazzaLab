@@ -160,8 +160,8 @@ Parità con QLab e poi oltre.
 - [ ] Fade cue completi: livelli per incrocio della matrice, fade di
       velocità, curve personalizzate, modalità assoluta e relativa, stop
       del cue di destinazione alla fine.
-- [ ] Fade and stop others (stessa lista, tutte le liste, tutto) e duck
-      others con ripristino automatico.
+- [x] Fade and stop others (stessa lista, tutte le liste) e duck others con
+      ripristino automatico, dall'inspector delle cue Audio e Video.
 - [ ] Normalizzazione del volume in LUFS, con analisi al caricamento.
 
 ### Misura ed effetti
