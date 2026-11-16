@@ -130,8 +130,11 @@ Parità con QLab e poi oltre.
 ### Dispositivi e routing
 - [x] Elenco e scelta del dispositivo, frequenza di campionamento e
       dimensione del buffer.
-- [ ] Driver a bassa latenza: ASIO su Windows (feature `asio` di `cpal`),
-      CoreAudio su macOS, JACK e PipeWire su Linux.
+- [ ] Driver a bassa latenza: ASIO su Windows c'è come opzione di
+      compilazione (`--features asio`, verificata in CI; manca la prova
+      su una scheda vera e la licenza Steinberg per distribuirla).
+      CoreAudio su macOS è già il default; mancano JACK e PipeWire su
+      Linux.
 - [ ] Più dispositivi insieme, con compensazione della deriva di clock.
 - [ ] **Patch di uscita** con nome: dispositivo, canali, livello, mute,
       polarità e ritardo per canale.
@@ -188,7 +191,7 @@ Parità con QLab e poi oltre.
       nell'inspector.
 - [x] Rinumerazione e auto-numerazione con passo configurabile.
 - [ ] Template dei cue.
-- [ ] Ricerca e filtri (per tipo, colore, flag, testo nelle note).
+- [x] Ricerca e filtri (per tipo, colore, flag, testo in numero, nome e note).
 - [x] Gestione delle cue list: aggiungere, rinominare, eliminare, anche
       liste cart. Manca vederne più di una insieme.
 - [ ] Inspector completo per ogni tipo di cue.
@@ -206,15 +209,17 @@ Parità con QLab e poi oltre.
 
 ### Modalità di lavoro
 - [ ] Modalità show e modalità edit, con blocco e password.
-- [ ] Mappa dei tasti configurabile.
-- [ ] Vista "solo show" per tablet: GO grande, standby, note, stop.
-- [ ] App web installabile (PWA) che funziona anche se la rete cade per un
-      momento.
+- [ ] Mappa dei tasti configurabile: i tasti del trasporto (GO, stop, pausa,
+      standby, panic) si cambiano per dispositivo; mancano gli altri tasti.
+- [x] Vista "solo show" per tablet (`/?view=show`): GO grande, standby, note,
+      cue in corso, stop e panic.
+- [x] App web installabile (PWA): manifest e service worker che tiene la
+      shell, e la connessione riprova da sola.
 
 ### Qualità dell'interfaccia
 - [ ] Accessibilità: uso completo da tastiera, screen reader, contrasto
       alto, ingrandimento (punto debole di molti software da palco).
-- [ ] Temi chiaro, scuro e "buio di sala" a luminosità minima.
+- [x] Temi chiaro, scuro e "buio di sala" a luminosità minima.
 - [ ] Sistema di traduzioni aperto oltre a IT/EN.
 - [ ] Test end-to-end dell'interfaccia (Playwright) e test visivi.
 
