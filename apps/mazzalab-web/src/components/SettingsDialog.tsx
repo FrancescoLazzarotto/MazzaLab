@@ -26,10 +26,15 @@ import { FixturesTab } from "./FixturesTab";
 import { Icon } from "./icons";
 import { ACTION_LABELS, KeyMapFields } from "./KeyMapFields";
 import { MidiTriggerField } from "./MidiTriggerField";
+import { PasscodesTab } from "./PasscodesTab";
 
 const BUFFER_SIZES = [64, 128, 256, 512, 1024, 2048];
 const PROTOCOLS: NetworkProtocol[] = ["osc_udp", "osc_tcp", "plain_udp", "plain_tcp"];
-type Tab = "general" | "audio" | "network" | "midi" | "lights" | "fixtures" | "video" | "keys";
+type Tab = "general" | "audio" | "network" | "midi" | "lights" | "fixtures" | "video" | "passcodes" | "keys";
+
+/** Without the right to edit, only what belongs to this device. */
+const VIEWER_TABS: Tab[] = ["general", "keys"];
+const EDITOR_TABS: Tab[] = ["general", "audio", "network", "midi", "lights", "fixtures", "video", "passcodes", "keys"];
 
 const SHORTCUTS: [string, string][] = [
   ["↑ ↓", "keys.select"],
@@ -58,6 +63,7 @@ export function SettingsDialog({
   connection,
   workspace,
   preferences,
+  canEdit,
   onPreferences,
   onSettings,
   onRename,
@@ -66,6 +72,8 @@ export function SettingsDialog({
   connection: ShowConnection;
   workspace: Workspace;
   preferences: Preferences;
+  /** The passcode may change the show. */
+  canEdit: boolean;
   onPreferences: (preferences: Preferences) => void;
   onSettings: (settings: WorkspaceSettings) => void;
   onRename: (name: string) => void;
@@ -96,7 +104,7 @@ export function SettingsDialog({
         <header>
           <h1>{t("settings.title")}</h1>
           <nav className="inspector-tabs">
-            {(["general", "audio", "network", "midi", "lights", "fixtures", "video", "keys"] as const).map((name) => (
+            {(canEdit ? EDITOR_TABS : VIEWER_TABS).map((name) => (
               <button key={name} className={name === tab ? "active" : undefined} onClick={() => setTab(name)}>
                 {t(`settings.${name}`)}
               </button>
@@ -109,6 +117,7 @@ export function SettingsDialog({
         <div className="dialog-body">
           {tab === "general" && (
             <div className="form-column">
+              <fieldset className="bare" disabled={!canEdit}>
               <TextField label={t("settings.showName")} value={workspace.name} onCommit={(name) => name.trim() && onRename(name.trim())} />
               <div className="row">
                 <TimeField
@@ -118,6 +127,7 @@ export function SettingsDialog({
                 />
                 <TimeField label={t("settings.panic")} value={settings.panic_duration} onCommit={(value) => set({ panic_duration: value ?? 0 })} />
               </div>
+              </fieldset>
               <h3>{t("settings.thisDevice")}</h3>
               <SelectField
                 label={t("settings.theme")}
@@ -162,6 +172,7 @@ export function SettingsDialog({
               onChange={(fixtures, fixture_groups) => set({ fixtures, fixture_groups })}
             />
           )}
+          {tab === "passcodes" && canEdit && <PasscodesTab passcodes={settings.passcodes ?? []} onChange={(passcodes) => set({ passcodes })} />}
           {tab === "keys" && (
             <table className="shortcuts">
               <tbody>

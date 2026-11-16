@@ -43,6 +43,7 @@ import { NO_FILTER, visibleIds, type CueFilter } from "./cueFilter";
 import { cuesForHotkey, hotkeyOf } from "./hotkeys";
 import { actionFor } from "./keymap";
 import { useTitleLabels } from "./a11y";
+import { effectiveMode, type AccessReply } from "./access";
 import { Announcer } from "./components/Announcer";
 import { resolveSplit, showInPane, toggleSplit } from "./panes";
 import { applyTheme } from "./theme";
@@ -51,7 +52,7 @@ import { loadPreferences, savePreferences, type Preferences } from "./preference
 
 const NO_SELECTION: ReadonlySet<Id> = new Set();
 
-export function App({ connection }: { connection: ShowConnection }) {
+export function App({ connection, access, onChangePasscode }: { connection: ShowConnection; access: AccessReply; onChangePasscode: () => void }) {
   const { t } = useI18n();
   const { snapshot, status, audio, dmx, timecode, toasts, connection: connectionState } = useShow(connection);
   // Selection and the visible list are per client, so several operators can
@@ -76,7 +77,10 @@ export function App({ connection }: { connection: ShowConnection }) {
     setPreferencesState(next);
     savePreferences(next);
   }, []);
-  const editable = preferences.mode === "edit";
+  // What the passcode allows: without edit the device is in show mode, without control nothing is run from it.
+  const mode = effectiveMode(preferences.mode, access);
+  const editable = mode === "edit";
+  const canControl = access.control;
   useEffect(() => applyTheme(preferences.theme), [preferences.theme]);
   useTitleLabels();
 
@@ -166,9 +170,9 @@ export function App({ connection }: { connection: ShowConnection }) {
       }
       setPicked([id]);
       setAnchor(id);
-      if (preferences.playheadFollowsSelection && id !== playhead) run({ command: "set_playhead", cue: id });
+      if (canControl && preferences.playheadFollowsSelection && id !== playhead) run({ command: "set_playhead", cue: id });
     },
-    [anchor, playhead, preferences.playheadFollowsSelection, run, shownRows],
+    [anchor, canControl, playhead, preferences.playheadFollowsSelection, run, shownRows],
   );
 
   const moveSelection = useCallback(
@@ -332,7 +336,7 @@ export function App({ connection }: { connection: ShowConnection }) {
       setPendingList(null);
     }
   }, [pendingList, workspace]);
-  const toggleCue = useCallback((cue: Id) => run({ command: running.has(cue) ? "stop" : "start", cue }), [run, running]);
+  const toggleCue = useCallback((cue: Id) => canControl && run({ command: running.has(cue) ? "stop" : "start", cue }), [canControl, run, running]);
 
   const exportCsv = useCallback(() => {
     if (!list || !workspace) return;
@@ -382,14 +386,14 @@ export function App({ connection }: { connection: ShowConnection }) {
       if (typing) return;
       // A cue's own hotkey comes first; the screen's keys cannot be taken.
       const hotkey = hotkeyOf(event);
-      const triggered = hotkey ? cuesForHotkey(allCues, hotkey) : [];
+      const triggered = hotkey && canControl ? cuesForHotkey(allCues, hotkey) : [];
       if (triggered.length > 0) {
         event.preventDefault();
         if (!event.repeat) for (const cue of triggered) run({ command: "start", cue });
         return;
       }
       // Transport and navigation work in both modes.
-      const action = hotkey ? actionFor(preferences.keymap, hotkey) : null;
+      const action = hotkey && canControl ? actionFor(preferences.keymap, hotkey) : null;
       if (action) {
         // Also stops a focused button from being clicked by the same key.
         event.preventDefault();
@@ -408,11 +412,11 @@ export function App({ connection }: { connection: ShowConnection }) {
         moveSelection(event.key === "ArrowDown" ? 1 : -1, event.shiftKey);
         return;
       }
-      if (event.key === "Enter" && focus) {
+      if (event.key === "Enter" && focus && canControl) {
         run({ command: "set_playhead", cue: focus });
         return;
       }
-      if (!command && key === "v" && focus) {
+      if (!command && key === "v" && focus && canControl) {
         run({ command: "start", cue: focus });
         return;
       }
@@ -460,7 +464,7 @@ export function App({ connection }: { connection: ShowConnection }) {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
     };
-  }, [allCues, copy, deleteSelected, duplicate, editable, focus, go, groupSelected, list?.id, modal, moveSelection, paste, preferences.keymap, run, save, shownRows]);
+  }, [allCues, canControl, copy, deleteSelected, duplicate, editable, focus, go, groupSelected, list?.id, modal, moveSelection, paste, preferences.keymap, run, save, shownRows]);
 
   // Files dropped outside the cue list would otherwise replace the page.
   useEffect(() => {
@@ -506,7 +510,7 @@ export function App({ connection }: { connection: ShowConnection }) {
           visible={active ? visible : null}
           editable={editable && active}
           onSelect={select}
-          onSetPlayhead={(cue) => run({ command: "set_playhead", cue })}
+          onSetPlayhead={(cue) => canControl && run({ command: "set_playhead", cue })}
           onMove={moveCues}
           onDropFiles={(files, drop) => void dropFiles(files, drop)}
           onEdit={(cue) => run({ command: "update_cue", cue })}
@@ -523,10 +527,11 @@ export function App({ connection }: { connection: ShowConnection }) {
   };
 
   return (
-    <div className={`app ${preferences.mode}-mode`}>
+    <div className={`app ${mode}-mode`}>
       <TopBar
         snapshot={snapshot}
-        mode={preferences.mode}
+        mode={mode}
+        canEdit={access.edit}
         onMode={(mode) => setPreferences({ ...preferences, mode })}
         onUndo={() => run({ command: "undo" })}
         onRedo={() => run({ command: "redo" })}
@@ -547,6 +552,7 @@ export function App({ connection }: { connection: ShowConnection }) {
             <Transport
               standby={standby}
               panicking={status?.panicking ?? false}
+              disabled={!canControl}
               onGo={go}
               onStopAll={() => run({ command: "stop_all" })}
               onPauseAll={() => run({ command: "pause_all" })}
@@ -686,6 +692,7 @@ export function App({ connection }: { connection: ShowConnection }) {
               <StageMonitor connection={connection} settings={workspace.settings} />
             )}
             <ActiveCues
+              disabled={!canControl}
               running={status?.running ?? []}
               cues={allCues}
               onPause={(cue) => run({ command: "pause", cue })}
@@ -700,6 +707,7 @@ export function App({ connection }: { connection: ShowConnection }) {
           connection={connection}
           workspace={workspace}
           preferences={preferences}
+          canEdit={access.edit}
           onPreferences={setPreferences}
           onSettings={updateSettings}
           onRename={(name) => run({ command: "rename_workspace", name })}
@@ -747,6 +755,8 @@ export function App({ connection }: { connection: ShowConnection }) {
         selectedCount={selected.length}
         audio={audio}
         timecode={timecode}
+        access={access}
+        onChangePasscode={onChangePasscode}
         connection={connectionState}
         onAudio={() => setSettingsOpen(true)}
       />

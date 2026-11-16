@@ -7,6 +7,7 @@ import { Icon } from "./icons";
 export function TopBar({
   snapshot,
   mode,
+  canEdit,
   onMode,
   onUndo,
   onRedo,
@@ -16,6 +17,8 @@ export function TopBar({
 }: {
   snapshot: Snapshot | null;
   mode: Preferences["mode"];
+  /** The passcode may change the show; without it the device stays in show mode. */
+  canEdit: boolean;
   onMode: (mode: Preferences["mode"]) => void;
   onUndo: () => void;
   onRedo: () => void;
@@ -37,7 +40,7 @@ export function TopBar({
         )}
       </div>
       <div className="segmented mode-switch" role="group" aria-label={t("mode.title")}>
-        <button className={editing ? "active" : undefined} aria-pressed={editing} onClick={() => onMode("edit")} title={t("mode.editHint")}>
+        <button className={editing ? "active" : undefined} aria-pressed={editing} onClick={() => onMode("edit")} disabled={!canEdit} title={t("mode.editHint")}>
           {t("mode.edit")}
         </button>
         <button className={editing ? undefined : "active"} aria-pressed={!editing} onClick={() => onMode("show")} title={t("mode.showHint")}>
@@ -59,7 +62,7 @@ export function TopBar({
               <Icon name={`show-${file}`} />
             </button>
           ))}
-        <button className="icon-button" onClick={onSave} disabled={!snapshot?.dirty} title={`${t("action.save")} (Ctrl+S)`}>
+        <button className="icon-button" onClick={onSave} disabled={!canEdit || !snapshot?.dirty} title={`${t("action.save")} (Ctrl+S)`}>
           <Icon name="save" />
         </button>
         <button className="icon-button" onClick={onSettings} disabled={!snapshot} title={t("settings.title")}>

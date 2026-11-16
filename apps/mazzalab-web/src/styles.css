@@ -871,6 +871,52 @@ select.status-item {
   height: 22px;
 }
 
+/* Passcode screen, and a transport the passcode does not let this device use */
+.passcode-screen {
+  display: grid;
+  place-items: center;
+  height: 100dvh;
+  background: var(--surface-0);
+}
+
+.passcode-screen form {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  width: min(260px, calc(100vw - 32px));
+  color: var(--text-3);
+}
+
+.passcode-screen form > .icon {
+  align-self: center;
+}
+
+.passcode-error {
+  min-height: 1.35em;
+  margin: 0;
+  color: var(--danger);
+  font-size: 12px;
+}
+
+.transport.dimmed {
+  opacity: 0.5;
+}
+
+fieldset.bare {
+  display: contents;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.passcodes .passcode-row {
+  display: grid;
+  grid-template-columns: 90px minmax(0, 1fr) auto auto auto auto;
+  align-items: end;
+  gap: 8px;
+}
+
 /* A hairline of text under the top bar while the server is out of reach */
 .reconnecting {
   flex: none;

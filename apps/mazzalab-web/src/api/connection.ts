@@ -17,6 +17,7 @@ import type {
   TimecodeIn,
   Waveform,
 } from "./types";
+import { authHeaders, withPasscode, type AccessReply } from "../access";
 import { ShowFileError, type FolderListing, type ShowFile } from "../showFiles";
 
 export type ConnectionState = "connecting" | "open" | "closed";
@@ -65,7 +66,40 @@ export class ShowConnection {
   private stopped = false;
   private state: ShowState = { connection: "connecting", snapshot: null, status: null, audio: null, dmx: null, timecode: null, stage: null, toasts: [] };
 
-  constructor(private readonly url: string) {}
+  /** What this client gives the server to be let in; null asks for nothing. */
+  private passcode: string | null;
+
+  constructor(
+    private readonly url: string,
+    passcode: string | null = null,
+  ) {
+    this.passcode = passcode;
+  }
+
+  /** Uses another passcode from now on, and reconnects with it. */
+  setPasscode(passcode: string | null): void {
+    this.passcode = passcode;
+    if (this.retryTimer !== null) clearTimeout(this.retryTimer);
+    this.retryTimer = null;
+    if (this.stopped) return;
+    const socket = this.socket;
+    this.socket = null;
+    socket?.close();
+    this.retries = 0;
+    this.connect();
+  }
+
+  /** A fetch that carries the passcode. */
+  private fetchApi(path: string, init: RequestInit = {}): Promise<Response> {
+    return fetch(`${this.httpBase}${path}`, { ...init, headers: { ...authHeaders(this.passcode), ...(init.headers as Record<string, string> | undefined) } });
+  }
+
+  /** What the passcode this client has grants; answers without one too. */
+  async access(): Promise<AccessReply> {
+    const response = await this.fetchApi("/api/access");
+    if (!response.ok) throw new Error(await errorOf(response));
+    return (await response.json()) as AccessReply;
+  }
 
   start(): void {
     this.stopped = false;
@@ -138,7 +172,7 @@ export class ShowConnection {
 
   /** Where a stage fetches the file of a cue. */
   cueMediaUrl(cue: Id): string {
-    return `${this.httpBase}/api/cue-media?cue=${cue}`;
+    return withPasscode(`${this.httpBase}/api/cue-media?cue=${cue}`, this.passcode);
   }
 
   /** The server's HTTP address, derived from the WebSocket one. */
@@ -148,14 +182,14 @@ export class ShowConnection {
 
   /** The audio output in use and the devices that could be chosen. */
   async audioInfo(): Promise<AudioInfo> {
-    const response = await fetch(`${this.httpBase}/api/audio`);
+    const response = await this.fetchApi("/api/audio");
     if (!response.ok) throw new Error(await errorOf(response));
     return (await response.json()) as AudioInfo;
   }
 
   /** The machine's displays, or `null` from a server that has none to put stages on. */
   async screens(): Promise<Screens | null> {
-    const response = await fetch(`${this.httpBase}/api/screens`);
+    const response = await this.fetchApi("/api/screens");
     if (!response.ok) throw new Error(await errorOf(response));
     const screens = (await response.json()) as Screens & { available: boolean };
     return screens.available ? { screens: screens.screens, shown: screens.shown } : null;
@@ -163,7 +197,7 @@ export class ShowConnection {
 
   /** Puts the stages up on the screens they name, or takes them down. */
   async showOnScreens(shown: boolean): Promise<boolean> {
-    const response = await fetch(`${this.httpBase}/api/screens`, {
+    const response = await this.fetchApi("/api/screens", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ shown }),
@@ -174,7 +208,7 @@ export class ShowConnection {
 
   /** Where the open show is on the server's machine. */
   async showFile(): Promise<ShowFile> {
-    const response = await fetch(`${this.httpBase}/api/show`);
+    const response = await this.fetchApi("/api/show");
     if (!response.ok) throw new Error(await errorOf(response));
     return (await response.json()) as ShowFile;
   }
@@ -182,7 +216,7 @@ export class ShowConnection {
   /** The subfolders and shows of a folder of the server's machine; the open show's folder without `dir`. */
   async showFiles(dir?: string): Promise<FolderListing> {
     const query = dir === undefined ? "" : `?dir=${encodeURIComponent(dir)}`;
-    const response = await fetch(`${this.httpBase}/api/show/files${query}`);
+    const response = await this.fetchApi(`/api/show/files${query}`);
     if (!response.ok) throw new Error(await errorOf(response));
     return (await response.json()) as FolderListing;
   }
@@ -193,7 +227,7 @@ export class ShowConnection {
    * a `ShowFileError` with `unsaved`.
    */
   async changeShow(action: "open" | "new" | "save-as", path: string, discard = false): Promise<void> {
-    const response = await fetch(`${this.httpBase}/api/show/${action}`, {
+    const response = await this.fetchApi(`/api/show/${action}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(action === "save-as" ? { path } : { path, discard }),
@@ -209,13 +243,13 @@ export class ShowConnection {
   }
 
   async midiPorts(): Promise<MidiPorts> {
-    const response = await fetch(`${this.httpBase}/api/midi`);
+    const response = await this.fetchApi("/api/midi");
     if (!response.ok) throw new Error(await errorOf(response));
     return (await response.json()) as MidiPorts;
   }
 
   async waveform(cue: Id, buckets: number, signal?: AbortSignal): Promise<Waveform> {
-    const response = await fetch(`${this.httpBase}/api/waveform?cue=${cue}&buckets=${buckets}`, { signal });
+    const response = await this.fetchApi(`/api/waveform?cue=${cue}&buckets=${buckets}`, { signal });
     if (!response.ok) throw new Error(await errorOf(response));
     return (await response.json()) as Waveform;
   }
@@ -229,6 +263,7 @@ export class ShowConnection {
       // XMLHttpRequest, unlike fetch, reports upload progress.
       const request = new XMLHttpRequest();
       request.open("POST", `${this.httpBase}/api/media?name=${encodeURIComponent(file.name)}`);
+      for (const [name, value] of Object.entries(authHeaders(this.passcode))) request.setRequestHeader(name, value);
       request.upload.onprogress = (event) => {
         if (event.lengthComputable) onProgress?.(event.loaded / event.total);
       };
@@ -269,7 +304,7 @@ export class ShowConnection {
 
   private connect(): void {
     this.update({ connection: "connecting" });
-    const socket = new WebSocket(this.url);
+    const socket = new WebSocket(withPasscode(this.url, this.passcode));
     this.socket = socket;
     socket.onopen = () => {
       this.retries = 0;
@@ -358,6 +393,11 @@ export function serverUrl(location: Pick<Location, "protocol" | "host" | "search
   const override = new URLSearchParams(location.search).get("server");
   const scheme = location.protocol === "https:" ? "wss" : "ws";
   return `${scheme}://${override ?? location.host}/ws`;
+}
+
+/** The server's address as the passcode is filed under it: `?server=` or the page's own host. */
+export function serverHost(location: Pick<Location, "host" | "search">): string {
+  return new URLSearchParams(location.search).get("server") ?? location.host;
 }
 
 export function useShow(connection: ShowConnection): ShowState {

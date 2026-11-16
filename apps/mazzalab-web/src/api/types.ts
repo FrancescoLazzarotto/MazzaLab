@@ -333,7 +333,18 @@ export interface FixtureGroup {
 /** A lit DMX slot: universe, address and value (1–255). */
 export type DmxLevel = [number, number, number];
 
+/** A passcode and what it lets a client on another machine do. Control and edit include view. */
+export interface Passcode {
+  code: string;
+  name?: string;
+  view: boolean;
+  control: boolean;
+  edit: boolean;
+}
+
 export interface WorkspaceSettings {
+  /** Only editors are sent these. */
+  passcodes?: Passcode[];
   double_go_protection: number;
   panic_duration: number;
   audio?: AudioSettings;

@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
+import { accessLevel, type AccessReply } from "../access";
 import type { ConnectionState } from "../api/connection";
 import type { AudioStatus, TimecodeIn } from "../api/types";
 import { LANGUAGES, useI18n, type Language } from "../i18n";
 import { FORMAT_LABELS } from "../timecode";
+import { Icon } from "./icons";
 
 /** How long after the last frame incoming timecode still shows as running. */
 const TIMECODE_STALE_MS = 1000;
@@ -40,6 +42,8 @@ export function StatusBar({
   selectedCount,
   audio,
   timecode,
+  access,
+  onChangePasscode,
   connection,
   onAudio,
 }: {
@@ -48,6 +52,9 @@ export function StatusBar({
   selectedCount: number;
   audio: AudioStatus | null;
   timecode: (TimecodeIn & { at: number }) | null;
+  /** What this device may do, and whether the show asks for a passcode at all. */
+  access: AccessReply;
+  onChangePasscode: () => void;
   connection: ConnectionState;
   onAudio: () => void;
 }) {
@@ -67,6 +74,12 @@ export function StatusBar({
           {audio.running
             ? `${audio.device_name} · ${audio.sample_rate / 1000} kHz · ${audio.channels} ${t("status.outputs")}`
             : (audio.error ?? t("audio.none"))}
+        </button>
+      )}
+      {access.required && (
+        <button className="status-item access" onClick={onChangePasscode} title={t("access.change")}>
+          <Icon name="lock" size={11} />
+          {t(`access.${accessLevel(access)}`)}
         </button>
       )}
       <span className={`status-item connection ${connection}`}>

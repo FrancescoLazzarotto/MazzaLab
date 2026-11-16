@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import type { Access } from "../access";
 import { useShow, type ShowConnection } from "../api/connection";
 import type { Command } from "../api/types";
 import { displayName, findCue, flatten } from "../cues";
@@ -7,7 +8,7 @@ import { useI18n } from "../i18n";
 import { CueIcon, Icon } from "./icons";
 
 /** The show reduced to what a tablet beside the stage manager needs: standby, GO, what runs, and the way out. */
-export function ShowView({ connection }: { connection: ShowConnection }) {
+export function ShowView({ connection, access }: { connection: ShowConnection; access: Access }) {
   const { t } = useI18n();
   const { snapshot, status, connection: link } = useShow(connection);
   const workspace = snapshot?.workspace;
@@ -51,14 +52,14 @@ export function ShowView({ connection }: { connection: ShowConnection }) {
           <div className="sv-cue sv-end">{t("standby.end")}</div>
         )}
       </section>
-      <button className="go sv-go" onClick={() => run({ command: "go", list: listId })} disabled={!standby}>
+      <button className="go sv-go" onClick={() => run({ command: "go", list: listId })} disabled={!standby || !access.control}>
         {t("action.go")}
       </button>
       <div className="sv-steps">
-        <button onClick={() => run({ command: "playhead_previous", list: listId })} disabled={position <= 0 && standbyId !== null} aria-label={t("action.playheadPrevious")}>
+        <button onClick={() => run({ command: "playhead_previous", list: listId })} disabled={!access.control || (position <= 0 && standbyId !== null)} aria-label={t("action.playheadPrevious")}>
           <Icon name="previous" size={22} />
         </button>
-        <button onClick={() => run({ command: "playhead_next", list: listId })} disabled={standbyId !== null && position >= order.length - 1} aria-label={t("action.playheadNext")}>
+        <button onClick={() => run({ command: "playhead_next", list: listId })} disabled={!access.control || (standbyId !== null && position >= order.length - 1)} aria-label={t("action.playheadNext")}>
           <Icon name="next" size={22} />
         </button>
       </div>
@@ -85,11 +86,11 @@ export function ShowView({ connection }: { connection: ShowConnection }) {
         })}
       </section>
       <footer className="sv-actions">
-        <button onClick={() => run({ command: "stop_all" })}>
+        <button onClick={() => run({ command: "stop_all" })} disabled={!access.control}>
           <Icon name="stop" size={16} />
           {t("action.stop")}
         </button>
-        <button className={`panic ${status?.panicking ? "active" : ""}`} onClick={() => run({ command: "panic" })}>
+        <button className={`panic ${status?.panicking ? "active" : ""}`} onClick={() => run({ command: "panic" })} disabled={!access.control}>
           {t("action.panic")}
         </button>
       </footer>

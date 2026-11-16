@@ -7,12 +7,14 @@ import { CueIcon, Icon } from "./icons";
 export function ActiveCues({
   running,
   cues,
+  disabled = false,
   onPause,
   onResume,
   onStop,
 }: {
   running: RunningCue[];
   cues: Cue[];
+  disabled?: boolean;
   onPause: (cue: Id) => void;
   onResume: (cue: Id) => void;
   onStop: (cue: Id) => void;
@@ -42,15 +44,15 @@ export function ActiveCues({
                 </span>
                 <span className="active-buttons">
                   {run.paused ? (
-                    <button className="icon-button" onClick={() => onResume(run.cue)} title={t("action.resume")}>
+                    <button className="icon-button" disabled={disabled} onClick={() => onResume(run.cue)} title={t("action.resume")}>
                       <Icon name="play" size={11} />
                     </button>
                   ) : (
-                    <button className="icon-button" onClick={() => onPause(run.cue)} title={t("action.pause")}>
+                    <button className="icon-button" disabled={disabled} onClick={() => onPause(run.cue)} title={t("action.pause")}>
                       <Icon name="pause" size={11} />
                     </button>
                   )}
-                  <button className="icon-button" onClick={() => onStop(run.cue)} title={t("action.stop")}>
+                  <button className="icon-button" disabled={disabled} onClick={() => onStop(run.cue)} title={t("action.stop")}>
                     <Icon name="stop" size={11} />
                   </button>
                 </span>

@@ -1,7 +1,9 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
-import { ShowConnection, serverUrl } from "./api/connection";
+import { loadPasscode, passcodeFromUrl, savePasscode, withoutPasscode } from "./access";
+import { ShowConnection, serverHost, serverUrl } from "./api/connection";
+import { AccessGate } from "./components/AccessGate";
 import { ShowView } from "./components/ShowView";
 import { StagePage } from "./components/StagePage";
 import { I18nProvider } from "./i18n";
@@ -21,7 +23,15 @@ if ("serviceWorker" in navigator && import.meta.env.PROD) {
   });
 }
 
-const connection = new ShowConnection(serverUrl(window.location));
+// A link may carry the passcode (`&passcode=`); it is kept and taken off the address.
+const host = serverHost(window.location);
+const linked = passcodeFromUrl(window.location.search);
+if (linked) {
+  savePasscode(host, linked);
+  window.history.replaceState(null, "", `${window.location.pathname}${withoutPasscode(window.location.search)}${window.location.hash}`);
+}
+
+const connection = new ShowConnection(serverUrl(window.location), linked ?? loadPasscode(host));
 connection.start();
 
 // `?stage=Main` turns this window into that stage; `&monitor` keeps it silent.
@@ -31,13 +41,17 @@ const stage = params.get("stage");
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <I18nProvider>
-      {stage !== null ? (
-        <StagePage connection={connection} name={stage || "Main"} monitor={params.has("monitor")} />
-      ) : params.get("view") === "show" ? (
-        <ShowView connection={connection} />
-      ) : (
-        <App connection={connection} />
-      )}
+      <AccessGate connection={connection} host={host}>
+        {({ access, onChangePasscode }) =>
+          stage !== null ? (
+            <StagePage connection={connection} name={stage || "Main"} monitor={params.has("monitor")} />
+          ) : params.get("view") === "show" ? (
+            <ShowView connection={connection} access={access} />
+          ) : (
+            <App connection={connection} access={access} onChangePasscode={onChangePasscode} />
+          )
+        }
+      </AccessGate>
     </I18nProvider>
   </StrictMode>,
 );
