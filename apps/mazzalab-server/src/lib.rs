@@ -35,7 +35,7 @@ pub use actor::{
 };
 pub use http::{MEDIA_FOLDER, router, router_with_screens};
 pub use outputs::{
-    AudioBackend, LightingBackend, LogOutput, MidiBackend, NetworkBackend, StageBackend,
+    AudioBackend, LightingBackend, LogOutput, LtcBackend, MidiBackend, NetworkBackend, StageBackend,
 };
 pub use screens::{Screen, Screens, ScreensHandle};
 

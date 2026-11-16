@@ -135,9 +135,26 @@ async fn save(State(state): State<AppState>) -> (StatusCode, Json<Value>) {
 async fn audio(State(state): State<AppState>) -> Json<Value> {
     let status = state.handle.audio_status().await;
     // Asking the drivers can take a moment: keep it off the async threads.
-    let devices = tokio::task::spawn_blocking(mazzalab_audio::output_devices)
-        .await
-        .unwrap_or_default();
+    let (devices, inputs) = tokio::task::spawn_blocking(|| {
+        (
+            mazzalab_audio::output_devices(),
+            mazzalab_audio::input_devices(),
+        )
+    })
+    .await
+    .unwrap_or_default();
+    let inputs: Vec<Value> = inputs
+        .into_iter()
+        .map(|device| {
+            json!({
+                "id": device.id,
+                "name": device.name,
+                "host": device.host,
+                "is_default": device.is_default,
+                "max_channels": device.max_channels,
+            })
+        })
+        .collect();
     let devices: Vec<Value> = devices
         .into_iter()
         .map(|device| {
@@ -152,7 +169,7 @@ async fn audio(State(state): State<AppState>) -> Json<Value> {
             })
         })
         .collect();
-    Json(json!({ "status": status, "devices": devices }))
+    Json(json!({ "status": status, "devices": devices, "inputs": inputs }))
 }
 
 /// The MIDI ports on this machine.

@@ -27,6 +27,6 @@ pub use id::{CueId, WorkspaceId};
 pub use slice::{Position, Segment, SliceMarker};
 pub use validate::{Issue, validate};
 pub use workspace::{
-    AudioSettings, Container, CueList, DmxOutput, DmxProtocol, Fixture, FixtureGroup, MidiControls,
-    MidiPatch, NetworkPatch, NetworkProtocol, Stage, Workspace, WorkspaceSettings,
+    AudioSettings, Container, CueList, DmxOutput, DmxProtocol, Fixture, FixtureGroup, LtcInput,
+    MidiControls, MidiPatch, NetworkPatch, NetworkProtocol, Stage, Workspace, WorkspaceSettings,
 };

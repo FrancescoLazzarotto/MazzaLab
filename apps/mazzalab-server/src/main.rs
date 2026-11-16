@@ -8,8 +8,8 @@ use std::process::ExitCode;
 
 use clap::Parser;
 use mazzalab_server::{
-    AudioBackend, DEFAULT_HTTP_PORT, LightingBackend, LogOutput, MidiBackend, NetworkBackend,
-    Output, ServerConfig, StageBackend,
+    AudioBackend, DEFAULT_HTTP_PORT, LightingBackend, LogOutput, LtcBackend, MidiBackend,
+    NetworkBackend, Output, ServerConfig, StageBackend,
 };
 use tracing_subscriber::EnvFilter;
 
@@ -103,6 +103,7 @@ async fn main() -> ExitCode {
             Box::new(StageBackend::new()),
         ];
         if !no_audio {
+            outputs.push(Box::new(LtcBackend::new(completion.clone())));
             outputs.push(Box::new(AudioBackend::new(&base_dir, completion)));
         }
         outputs

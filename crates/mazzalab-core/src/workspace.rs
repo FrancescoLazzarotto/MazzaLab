@@ -278,6 +278,25 @@ pub struct WorkspaceSettings {
     /// Incoming MIDI messages that GO, stop or panic the show.
     #[serde(default, skip_serializing_if = "MidiControls::is_empty")]
     pub midi_controls: MidiControls,
+    /// An audio input to read LTC from; `None` listens to none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ltc_input: Option<LtcInput>,
+}
+
+/// Where linear timecode comes in.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LtcInput {
+    /// Input device identifier as listed by the audio backend; `None` is
+    /// the system default input.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub device: Option<String>,
+    /// The channel the signal is on, from 1.
+    #[serde(default = "first_channel")]
+    pub channel: u16,
+}
+
+fn first_channel() -> u16 {
+    1
 }
 
 impl Default for WorkspaceSettings {
@@ -293,6 +312,7 @@ impl Default for WorkspaceSettings {
             fixture_groups: Vec::new(),
             stages: Vec::new(),
             midi_controls: MidiControls::default(),
+            ltc_input: None,
         }
     }
 }

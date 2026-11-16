@@ -498,6 +498,78 @@ impl Output for MidiBackend {
     }
 }
 
+/// Listens for LTC on the audio input the show names, and hands what it
+/// reads to the show like any other incoming timecode.
+pub struct LtcBackend {
+    completion: Completion,
+    /// The settings the input was opened with, and the input.
+    input: Option<(mazzalab_core::LtcInput, mazzalab_audio::LtcInput)>,
+    /// The settings last tried, so that a failing input is not retried on
+    /// every edit.
+    tried: Option<mazzalab_core::LtcInput>,
+}
+
+impl LtcBackend {
+    pub fn new(completion: Completion) -> Self {
+        Self {
+            completion,
+            input: None,
+            tried: None,
+        }
+    }
+}
+
+impl std::fmt::Debug for LtcBackend {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("LtcBackend")
+            .field("input", &self.input.as_ref().map(|(settings, _)| settings))
+            .finish_non_exhaustive()
+    }
+}
+
+impl Output for LtcBackend {
+    fn handle(&mut self, _show: &Show, _events: &[Event]) {}
+
+    fn sync(&mut self, show: &Show) {
+        let wanted = show.workspace().settings.ltc_input.clone();
+        if wanted == self.tried {
+            return;
+        }
+        self.tried = wanted.clone();
+        // The old input goes first: the new one may be the same device.
+        self.input = None;
+        let Some(settings) = wanted else {
+            return;
+        };
+        let completion = self.completion.clone();
+        let channel = usize::from(settings.channel.max(1) - 1);
+        match mazzalab_audio::LtcInput::start(
+            settings.device.as_deref(),
+            channel,
+            move |timecode, rate| {
+                completion.timecode_received(timecode, rate);
+            },
+        ) {
+            Ok(input) => {
+                let info = input.info();
+                tracing::info!(device = %info.name, channel = info.channel + 1, "listening for LTC");
+                if info.fallback {
+                    self.completion.notify(
+                        NoticeLevel::Warning,
+                        format!("LTC input not found; listening on {}", info.name),
+                    );
+                }
+                self.input = Some((settings, input));
+            }
+            Err(error) => {
+                self.completion
+                    .notify(NoticeLevel::Warning, format!("LTC input: {error}"));
+            }
+        }
+    }
+}
+
 /// Keeps what the stages show, for the browsers that render them.
 #[derive(Debug)]
 pub struct StageBackend {
