@@ -1,5 +1,23 @@
-* text=auto
+* text=auto eol=lf
 *.rs linguist-language=Rust
 docs/** linguist-documentation
 assets/** linguist-vendored
 *.sh text eol=lf
+
+# Never touched by line-ending conversion.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.icns binary
+*.wav binary
+*.mp3 binary
+*.flac binary
+*.ogg binary
+*.mp4 binary
+*.mov binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.pdf binary
