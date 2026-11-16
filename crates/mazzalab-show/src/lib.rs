@@ -8,6 +8,7 @@
 
 mod osc;
 pub mod preflight;
+mod record;
 
 use std::time::Duration;
 
@@ -19,6 +20,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 pub use osc::{OscOutcome, SessionRequest};
+pub use record::{Entry, Header, Input, RECORD_FORMAT, ReplayError, replay};
 
 /// Maximum number of undo steps kept in memory.
 const UNDO_LIMIT: usize = 200;
@@ -231,6 +233,12 @@ pub struct Show {
     revision: u64,
     dirty: bool,
     recovered: bool,
+    /// Where inputs are recorded, if anywhere.
+    recorder: Option<record::Recorder>,
+    record_error: Option<String>,
+    /// Above zero while an input is being carried out, so what it sets off
+    /// is not recorded as an input of its own.
+    nesting: u32,
 }
 
 impl Show {
@@ -248,6 +256,9 @@ impl Show {
             revision: 0,
             dirty: false,
             recovered: false,
+            recorder: None,
+            record_error: None,
+            nesting: 0,
         }
     }
 
@@ -312,10 +323,18 @@ impl Show {
 
     /// Forwards a media backend's "this open-ended action has ended".
     pub fn action_finished(&mut self, cue: CueId) -> Result<bool, ShowError> {
+        self.log(|| record::Input::ActionFinished { cue });
         Ok(self.engine.action_finished(cue)?)
     }
 
     pub fn execute(&mut self, command: Command) -> Result<(), ShowError> {
+        self.log(|| record::Input::Command {
+            command: Box::new(command.clone()),
+        });
+        self.nested(|show| show.carry_out(command))
+    }
+
+    fn carry_out(&mut self, command: Command) -> Result<(), ShowError> {
         match command {
             Command::Go { list } => {
                 let list = list.unwrap_or(self.current_list);
@@ -465,6 +484,11 @@ impl Show {
         duration: Option<Duration>,
         channels: Option<u8>,
     ) -> bool {
+        self.log(|| record::Input::MediaInfo {
+            cue,
+            duration: duration.and_then(|duration| u64::try_from(duration.as_nanos()).ok()),
+            channels,
+        });
         let changed = self.engine.edit_workspace(|workspace| {
             let Some(CueKind::Audio(audio)) = workspace.find_cue_mut(cue).map(|cue| &mut cue.kind)
             else {

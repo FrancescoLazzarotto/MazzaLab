@@ -78,8 +78,25 @@ impl Show {
     /// address as it arrived. Returns how many it started: a disarmed or
     /// otherwise unstartable cue does not count.
     pub fn osc_trigger(&mut self, address: &str) -> usize {
-        let starts: Vec<CueId> = self
-            .workspace()
+        let starts = self.osc_listeners(address);
+        if starts.is_empty() {
+            // Most messages start nothing; they need no place in the record.
+            return 0;
+        }
+        self.log(|| crate::Input::OscTrigger {
+            address: address.to_owned(),
+        });
+        self.nested(|show| {
+            starts
+                .into_iter()
+                .filter(|&cue| show.execute(Command::Start { cue }).is_ok())
+                .count()
+        })
+    }
+
+    /// The cues whose OSC trigger matches `address`.
+    fn osc_listeners(&self, address: &str) -> Vec<CueId> {
+        self.workspace()
             .cues()
             .filter(|cue| {
                 cue.triggers
@@ -89,16 +106,19 @@ impl Show {
                     .is_some_and(|pattern| !pattern.is_empty() && osc_match(pattern, address))
             })
             .map(|cue| cue.id)
-            .collect();
-        starts
-            .into_iter()
-            .filter(|&cue| self.execute(Command::Start { cue }).is_ok())
-            .count()
+            .collect()
     }
 
     /// Handles one OSC request. Returns `None` when the request is
     /// addressed to a different workspace.
     pub fn handle_osc(&mut self, request: &Request) -> Option<OscOutcome> {
+        self.log(|| crate::Input::Osc {
+            request: request.clone(),
+        });
+        self.nested(|show| show.answer_osc(request))
+    }
+
+    fn answer_osc(&mut self, request: &Request) -> Option<OscOutcome> {
         if let Some(target) = &request.workspace {
             let workspace = self.workspace();
             let matches =
