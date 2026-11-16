@@ -21,6 +21,9 @@ const RESCAN: Duration = Duration::from_secs(2);
 type EventCallback = Arc<dyn Fn(&str, MidiEvent) + Send + Sync>;
 /// What is called with the name of an input and an MTC message from it.
 type TimecodeCallback = Arc<dyn Fn(&str, &[u8]) + Send + Sync>;
+/// What is called with the name of an input and a System Exclusive message
+/// from it, `F0` to `F7`.
+type SysexCallback = Arc<dyn Fn(&str, &[u8]) + Send + Sync>;
 
 /// Whether `bytes` is MIDI Time Code: a quarter frame, or a full frame.
 pub fn is_timecode(bytes: &[u8]) -> bool {
@@ -95,17 +98,29 @@ impl Listener {
         on_event: impl Fn(&str, MidiEvent) + Send + Sync + 'static,
         on_timecode: impl Fn(&str, &[u8]) + Send + Sync + 'static,
     ) -> std::io::Result<Self> {
+        Self::start_with_sysex(on_event, on_timecode, |_, _| {})
+    }
+
+    /// Like [`start_with_timecode`](Self::start_with_timecode), also handing
+    /// `on_sysex` every other System Exclusive message that arrives (MIDI Show
+    /// Control among them; see [`parse_msc`](crate::parse_msc)).
+    pub fn start_with_sysex(
+        on_event: impl Fn(&str, MidiEvent) + Send + Sync + 'static,
+        on_timecode: impl Fn(&str, &[u8]) + Send + Sync + 'static,
+        on_sysex: impl Fn(&str, &[u8]) + Send + Sync + 'static,
+    ) -> std::io::Result<Self> {
         let stop = Arc::new(AtomicBool::new(false));
         let stopping = stop.clone();
         let on_event: EventCallback = Arc::new(on_event);
         let on_timecode: TimecodeCallback = Arc::new(on_timecode);
+        let on_sysex: SysexCallback = Arc::new(on_sysex);
         let thread = std::thread::Builder::new()
             .name("mazzalab-midi-in".into())
             .spawn(move || {
                 // Connections live on this thread: they are not all `Send`.
                 let mut open: HashMap<String, MidiInputConnection<()>> = HashMap::new();
                 while !stopping.load(Ordering::Relaxed) {
-                    rescan(&mut open, &on_event, &on_timecode);
+                    rescan(&mut open, &on_event, &on_timecode, &on_sysex);
                     let mut waited = Duration::ZERO;
                     while waited < RESCAN && !stopping.load(Ordering::Relaxed) {
                         std::thread::sleep(Duration::from_millis(100));
@@ -134,6 +149,7 @@ fn rescan(
     open: &mut HashMap<String, MidiInputConnection<()>>,
     on_event: &EventCallback,
     on_timecode: &TimecodeCallback,
+    on_sysex: &SysexCallback,
 ) {
     let Ok(probe) = MidiInput::new(CLIENT_NAME) else {
         return;
@@ -163,6 +179,7 @@ fn rescan(
         };
         let callback = on_event.clone();
         let timecode = on_timecode.clone();
+        let sysex = on_sysex.clone();
         let source = name.clone();
         match input.connect(
             &port,
@@ -172,6 +189,8 @@ fn rescan(
                     callback(&source, event);
                 } else if is_timecode(bytes) {
                     timecode(&source, bytes);
+                } else if bytes.first() == Some(&0xF0) {
+                    sysex(&source, bytes);
                 }
             },
             (),

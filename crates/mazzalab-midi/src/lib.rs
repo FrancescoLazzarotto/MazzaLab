@@ -7,12 +7,15 @@
 //!
 //! What comes in: [`Listener`] follows every input port, [`parse_event`]
 //! reads channel messages and [`matches`] tells whether one is the message
-//! a [`MidiTrigger`] waits for.
+//! a [`MidiTrigger`] waits for. MIDI Show Control that comes in is read by
+//! [`parse_msc`] and turned into what the show does by [`action_for`].
 
 mod input;
+mod msc;
 mod mtc;
 
 pub use input::{Listener, MidiEvent, is_timecode, matches, parse_event};
+pub use msc::{MscAction, MscCommand, MscCue, MscMessage, action_for, parse_msc};
 pub use mtc::MtcGenerator;
 
 use std::collections::HashMap;
