@@ -75,6 +75,13 @@ npm run dev                                  # interfaccia con hot reload, colle
 cargo run -p mazzalab-cli -- simulate examples/shows/demo.mazzalab --gos 4 --interval 15
 ```
 
+I driver ASIO su Windows sono un'opzione di compilazione: aggiungi
+`--features asio` alla build dell'app desktop o del server. Serve LLVM
+(`LIBCLANG_PATH` sulla sua cartella `bin`); cpal scarica l'SDK ASIO di
+Steinberg, a meno che `CPAL_ASIO_DIR` non ne indichi uno. I dispositivi
+ASIO compaiono poi nelle impostazioni Audio accanto a quelli WASAPI. Per
+distribuire una build così serve la licenza ASIO di Steinberg.
+
 Installer: dalla cartella `apps/mazzalab-desktop` esegui
 `npx @tauri-apps/cli build --config tauri.bundle.conf.json`, dopo aver
 compilato l'interfaccia web.

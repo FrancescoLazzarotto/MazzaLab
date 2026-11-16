@@ -70,6 +70,12 @@ npm run dev                                  # UI with hot reload, proxied to a 
 cargo run -p mazzalab-cli -- simulate examples/shows/demo.mazzalab --gos 4 --interval 15
 ```
 
+ASIO drivers on Windows are a build option: add `--features asio` to the
+desktop or server build. It needs LLVM (`LIBCLANG_PATH` pointing at its
+`bin` folder); cpal downloads Steinberg's ASIO SDK unless `CPAL_ASIO_DIR`
+names one. ASIO devices then appear in the Audio settings next to the
+WASAPI ones. Distributing such a build needs Steinberg's ASIO licence.
+
 Installers: from `apps/mazzalab-desktop`, run
 `npx @tauri-apps/cli build --config tauri.bundle.conf.json` after building
 the web UI.

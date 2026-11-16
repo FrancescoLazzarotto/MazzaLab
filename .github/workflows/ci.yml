@@ -26,6 +26,20 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --workspace --locked
 
+  asio:
+    # ASIO drivers are a build option: cpal fetches the SDK, bindgen needs
+    # the LLVM the Windows runners ship with.
+    runs-on: windows-latest
+    env:
+      LIBCLANG_PATH: C:/Program Files/LLVM/bin
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install toolchain from rust-toolchain.toml
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy -p mazzalab-audio -p mazzalab-server --features mazzalab-audio/asio --all-targets --locked -- -D warnings
+      - run: cargo test -p mazzalab-audio --features asio --locked
+
   lint:
     runs-on: ubuntu-latest
     steps:
