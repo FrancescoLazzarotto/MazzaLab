@@ -152,6 +152,8 @@ pub struct AudioOutput {
     /// Cues loaded to a time, counted from the start of their pre-wait.
     loaded: HashMap<CueId, Duration>,
     next_serial: u64,
+    /// The show's audio settings as last synced: loudness normalization.
+    audio_settings: mazzalab_core::AudioSettings,
     _device: device::DeviceThread,
     _housekeeping: JoinHandle<()>,
 }
@@ -240,6 +242,7 @@ impl AudioOutput {
             preloaded: HashMap::new(),
             loaded: HashMap::new(),
             next_serial: 0,
+            audio_settings: mazzalab_core::AudioSettings::default(),
             _device: device,
             _housekeeping: housekeeping,
         })
@@ -436,6 +439,11 @@ impl AudioOutput {
     /// Applies edits made to cues while they play: a changed level glides to
     /// its new value and a changed matrix is repatched.
     pub fn sync(&mut self, workspace: &Workspace) {
+        let before = std::mem::replace(&mut self.audio_settings, workspace.settings.audio.clone());
+        if before.normalize_lufs != self.audio_settings.normalize_lufs {
+            // Decoded ahead at the old level.
+            self.preloaded.clear();
+        }
         let mut commands = Vec::new();
         {
             let mut playing = lock(&self.playing);
@@ -444,10 +452,13 @@ impl AudioOutput {
                 else {
                     continue;
                 };
-                if audio.level_db != entry.definition.level_db {
+                let was =
+                    entry.definition.level_db + before.normalize_gain(entry.definition.media_lufs);
+                let is = audio.level_db + self.audio_settings.normalize_gain(audio.media_lufs);
+                if is != was {
                     commands.push(MixerCommand::Fade {
                         cue: *cue,
-                        to_db: audio.level_db as f32,
+                        to_db: is as f32,
                         frames: self.frames(Duration::from_secs_f64(LIVE_EDIT_SECONDS)),
                         curve: FadeCurve::Linear,
                     });
@@ -555,7 +566,8 @@ impl AudioOutput {
                 source_rate: info.sample_rate,
                 output_rate: self.info.sample_rate,
                 rate: audio.rate,
-                level_db: audio.level_db as f32,
+                level_db: (audio.level_db + self.audio_settings.normalize_gain(audio.media_lufs))
+                    as f32,
                 routes: self.routes(audio, info.channels),
                 // Started partway through, the fade in is already behind.
                 fade_in_frames: if into.is_zero() {
