@@ -111,7 +111,8 @@ export function textStyle(geometry: Required<Geometry>, style: TextStyle | undef
   return {
     left: stage.width / 2,
     top: stage.height / 2,
-    width: style?.width,
+    // As wide as its longest line, up to the stage's width, unless it has a width of its own.
+    width: style?.width ?? "max-content",
     maxWidth: style?.width === undefined ? stage.width : undefined,
     transform: `translate(-50%, -50%) ${transformOf(geometry)}`,
     clipPath: clipOf(geometry),
