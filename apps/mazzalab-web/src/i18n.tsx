@@ -395,6 +395,16 @@ const en = {
   "file.empty": "Nothing here.",
   "file.unsaved": "The open show has unsaved changes.",
   "file.discard": "Don't save",
+  "action.playheadNext": "Stand by on the next cue",
+  "action.playheadPrevious": "Stand by on the previous cue",
+  "keys.transport": "Transport keys",
+  "keys.none": "None",
+  "keys.press": "Press a key…",
+  "keys.clear": "No key",
+  "keys.restore": "Restore defaults",
+  "keys.usedBy": "Already used by",
+  "keys.reserved": "The screen keeps this key",
+  "keys.cueHotkey": "A cue has this hotkey",
 };
 
 type Key = keyof typeof en;
@@ -788,6 +798,16 @@ const it: Record<Key, string> = {
   "file.empty": "Vuoto.",
   "file.unsaved": "Lo show aperto ha modifiche non salvate.",
   "file.discard": "Non salvare",
+  "action.playheadNext": "Standby sul cue successivo",
+  "action.playheadPrevious": "Standby sul cue precedente",
+  "keys.transport": "Tasti del trasporto",
+  "keys.none": "Nessuno",
+  "keys.press": "Premi un tasto…",
+  "keys.clear": "Nessun tasto",
+  "keys.restore": "Ripristina i predefiniti",
+  "keys.usedBy": "Già usato da",
+  "keys.reserved": "Il tasto è riservato",
+  "keys.cueHotkey": "Un cue ha già questo hotkey",
 };
 
 export const DICTIONARIES: Record<Language, Record<Key, string>> = { en, it };

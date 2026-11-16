@@ -17,12 +17,14 @@ import type {
 } from "../api/types";
 import { useI18n } from "../i18n";
 import type { Preferences } from "../preferences";
+import { TRANSPORT_ACTIONS, type KeyMap } from "../keymap";
 import { THEMES } from "../theme";
 import { CheckField, LevelField, NumberField, SelectField, TextField, TimeField } from "./fields";
 import { screenLabels, screensInOrder, stageUrl } from "../stage";
 import { useScreens } from "../useScreens";
 import { FixturesTab } from "./FixturesTab";
 import { Icon } from "./icons";
+import { ACTION_LABELS, KeyMapFields } from "./KeyMapFields";
 import { MidiTriggerField } from "./MidiTriggerField";
 
 const BUFFER_SIZES = [64, 128, 256, 512, 1024, 2048];
@@ -30,8 +32,6 @@ const PROTOCOLS: NetworkProtocol[] = ["osc_udp", "osc_tcp", "plain_udp", "plain_
 type Tab = "general" | "audio" | "network" | "midi" | "lights" | "fixtures" | "video" | "keys";
 
 const SHORTCUTS: [string, string][] = [
-  ["Space", "action.go"],
-  ["Esc", "keys.panic"],
   ["↑ ↓", "keys.select"],
   ["Shift + ↑ ↓", "keys.extend"],
   ["Enter", "keys.playhead"],
@@ -45,6 +45,14 @@ const SHORTCUTS: [string, string][] = [
   ["Ctrl + S", "keys.save"],
   ["Ctrl + F", "filter.search"],
 ];
+
+/** The transport keys as this device has them, for the shortcut list. */
+function transportRows(keymap: KeyMap): [string, string][] {
+  return TRANSPORT_ACTIONS.flatMap((action): [string, string][] => {
+    const key = keymap[action];
+    return key ? [[key.replace(/\+/g, " + "), ACTION_LABELS[action]]] : [];
+  });
+}
 
 export function SettingsDialog({
   connection,
@@ -70,6 +78,8 @@ export function SettingsDialog({
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      // Escape is a key to bind, too, while a key is being captured.
+      if (event.target instanceof Element && event.target.closest(".capturing")) return;
       if (event.key === "Escape") {
         event.stopPropagation();
         onClose();
@@ -121,6 +131,7 @@ export function SettingsDialog({
                 onChange={(playheadFollowsSelection) => onPreferences({ ...preferences, playheadFollowsSelection })}
               />
               <p className="hint">{t("settings.followHint")}</p>
+              <KeyMapFields keymap={preferences.keymap} cues={workspace.cue_lists.flatMap((list) => list.cues)} onChange={(keymap) => onPreferences({ ...preferences, keymap })} />
             </div>
           )}
           {tab === "audio" && (
@@ -154,7 +165,7 @@ export function SettingsDialog({
           {tab === "keys" && (
             <table className="shortcuts">
               <tbody>
-                {SHORTCUTS.map(([keys, label]) => (
+                {[...transportRows(preferences.keymap), ...SHORTCUTS].map(([keys, label]) => (
                   <tr key={keys}>
                     <td>
                       <kbd>{keys}</kbd>

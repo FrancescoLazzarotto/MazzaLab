@@ -1,3 +1,4 @@
+import { DEFAULT_KEYMAP, normalizeKeyMap, type KeyMap } from "./keymap";
 import { normalizeTheme, type Theme } from "./theme";
 
 /** Choices that belong to this device rather than to the show. */
@@ -7,9 +8,11 @@ export interface Preferences {
   /** Show mode locks editing, so a stray key cannot change the show. */
   mode: "edit" | "show";
   theme: Theme;
+  /** The keys of the transport, as this device has them. */
+  keymap: KeyMap;
 }
 
-export const DEFAULT_PREFERENCES: Preferences = { playheadFollowsSelection: true, mode: "edit", theme: "dark" };
+export const DEFAULT_PREFERENCES: Preferences = { playheadFollowsSelection: true, mode: "edit", theme: "dark", keymap: DEFAULT_KEYMAP };
 
 const STORAGE_KEY = "mazzalab.preferences";
 
@@ -21,6 +24,7 @@ export function loadPreferences(): Preferences {
         typeof saved.playheadFollowsSelection === "boolean" ? saved.playheadFollowsSelection : DEFAULT_PREFERENCES.playheadFollowsSelection,
       mode: saved.mode === "show" ? "show" : "edit",
       theme: normalizeTheme(saved.theme),
+      keymap: normalizeKeyMap(saved.keymap),
     };
   } catch {
     // Storage can be unavailable (private mode) or hold something else.

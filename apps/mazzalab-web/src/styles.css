@@ -789,6 +789,50 @@ select.status-item {
   text-align: center;
 }
 
+/* Transport key rebinding */
+.keymap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.keymap-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+}
+
+.keymap-label {
+  flex: 1;
+  color: var(--text-2);
+}
+
+.key-capture {
+  min-width: 120px;
+  background: var(--surface-0);
+  border-color: var(--border);
+}
+
+.key-capture.capturing {
+  border-color: var(--focus);
+  color: var(--text-2);
+}
+
+.key-capture .none {
+  color: var(--text-3);
+}
+
+.keymap-problem {
+  color: var(--warn);
+  font-size: 12px;
+}
+
+.keymap .restore {
+  align-self: flex-start;
+  margin-top: 6px;
+}
+
 /* The show-only view, for a tablet */
 .show-view {
   display: flex;

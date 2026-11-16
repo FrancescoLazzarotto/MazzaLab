@@ -41,6 +41,7 @@ import {
 } from "./cues";
 import { NO_FILTER, visibleIds, type CueFilter } from "./cueFilter";
 import { cuesForHotkey, hotkeyOf } from "./hotkeys";
+import { actionFor } from "./keymap";
 import { applyTheme } from "./theme";
 import { useI18n } from "./i18n";
 import { loadPreferences, savePreferences, type Preferences } from "./preferences";
@@ -370,15 +371,18 @@ export function App({ connection }: { connection: ShowConnection }) {
         return;
       }
       // Transport and navigation work in both modes.
-      if (event.key === "Escape") {
-        event.preventDefault();
-        run({ command: "panic" });
-        return;
-      }
-      if (event.key === " ") {
+      const action = hotkey ? actionFor(preferences.keymap, hotkey) : null;
+      if (action) {
         // Also stops a focused button from being clicked by the same key.
         event.preventDefault();
-        if (!event.repeat) go();
+        if (action === "panic") run({ command: "panic" });
+        else if (!event.repeat) {
+          if (action === "go") go();
+          else if (action === "stopAll") run({ command: "stop_all" });
+          else if (action === "pauseAll") run({ command: "pause_all" });
+          else if (action === "resumeAll") run({ command: "resume_all" });
+          else run({ command: action === "playheadNext" ? "playhead_next" : "playhead_previous", list: list?.id });
+        }
         return;
       }
       if (event.key === "ArrowDown" || event.key === "ArrowUp") {
@@ -438,7 +442,7 @@ export function App({ connection }: { connection: ShowConnection }) {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
     };
-  }, [allCues, copy, deleteSelected, duplicate, editable, focus, go, groupSelected, modal, moveSelection, paste, run, save, shownRows]);
+  }, [allCues, copy, deleteSelected, duplicate, editable, focus, go, groupSelected, list?.id, modal, moveSelection, paste, preferences.keymap, run, save, shownRows]);
 
   // Files dropped outside the cue list would otherwise replace the page.
   useEffect(() => {
