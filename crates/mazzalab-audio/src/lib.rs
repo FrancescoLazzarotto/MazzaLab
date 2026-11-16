@@ -306,6 +306,26 @@ impl AudioOutput {
                             self.play_ltc(cue, timecode, into);
                         }
                         CueKind::Fade(fade) => {
+                            if let (Some(target), Some(matrix)) = (definition.target, &fade.matrix)
+                            {
+                                let frames = self.frames(fade.duration);
+                                for cue in sounds_in(workspace, target) {
+                                    let channels =
+                                        lock(&self.playing).get(&cue).map(|entry| entry.channels);
+                                    if let Some(channels) = channels {
+                                        let routes = Routes::from_matrix(
+                                            matrix,
+                                            channels,
+                                            self.info.channels,
+                                        );
+                                        self.send(MixerCommand::FadeRoutes {
+                                            cue,
+                                            routes: Box::new(routes),
+                                            frames,
+                                        });
+                                    }
+                                }
+                            }
                             if let (Some(target), Some(level)) = (definition.target, fade.level_db)
                             {
                                 // A group's fade takes every sound in it.

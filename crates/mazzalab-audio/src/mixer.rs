@@ -155,6 +155,47 @@ pub(crate) struct Route {
     pub(crate) input: u8,
     pub(crate) output: u8,
     pub(crate) gain: f32,
+    /// Where a fade of the crosspoint is taking `gain`, by `step` a frame
+    /// for `remaining` more frames.
+    target: f32,
+    step: f32,
+    remaining: u32,
+}
+
+impl Route {
+    fn new(input: usize, output: usize, gain: f32) -> Self {
+        Self {
+            input: input as u8,
+            output: output as u8,
+            gain,
+            target: gain,
+            step: 0.0,
+            remaining: 0,
+        }
+    }
+
+    fn fade_to(&mut self, target: f32, frames: u32) {
+        self.target = target;
+        if frames == 0 {
+            self.gain = target;
+            self.remaining = 0;
+        } else {
+            self.step = (target - self.gain) / frames as f32;
+            self.remaining = frames;
+        }
+    }
+
+    /// Advances a running fade by one frame.
+    fn advance(&mut self) {
+        if self.remaining > 0 {
+            self.remaining -= 1;
+            self.gain = if self.remaining == 0 {
+                self.target
+            } else {
+                self.gain + self.step
+            };
+        }
+    }
 }
 
 /// The crosspoints of a voice, in a fixed array so that voices never
@@ -175,22 +216,38 @@ impl Routes {
     pub(crate) fn empty() -> Self {
         Self {
             count: 0,
-            items: [Route {
-                input: 0,
-                output: 0,
-                gain: 0.0,
-            }; MAX_ROUTES],
+            items: [Route::new(0, 0, 0.0); MAX_ROUTES],
         }
     }
 
     fn push(&mut self, input: usize, output: usize, gain: f32) {
         if self.count < MAX_ROUTES && gain != 0.0 {
-            self.items[self.count] = Route {
-                input: input as u8,
-                output: output as u8,
-                gain,
-            };
+            self.items[self.count] = Route::new(input, output, gain);
             self.count += 1;
+        }
+    }
+
+    /// Fades every crosspoint to its level in `to` over `frames`: those
+    /// `to` leaves out go silent, those only `to` has come up from silence.
+    pub(crate) fn fade_to(&mut self, to: &Routes, frames: u32) {
+        for route in &mut self.items[..self.count] {
+            let target = to
+                .as_slice()
+                .iter()
+                .find(|new| new.input == route.input && new.output == route.output)
+                .map_or(0.0, |new| new.gain);
+            route.fade_to(target, frames);
+        }
+        for new in to.as_slice() {
+            let known = self.items[..self.count]
+                .iter()
+                .any(|route| route.input == new.input && route.output == new.output);
+            if !known && self.count < MAX_ROUTES {
+                let mut route = Route::new(usize::from(new.input), usize::from(new.output), 0.0);
+                route.fade_to(new.gain, frames);
+                self.items[self.count] = route;
+                self.count += 1;
+            }
         }
     }
 
@@ -526,10 +583,11 @@ impl Voice {
             for (channel, value) in inputs.iter_mut().enumerate().take(self.channels) {
                 *value = hermite(h0[channel], h1[channel], h2[channel], h3[channel], t) * gain;
             }
-            for route in self.routes.as_slice() {
+            for route in &mut self.routes.items[..self.routes.count] {
                 if let Some(sample) = frame.get_mut(usize::from(route.output)) {
                     *sample += inputs[usize::from(route.input)] * route.gain;
                 }
+                route.advance();
             }
             self.position += self.step;
         }
@@ -575,6 +633,12 @@ pub(crate) enum MixerCommand {
     Route {
         cue: CueId,
         routes: Box<Routes>,
+    },
+    /// Fades the crosspoints of a playing cue to new levels.
+    FadeRoutes {
+        cue: CueId,
+        routes: Box<Routes>,
+        frames: u32,
     },
     Master(f32),
 }
@@ -690,6 +754,16 @@ impl Mixer {
                     voice.routes = *routes;
                 }
                 // The box is freed away from the audio thread.
+                let _ = self.events.push(MixerEvent::Garbage(routes));
+            }
+            MixerCommand::FadeRoutes {
+                cue,
+                routes,
+                frames,
+            } => {
+                for voice in find(&mut self.voices, cue).filter(|voice| !voice.stopping) {
+                    voice.routes.fade_to(&routes, frames);
+                }
                 let _ = self.events.push(MixerEvent::Garbage(routes));
             }
             // A short glide keeps master moves free of zipper noise.
@@ -911,6 +985,32 @@ mod tests {
         let out = render(&mut rig, 200, 1);
         assert!(out[50] < 1.0 && out[50] > 0.1);
         assert!((out[150] - 0.1).abs() < 1e-3);
+    }
+
+    #[test]
+    fn crosspoints_fade_to_a_new_matrix() {
+        // Mono to outputs 1 and 2, then faded to output 2 alone at -6 dB.
+        let mut rig = rig(2);
+        rig.commands
+            .push(MixerCommand::Add(voice(1, &[1.0; 4000], 1, RATE, 0.0)))
+            .unwrap();
+        let before = render(&mut rig, 10, 2);
+        assert!((before[10] - 1.0).abs() < 1e-3 && (before[11] - 1.0).abs() < 1e-3);
+        rig.commands
+            .push(MixerCommand::FadeRoutes {
+                cue: CueId::from_u128(1),
+                routes: Box::new(Routes::from_matrix(&[vec![None, Some(-6.0)]], 1, 2)),
+                frames: 100,
+            })
+            .unwrap();
+        let out = render(&mut rig, 200, 2);
+        // Halfway, both are on their way.
+        let (left, right) = (out[100], out[101]);
+        assert!(left > 0.3 && left < 0.7, "{left}");
+        assert!(right > db_to_gain(-6.0) && right < 1.0, "{right}");
+        // At the end, output 1 is silent and output 2 at -6 dB.
+        assert!(out[300].abs() < 1e-4, "{}", out[300]);
+        assert!((out[301] - db_to_gain(-6.0)).abs() < 1e-3, "{}", out[301]);
     }
 
     #[test]
