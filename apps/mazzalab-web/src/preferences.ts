@@ -1,12 +1,15 @@
+import { normalizeTheme, type Theme } from "./theme";
+
 /** Choices that belong to this device rather than to the show. */
 export interface Preferences {
   /** Selecting a cue also makes it the next one to GO, as in QLab. */
   playheadFollowsSelection: boolean;
   /** Show mode locks editing, so a stray key cannot change the show. */
   mode: "edit" | "show";
+  theme: Theme;
 }
 
-export const DEFAULT_PREFERENCES: Preferences = { playheadFollowsSelection: true, mode: "edit" };
+export const DEFAULT_PREFERENCES: Preferences = { playheadFollowsSelection: true, mode: "edit", theme: "dark" };
 
 const STORAGE_KEY = "mazzalab.preferences";
 
@@ -17,6 +20,7 @@ export function loadPreferences(): Preferences {
       playheadFollowsSelection:
         typeof saved.playheadFollowsSelection === "boolean" ? saved.playheadFollowsSelection : DEFAULT_PREFERENCES.playheadFollowsSelection,
       mode: saved.mode === "show" ? "show" : "edit",
+      theme: normalizeTheme(saved.theme),
     };
   } catch {
     // Storage can be unavailable (private mode) or hold something else.

@@ -36,6 +36,7 @@ import {
 } from "./cues";
 import { NO_FILTER, visibleIds, type CueFilter } from "./cueFilter";
 import { cuesForHotkey, hotkeyOf } from "./hotkeys";
+import { applyTheme } from "./theme";
 import { useI18n } from "./i18n";
 import { loadPreferences, savePreferences, type Preferences } from "./preferences";
 
@@ -61,6 +62,7 @@ export function App({ connection }: { connection: ShowConnection }) {
     savePreferences(next);
   }, []);
   const editable = preferences.mode === "edit";
+  useEffect(() => applyTheme(preferences.theme), [preferences.theme]);
 
   const workspace = snapshot?.workspace;
   const list = workspace?.cue_lists.find((candidate) => candidate.id === listId) ?? workspace?.cue_lists[0];

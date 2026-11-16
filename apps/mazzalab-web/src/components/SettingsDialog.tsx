@@ -17,6 +17,7 @@ import type {
 } from "../api/types";
 import { useI18n } from "../i18n";
 import type { Preferences } from "../preferences";
+import { THEMES } from "../theme";
 import { CheckField, LevelField, NumberField, SelectField, TextField, TimeField } from "./fields";
 import { screenLabels, screensInOrder, stageUrl } from "../stage";
 import { useScreens } from "../useScreens";
@@ -108,6 +109,12 @@ export function SettingsDialog({
                 <TimeField label={t("settings.panic")} value={settings.panic_duration} onCommit={(value) => set({ panic_duration: value ?? 0 })} />
               </div>
               <h3>{t("settings.thisDevice")}</h3>
+              <SelectField
+                label={t("settings.theme")}
+                value={preferences.theme}
+                options={THEMES.map((theme) => ({ value: theme, label: t(`theme.${theme}`) }))}
+                onChange={(theme) => onPreferences({ ...preferences, theme })}
+              />
               <CheckField
                 label={t("settings.follow")}
                 checked={preferences.playheadFollowsSelection}

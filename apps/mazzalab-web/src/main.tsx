@@ -4,7 +4,12 @@ import { App } from "./App";
 import { ShowConnection, serverUrl } from "./api/connection";
 import { StagePage } from "./components/StagePage";
 import { I18nProvider } from "./i18n";
+import { loadPreferences } from "./preferences";
+import { applyTheme } from "./theme";
 import "./styles.css";
+
+// Before the first paint, so the page never flashes the wrong palette.
+applyTheme(loadPreferences().theme);
 
 const connection = new ShowConnection(serverUrl(window.location));
 connection.start();
