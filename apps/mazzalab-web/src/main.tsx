@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { ShowConnection, serverUrl } from "./api/connection";
+import { ShowView } from "./components/ShowView";
 import { StagePage } from "./components/StagePage";
 import { I18nProvider } from "./i18n";
 import { loadPreferences } from "./preferences";
@@ -21,7 +22,13 @@ const stage = params.get("stage");
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <I18nProvider>
-      {stage !== null ? <StagePage connection={connection} name={stage || "Main"} monitor={params.has("monitor")} /> : <App connection={connection} />}
+      {stage !== null ? (
+        <StagePage connection={connection} name={stage || "Main"} monitor={params.has("monitor")} />
+      ) : params.get("view") === "show" ? (
+        <ShowView connection={connection} />
+      ) : (
+        <App connection={connection} />
+      )}
     </I18nProvider>
   </StrictMode>,
 );
