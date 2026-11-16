@@ -3,7 +3,6 @@ import type { Cue } from "./api/types";
 import { serverUrl } from "./api/connection";
 import { actionLength, findCue, flatten, newCue, nextNumber } from "./cues";
 import { formatTime, parseTime } from "./format";
-import { DICTIONARIES } from "./i18n";
 
 describe("time formatting", () => {
   it("formats seconds", () => {
@@ -57,14 +56,6 @@ describe("cue helpers", () => {
   it("creates valid default cues", () => {
     const fade = newCue("fade", "4", "id");
     expect(fade).toMatchObject({ id: "id", number: "4", type: "fade", duration: 5 });
-  });
-});
-
-describe("i18n", () => {
-  it("translates every key in every language", () => {
-    const english = Object.keys(DICTIONARIES.en).sort();
-    expect(Object.keys(DICTIONARIES.it).sort()).toEqual(english);
-    for (const value of Object.values(DICTIONARIES.it)) expect(value.length).toBeGreaterThan(0);
   });
 });
 

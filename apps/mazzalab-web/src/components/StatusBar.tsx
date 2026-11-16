@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { accessLevel, type AccessReply } from "../access";
 import type { ConnectionState } from "../api/connection";
 import type { AudioStatus, TimecodeIn } from "../api/types";
-import { LANGUAGES, useI18n, type Language } from "../i18n";
+import { useI18n } from "../i18n";
 import { FORMAT_LABELS } from "../timecode";
 import { Icon } from "./icons";
 
@@ -58,7 +58,7 @@ export function StatusBar({
   connection: ConnectionState;
   onAudio: () => void;
 }) {
-  const { t, language, setLanguage } = useI18n();
+  const { t } = useI18n();
   const trouble = audio !== null && (!audio.running || audio.fallback);
   return (
     <footer className="status-bar">
@@ -86,13 +86,6 @@ export function StatusBar({
         <i className="dot" />
         {t(`connection.${connection}`)}
       </span>
-      <select className="status-item" aria-label={t("settings.language")} value={language} onChange={(event) => setLanguage(event.target.value as Language)}>
-        {LANGUAGES.map((option) => (
-          <option key={option.code} value={option.code}>
-            {option.label}
-          </option>
-        ))}
-      </select>
       <Clock />
     </footer>
   );

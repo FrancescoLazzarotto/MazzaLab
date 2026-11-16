@@ -15,7 +15,8 @@ import type {
   Workspace,
   WorkspaceSettings,
 } from "../api/types";
-import { useI18n } from "../i18n";
+import { LANGUAGE_OPTIONS, useI18n } from "../i18n";
+import { AUTO } from "../locales/resolve";
 import type { Preferences } from "../preferences";
 import { TRANSPORT_ACTIONS, type KeyMap } from "../keymap";
 import { THEMES } from "../theme";
@@ -79,7 +80,7 @@ export function SettingsDialog({
   onRename: (name: string) => void;
   onClose: () => void;
 }) {
-  const { t } = useI18n();
+  const { t, choice, setChoice } = useI18n();
   const [tab, setTab] = useState<Tab>("general");
   const settings = workspace.settings;
   const set = (patch: Partial<WorkspaceSettings>) => onSettings({ ...settings, ...patch });
@@ -129,6 +130,12 @@ export function SettingsDialog({
               </div>
               </fieldset>
               <h3>{t("settings.thisDevice")}</h3>
+              <SelectField
+                label={t("settings.language")}
+                value={choice}
+                options={[{ value: AUTO, label: t("settings.languageAuto") }, ...LANGUAGE_OPTIONS.map((option) => ({ value: option.code, label: option.label }))]}
+                onChange={setChoice}
+              />
               <SelectField
                 label={t("settings.theme")}
                 value={preferences.theme}
