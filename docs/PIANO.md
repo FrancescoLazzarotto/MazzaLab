@@ -390,7 +390,8 @@ Parità con QLab e poi oltre.
 ### Documentazione
 - [x] Guida utente in italiano e in inglese (`docs/user-guide`): descrive
       quello che c'è oggi e va tenuta aggiornata con le funzioni nuove.
-- [ ] Show di esempio e tutorial.
+- [x] Show di esempio e tutorial: `examples/shows/theatre.mazzalab` (si riscrive
+      con `mazzalab new --example theatre`) e `docs/user-guide/tutorial.md`.
 - [ ] Unificare i fine riga (LF) per evitare gli avvisi LF/CRLF su Windows.
 
 ---

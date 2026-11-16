@@ -8,6 +8,8 @@ the roadmap are not described. For the technical side see the
 [client API](../protocols/client-api.md), the [OSC dictionary](../protocols/osc.md)
 and the [plan](../PIANO.md).
 
+New here? The [tutorial](tutorial.md) builds a first act step by step.
+
 ## Contents
 
 1. [Install and run](#1-install-and-run)

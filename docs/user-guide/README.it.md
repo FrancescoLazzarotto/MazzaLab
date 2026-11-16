@@ -7,6 +7,8 @@ lo show. Descrive quello che il programma fa oggi; ciò che è ancora nel piano
 di lavoro non è descritto. Per la parte tecnica: [API dei client](../protocols/client-api.md),
 [dizionario OSC](../protocols/osc.md) e [piano](../PIANO.md).
 
+Prima volta? Il [tutorial](tutorial.it.md) costruisce un primo atto passo per passo.
+
 ## Indice
 
 1. [Installare e avviare](#1-installare-e-avviare)
