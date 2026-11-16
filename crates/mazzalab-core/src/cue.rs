@@ -765,6 +765,10 @@ pub struct FadeCue {
     /// `level_db` moves the level from where it is, instead of setting it.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub relative: bool,
+    /// Crosspoint levels the target's routing matrix fades to, in dB,
+    /// `matrix[file channel][output channel]`; `None` entries fade out.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub matrix: Option<Vec<Vec<Option<f64>>>>,
     /// Target opacity, when the fade affects video.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub opacity: Option<f64>,
