@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useShow, type ShowConnection } from "./api/connection";
-import type { Command, Cue, CueType, Id, WorkspaceSettings } from "./api/types";
+import type { Command, Cue, CueList as CueListData, CueType, Id, WorkspaceSettings } from "./api/types";
 import { ActiveCues } from "./components/ActiveCues";
 import { AudioPanel } from "./components/AudioPanel";
 import { CueCart } from "./components/CueCart";
@@ -42,9 +42,12 @@ import {
 import { NO_FILTER, visibleIds, type CueFilter } from "./cueFilter";
 import { cuesForHotkey, hotkeyOf } from "./hotkeys";
 import { actionFor } from "./keymap";
+import { resolveSplit, showInPane, toggleSplit } from "./panes";
 import { applyTheme } from "./theme";
 import { useI18n } from "./i18n";
 import { loadPreferences, savePreferences, type Preferences } from "./preferences";
+
+const NO_SELECTION: ReadonlySet<Id> = new Set();
 
 export function App({ connection }: { connection: ShowConnection }) {
   const { t } = useI18n();
@@ -75,7 +78,19 @@ export function App({ connection }: { connection: ShowConnection }) {
   useEffect(() => applyTheme(preferences.theme), [preferences.theme]);
 
   const workspace = snapshot?.workspace;
-  const list = workspace?.cue_lists.find((candidate) => candidate.id === listId) ?? workspace?.cue_lists[0];
+  // Two panes, when the device asks for them and the show has two lists; the one worked in is the active list.
+  const panes = resolveSplit(preferences.split, workspace?.cue_lists.map((candidate) => candidate.id) ?? []);
+  const [activePane, setActivePane] = useState<0 | 1>(0);
+  const list = panes
+    ? workspace?.cue_lists.find((candidate) => candidate.id === panes[activePane])
+    : (workspace?.cue_lists.find((candidate) => candidate.id === listId) ?? workspace?.cue_lists[0]);
+  const selectList = useCallback(
+    (id: Id) => {
+      if (panes) setPreferences({ ...preferences, split: { on: true, ids: showInPane(panes, activePane, id) } });
+      else setListId(id);
+    },
+    [activePane, panes, preferences, setPreferences],
+  );
   const allCues = useMemo(() => workspace?.cue_lists.flatMap((l) => l.cues) ?? [], [workspace]);
   const rows = useMemo(() => (list ? flatten(list.cues) : []), [list]);
   // The filter only changes what is shown; GO and the playhead follow the real list.
@@ -310,7 +325,7 @@ export function App({ connection }: { connection: ShowConnection }) {
     if (!pendingList || !workspace) return;
     const added = [...workspace.cue_lists].reverse().find((candidate) => candidate.name === pendingList);
     if (added) {
-      setListId(added.id);
+      selectList(added.id);
       setPendingList(null);
     }
   }, [pendingList, workspace]);
@@ -459,6 +474,51 @@ export function App({ connection }: { connection: ShowConnection }) {
 
   const updateSettings = (settings: WorkspaceSettings) => run({ command: "update_settings", settings });
 
+  /** One list, as a cart or as rows. With two panes, only the active one is worked in. */
+  const renderPane = (target: CueListData, pane: 0 | 1 | null) => {
+    const active = pane === null || pane === activePane;
+    const body = target.cart ? (
+      <CueCart
+        cues={target.cues}
+        allCues={allCues}
+        selection={active ? selection : NO_SELECTION}
+        running={running}
+        loaded={loaded}
+        editable={editable && active}
+        onSelect={select}
+        onToggle={toggleCue}
+        onMove={moveCues}
+        onDropFiles={(files, drop) => void dropFiles(files, drop)}
+      />
+    ) : (
+      <>
+        {active && <FilterBar filter={filter} onChange={setFilter} shown={shownRows.length} total={rows.length} inputRef={filterInput} />}
+        <CueList
+          cues={target.cues}
+          allCues={allCues}
+          playhead={status?.playheads.find((entry) => entry.list === target.id)?.cue ?? null}
+          selection={active ? selection : NO_SELECTION}
+          running={running}
+          loaded={loaded}
+          visible={active ? visible : null}
+          editable={editable && active}
+          onSelect={select}
+          onSetPlayhead={(cue) => run({ command: "set_playhead", cue })}
+          onMove={moveCues}
+          onDropFiles={(files, drop) => void dropFiles(files, drop)}
+          onEdit={(cue) => run({ command: "update_cue", cue })}
+        />
+      </>
+    );
+    if (pane === null) return body;
+    return (
+      <div key={pane} className={active ? "pane active" : "pane"} onPointerDownCapture={() => setActivePane(pane)}>
+        <div className="pane-title">{target.name}</div>
+        {body}
+      </div>
+    );
+  };
+
   return (
     <div className={`app ${preferences.mode}-mode`}>
       <TopBar
@@ -534,7 +594,7 @@ export function App({ connection }: { connection: ShowConnection }) {
                     <button
                       key={candidate.id}
                       className={candidate.id === list?.id ? "tab active" : "tab"}
-                      onClick={() => setListId(candidate.id)}
+                      onClick={() => selectList(candidate.id)}
                       onDoubleClick={() => editable && setRenamingList(candidate.id)}
                       title={editable ? t("list.renameHint") : undefined}
                     >
@@ -558,8 +618,21 @@ export function App({ connection }: { connection: ShowConnection }) {
                     <Icon name="trash" size={13} />
                   </button>
                 )}
+                <span className="tabs-end">
+                  {workspace.cue_lists.length > 1 && (
+                    <button
+                      className={panes ? "icon-button quiet toggled" : "icon-button quiet"}
+                      onClick={() => list && setPreferences({ ...preferences, split: toggleSplit(preferences.split, list.id, workspace.cue_lists.map((candidate) => candidate.id)) })}
+                      title={t("list.split")}
+                      aria-label={t("list.split")}
+                      aria-pressed={panes !== null}
+                    >
+                      <Icon name="split" size={13} />
+                    </button>
+                  )}
+                </span>
                 {!list?.cart && (
-                  <span className="tabs-end">
+                  <span className="tabs-end-actions">
                     {editable && (
                       <button className="icon-button quiet" onClick={() => importInput.current?.click()} title={t("list.import")}>
                         <Icon name="import" size={13} />
@@ -575,38 +648,10 @@ export function App({ connection }: { connection: ShowConnection }) {
                 )}
               </nav>
             )}
-            {list?.cart ? (
-              <CueCart
-                cues={list.cues}
-                allCues={allCues}
-                selection={selection}
-                running={running}
-                loaded={loaded}
-                editable={editable}
-                onSelect={select}
-                onToggle={toggleCue}
-                onMove={moveCues}
-                onDropFiles={(files, drop) => void dropFiles(files, drop)}
-              />
+            {panes ? (
+              <div className="split-panes">{panes.map((id, index) => renderPane(workspace.cue_lists.find((candidate) => candidate.id === id)!, index as 0 | 1))}</div>
             ) : (
-              <>
-              <FilterBar filter={filter} onChange={setFilter} shown={shownRows.length} total={rows.length} inputRef={filterInput} />
-              <CueList
-                cues={list?.cues ?? []}
-                allCues={allCues}
-                playhead={playhead}
-                selection={selection}
-                running={running}
-                loaded={loaded}
-                visible={visible}
-                editable={editable}
-                onSelect={select}
-                onSetPlayhead={(cue) => run({ command: "set_playhead", cue })}
-                onMove={moveCues}
-                onDropFiles={(files, drop) => void dropFiles(files, drop)}
-                onEdit={(cue) => run({ command: "update_cue", cue })}
-              />
-              </>
+              list && renderPane(list, null)
             )}
             {editable && (
               <Inspector
