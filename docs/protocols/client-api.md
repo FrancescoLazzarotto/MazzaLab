@@ -81,6 +81,8 @@ the target container once the cue has been taken out of its old place.
 | `POST /api/command` | run a command (JSON body) |
 | `POST /api/save` | save the show to its file |
 | `GET /api/cue-media?cue=` | the media file of a cue, with range requests, for stages to play |
+| `GET /api/screens` | the displays of the machine (`name`, `width`, `height`, `x`, `y` in physical pixels, `main` for the one the operator's window is on) and whether stages are `shown` on them; `available` is false on a server without displays (headless) |
+| `POST /api/screens` | `{ "shown": true }` puts stages on the displays they name, full screen, `false` takes them down; 404 without displays |
 | `POST /api/timecode/in` | feeds the show `timecode` (`HH:MM:SS:FF`) at a `format` (`fps25`...) as if it had come in, to try timecode triggers without a source |
 | `POST /api/midi/in` | feeds the show a MIDI message (`kind`, `channel`, `number`, `value`) as if it had arrived on an input, to try triggers without the controller |
 | `GET /api/audio` | `status` (as in the `audio` message, or `null` without an audio backend) and `devices`: every output device with `id`, `name`, `host`, `is_default`, `max_channels`, `sample_rates`, `default_sample_rate` |
@@ -155,7 +157,10 @@ absent); without any there is one called `Main`, and a cue that names no
 `stage` goes to the first. A stage is any client that renders the
 `stage` message: the web UI does so at `/?stage=Name` (add `&monitor`
 for a silent copy), so a projector can be a browser on any machine of
-the network. The message's `stages` lists them with their sizes.
+the network. The message's `stages` lists them with their sizes. In the
+desktop app a stage with a `screen` (a display's `name` from
+`/api/screens`) also goes full screen on that display while stages are
+shown, from the Video menu (Ctrl+Shift+D) or `POST /api/screens`.
 
 A stage is drawn in its own pixels and scaled to the screen that shows
 it. A cue's `geometry` places it there: `fit` (`fit`, `fill`, `stretch`

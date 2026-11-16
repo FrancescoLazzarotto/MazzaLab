@@ -308,9 +308,12 @@ Parità con QLab e poi oltre.
 - [x] **Stage nel browser**: qualsiasi finestra a `/?stage=Nome` è
       un'uscita video, anche su un altro computer della rete, in sincronia
       con l'orologio del server e con la decodifica hardware del browser.
-      Restano da fare il renderer nativo (`wgpu`) per edge blending,
-      warping e HAP, e l'apertura degli stage a schermo intero sui monitor
-      dall'app desktop.
+      Resta da fare il renderer nativo (`wgpu`) per edge blending,
+      warping e HAP.
+- [x] **Stage sui monitor**: l'app desktop mette ogni stage a schermo
+      intero sullo schermo che gli è assegnato (menu Video, Ctrl+Maiusc+D,
+      o il pulsante sul monitor dello stage), con l'audio senza clic e le
+      finestre che seguono rinomine, cambi di schermo e cambi di show.
 
 ## Fase 7 — Collaborazione e ridondanza (L)
 
@@ -421,9 +424,10 @@ Voci ancora aperte qui sopra di cui esiste già un pezzo:
   di entrambe, pausa, ripresa, carico a un punto e fine segnalata dallo
   stage; il testo ha carattere, colore, allineamento e riquadro. Ogni
   browser che apre `/?stage=Nome` è un proiettore, e il pannello laterale
-  mostra lo stage dal vivo. L'audio dei video esce dal browser dello
-  stage. Mancano il renderer nativo, edge blending e warping,
-  NDI/Spout/Syphon e il Camera cue.
+  mostra lo stage dal vivo; l'app desktop apre gli stage a schermo intero
+  sui monitor assegnati. L'audio dei video esce dal browser dello stage.
+  Mancano il renderer nativo, edge blending e warping, NDI/Spout/Syphon e
+  il Camera cue.
 - **Avvisi**: file illeggibili, patch mancanti e dispositivi assenti
   arrivano all'operatore come notifiche; manca il controllo pre-show unico.
 
