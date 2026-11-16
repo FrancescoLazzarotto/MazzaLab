@@ -177,6 +177,11 @@ impl Show {
         Ok(())
     }
 
+    /// Stops recording inputs.
+    pub fn stop_recording(&mut self) {
+        self.recorder = None;
+    }
+
     /// Why recording stopped, if writing the record failed.
     pub fn record_error(&self) -> Option<&str> {
         self.record_error.as_deref()
