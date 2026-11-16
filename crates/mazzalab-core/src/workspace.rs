@@ -286,6 +286,9 @@ pub struct WorkspaceSettings {
     /// answered.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub msc_device_id: Option<u8>,
+    /// Cues kept to make others from, by name.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cue_templates: Vec<CueTemplate>,
     /// What clients on other machines may do, by passcode. Without any,
     /// every client may do everything; the machine running the show always
     /// may.
@@ -342,9 +345,18 @@ impl Default for WorkspaceSettings {
             midi_controls: MidiControls::default(),
             ltc_input: None,
             msc_device_id: None,
+            cue_templates: Vec::new(),
             passcodes: Vec::new(),
         }
     }
+}
+
+/// A cue kept to make others from. Its id and number mean nothing: a new
+/// cue made from it gets its own.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CueTemplate {
+    pub name: String,
+    pub cue: Cue,
 }
 
 /// One show document.

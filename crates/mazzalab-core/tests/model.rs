@@ -269,3 +269,24 @@ fn the_msc_device_id_is_kept_only_when_set() {
     let old: WorkspaceSettings = serde_json::from_str("{}").unwrap();
     assert_eq!(old.msc_device_id, None);
 }
+
+#[test]
+fn templates_round_trip_with_their_cue() {
+    use mazzalab_core::{Cue, CueKind, CueTemplate, WorkspaceSettings};
+    let mut settings = WorkspaceSettings::default();
+    assert!(
+        serde_json::to_value(&settings)
+            .unwrap()
+            .get("cue_templates")
+            .is_none()
+    );
+    settings.cue_templates.push(CueTemplate {
+        name: "Blackout".into(),
+        cue: Cue::new(CueKind::Memo).with_name("Blackout"),
+    });
+    let back: WorkspaceSettings =
+        serde_json::from_str(&serde_json::to_string(&settings).unwrap()).unwrap();
+    assert_eq!(back.cue_templates, settings.cue_templates);
+    let old: WorkspaceSettings = serde_json::from_str("{}").unwrap();
+    assert!(old.cue_templates.is_empty());
+}
