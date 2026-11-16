@@ -7,6 +7,7 @@
 //! clients. Like the engine, it performs no I/O.
 
 mod osc;
+pub mod preflight;
 
 use std::time::Duration;
 
