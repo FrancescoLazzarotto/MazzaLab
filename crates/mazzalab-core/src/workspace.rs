@@ -69,6 +69,25 @@ pub struct AudioSettings {
     /// from the show's own output; `None` is the system default output.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub audition_device: Option<String>,
+    /// Plays every measured file as loud as this, in LUFS, on top of its
+    /// cue's own level; `None` plays files as they are.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub normalize_lufs: Option<f64>,
+}
+
+/// The most a loudness normalization moves a file, either way, in dB.
+pub const MAX_NORMALIZE_DB: f64 = 20.0;
+
+impl AudioSettings {
+    /// What normalization adds to a file of `lufs`, in dB.
+    pub fn normalize_gain(&self, lufs: Option<f64>) -> f64 {
+        match (self.normalize_lufs, lufs) {
+            (Some(target), Some(lufs)) => {
+                (target - lufs).clamp(-MAX_NORMALIZE_DB, MAX_NORMALIZE_DB)
+            }
+            _ => 0.0,
+        }
+    }
 }
 
 /// How a network patch talks to its device.

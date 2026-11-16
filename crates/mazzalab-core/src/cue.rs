@@ -607,6 +607,9 @@ pub struct AudioCue {
     /// Channel count of the media file, filled in with `media_duration`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub media_channels: Option<u8>,
+    /// Integrated loudness of the media file in LUFS, once measured.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub media_lufs: Option<f64>,
 }
 
 impl Default for AudioCue {
@@ -627,6 +630,7 @@ impl Default for AudioCue {
             matrix: None,
             media_duration: None,
             media_channels: None,
+            media_lufs: None,
         }
     }
 }

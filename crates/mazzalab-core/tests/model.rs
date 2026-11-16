@@ -290,3 +290,18 @@ fn templates_round_trip_with_their_cue() {
     let old: WorkspaceSettings = serde_json::from_str("{}").unwrap();
     assert!(old.cue_templates.is_empty());
 }
+
+#[test]
+fn normalization_brings_files_to_the_target_within_limits() {
+    let mut audio = mazzalab_core::AudioSettings::default();
+    assert_eq!(audio.normalize_gain(Some(-30.0)), 0.0);
+    audio.normalize_lufs = Some(-23.0);
+    assert_eq!(audio.normalize_gain(Some(-30.0)), 7.0);
+    assert_eq!(audio.normalize_gain(Some(-14.0)), -9.0);
+    assert_eq!(audio.normalize_gain(None), 0.0);
+    // A nearly silent file is not pushed up without bound.
+    assert_eq!(
+        audio.normalize_gain(Some(-80.0)),
+        mazzalab_core::MAX_NORMALIZE_DB
+    );
+}
