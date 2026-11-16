@@ -468,3 +468,21 @@ fn carts_are_cue_lists_marked_as_such() {
     assert!(saved["cue_lists"][0].get("cart").is_none());
     assert_eq!(saved["cue_lists"][1]["cart"], true);
 }
+
+#[test]
+fn osc_triggers_start_the_cues_whose_address_matches() {
+    let mut show = show();
+    for (cue, address) in [(1, "/scene/*/go"), (2, "/scene/2/go")] {
+        let mut cue = show.workspace().find_cue(id(cue)).unwrap().clone();
+        cue.triggers.osc = Some(address.into());
+        show.execute(Command::UpdateCue { cue }).unwrap();
+    }
+
+    assert_eq!(show.osc_trigger("/lights/1"), 0);
+    assert_eq!(show.osc_trigger("/scene/2/go"), 2);
+    assert!(show.engine().is_active(id(1)) && show.engine().is_active(id(2)));
+    show.execute(Command::StopAll).unwrap();
+    show.advance_to(Duration::from_secs(1));
+    assert_eq!(show.osc_trigger("/scene/7/go"), 1);
+    assert!(show.engine().is_active(id(1)) && !show.engine().is_active(id(2)));
+}

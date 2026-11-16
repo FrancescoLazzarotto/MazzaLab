@@ -74,6 +74,28 @@ impl From<Result<(), ShowError>> for OscOutcome {
 }
 
 impl Show {
+    /// Starts every cue whose OSC trigger matches `address`, a message's
+    /// address as it arrived. Returns how many it started: a disarmed or
+    /// otherwise unstartable cue does not count.
+    pub fn osc_trigger(&mut self, address: &str) -> usize {
+        let starts: Vec<CueId> = self
+            .workspace()
+            .cues()
+            .filter(|cue| {
+                cue.triggers
+                    .osc
+                    .as_deref()
+                    .map(str::trim)
+                    .is_some_and(|pattern| !pattern.is_empty() && osc_match(pattern, address))
+            })
+            .map(|cue| cue.id)
+            .collect();
+        starts
+            .into_iter()
+            .filter(|&cue| self.execute(Command::Start { cue }).is_ok())
+            .count()
+    }
+
     /// Handles one OSC request. Returns `None` when the request is
     /// addressed to a different workspace.
     pub fn handle_osc(&mut self, request: &Request) -> Option<OscOutcome> {
