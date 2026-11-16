@@ -12,6 +12,15 @@ import "./styles.css";
 // Before the first paint, so the page never flashes the wrong palette.
 applyTheme(loadPreferences().theme);
 
+// The app's files are kept by a service worker, so the page reloads offline.
+if ("serviceWorker" in navigator && import.meta.env.PROD) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => {
+      // Not installable here (plain HTTP on a LAN, private mode): the app works without.
+    });
+  });
+}
+
 const connection = new ShowConnection(serverUrl(window.location));
 connection.start();
 

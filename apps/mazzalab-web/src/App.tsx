@@ -467,6 +467,11 @@ export function App({ connection }: { connection: ShowConnection }) {
         onFile={setFileDialog}
         onSettings={() => setSettingsOpen(true)}
       />
+      {snapshot && connectionState !== "open" && (
+        <div className="reconnecting" role="status">
+          {t("app.disconnected")}
+        </div>
+      )}
       {!snapshot || !workspace ? (
         <div className="splash">{connectionState === "closed" ? t("app.disconnected") : t("app.connecting")}</div>
       ) : (

@@ -778,6 +778,17 @@ select.status-item {
   height: 22px;
 }
 
+/* A hairline of text under the top bar while the server is out of reach */
+.reconnecting {
+  flex: none;
+  padding: 2px 12px;
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--hairline);
+  color: var(--warn);
+  font-size: 11px;
+  text-align: center;
+}
+
 /* The show-only view, for a tablet */
 .show-view {
   display: flex;

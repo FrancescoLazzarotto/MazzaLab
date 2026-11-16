@@ -61,6 +61,7 @@ export class ShowConnection {
   private meterListeners = new Set<MeterListener>();
   private midiListeners = new Set<MidiListener>();
   private retries = 0;
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private stopped = false;
   private state: ShowState = { connection: "connecting", snapshot: null, status: null, audio: null, dmx: null, timecode: null, stage: null, toasts: [] };
 
@@ -69,10 +70,24 @@ export class ShowConnection {
   start(): void {
     this.stopped = false;
     this.connect();
+    // Back on the network, or back on the screen: do not wait out the backoff.
+    window.addEventListener("online", this.retryNow);
+    document.addEventListener("visibilitychange", this.retryNow);
   }
+
+  private retryNow = (): void => {
+    if (this.stopped || this.socket !== null || document.visibilityState === "hidden") return;
+    if (this.retryTimer !== null) clearTimeout(this.retryTimer);
+    this.retryTimer = null;
+    this.retries = 0;
+    this.connect();
+  };
 
   stop(): void {
     this.stopped = true;
+    if (this.retryTimer !== null) clearTimeout(this.retryTimer);
+    window.removeEventListener("online", this.retryNow);
+    document.removeEventListener("visibilitychange", this.retryNow);
     this.socket?.close();
   }
 
@@ -269,7 +284,10 @@ export class ShowConnection {
       this.update({ connection: "closed" });
       if (!this.stopped) {
         const delay = Math.min(5000, 250 * 2 ** this.retries++);
-        setTimeout(() => this.connect(), delay);
+        this.retryTimer = setTimeout(() => {
+          this.retryTimer = null;
+          this.connect();
+        }, delay);
       }
     };
   }
