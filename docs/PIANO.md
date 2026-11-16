@@ -121,8 +121,10 @@ Lavori che servono a tutte le fasi successive. Conviene farli prima.
 - [x] **Autosave, backup a rotazione e recupero dopo un crash**.
 - [ ] **Registro dei backend di uscita**: audio, luci, video e dispositivi
       si configurano e si riavviano senza fermare il server.
-- [ ] **Pannello diagnostica**: carico del thread audio, xrun, latenza,
-      memoria, client collegati.
+- [x] **Pannello diagnostica** (dalla riga in basso, sulla connessione):
+      carico del thread audio con l'andamento dell'ultimo minuto, callback in
+      ritardo (i probabili xrun), uptime, client collegati, cue in corso e
+      registro degli input. La memoria e la latenza non sono riportate.
 
 ## Fase 1 — Audio (XL)
 

@@ -937,6 +937,56 @@ fieldset.bare {
   color: var(--text-2);
 }
 
+/* Diagnostics */
+.diagnostics-list {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px 16px;
+  margin: 0;
+}
+
+.diagnostics-list dt {
+  color: var(--text-3);
+}
+
+.diagnostics-list dd {
+  margin: 0;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.diagnostics-peak {
+  color: var(--text-3);
+}
+
+.sparkline {
+  display: block;
+  margin-top: 4px;
+}
+
+.sparkline polyline {
+  fill: none;
+  stroke: var(--go);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+
+.sparkline .baseline {
+  stroke: var(--hairline);
+}
+
+.diagnostics-list dd.late.rising {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+button.status-item.connection {
+  height: auto;
+  padding: 0 4px;
+  background: transparent;
+}
+
 /* Cue templates */
 .template-menu {
   position: relative;

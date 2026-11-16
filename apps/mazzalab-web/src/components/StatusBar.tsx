@@ -46,6 +46,7 @@ export function StatusBar({
   onChangePasscode,
   connection,
   onAudio,
+  onDiagnostics,
 }: {
   cueCount: number;
   listCount: number;
@@ -57,6 +58,7 @@ export function StatusBar({
   onChangePasscode: () => void;
   connection: ConnectionState;
   onAudio: () => void;
+  onDiagnostics: () => void;
 }) {
   const { t } = useI18n();
   const trouble = audio !== null && (!audio.running || audio.fallback);
@@ -82,10 +84,10 @@ export function StatusBar({
           {t(`access.${accessLevel(access)}`)}
         </button>
       )}
-      <span className={`status-item connection ${connection}`}>
+      <button className={`status-item connection ${connection}`} onClick={onDiagnostics} title={t("diagnostics.title")}>
         <i className="dot" />
         {t(`connection.${connection}`)}
-      </span>
+      </button>
       <Clock />
     </footer>
   );

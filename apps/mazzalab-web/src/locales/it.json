@@ -493,5 +493,16 @@
   "lock.short": "Almeno 4 caratteri",
   "lock.ok": "OK",
   "lock.on": "Tornare in Modifica chiede un PIN",
-  "lock.off": "La modalità Show non è bloccata"
+  "lock.off": "La modalità Show non è bloccata",
+  "diagnostics.title": "Diagnostica",
+  "diagnostics.uptime": "In funzione da",
+  "diagnostics.clients": "Client",
+  "diagnostics.running": "Cue in corso",
+  "diagnostics.load": "Carico audio",
+  "diagnostics.peak": "picco",
+  "diagnostics.late": "Callback in ritardo",
+  "diagnostics.lastMinute": "nell'ultimo minuto",
+  "diagnostics.callbacks": "Callback",
+  "diagnostics.audio": "Audio",
+  "diagnostics.record": "Registro degli input"
 }

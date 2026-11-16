@@ -493,5 +493,16 @@
   "lock.short": "At least 4 characters",
   "lock.ok": "OK",
   "lock.on": "Going back to edit mode asks for a PIN",
-  "lock.off": "Show mode is not locked"
+  "lock.off": "Show mode is not locked",
+  "diagnostics.title": "Diagnostics",
+  "diagnostics.uptime": "Running for",
+  "diagnostics.clients": "Clients",
+  "diagnostics.running": "Cues running",
+  "diagnostics.load": "Audio load",
+  "diagnostics.peak": "peak",
+  "diagnostics.late": "Late callbacks",
+  "diagnostics.lastMinute": "in the last minute",
+  "diagnostics.callbacks": "Callbacks",
+  "diagnostics.audio": "Audio",
+  "diagnostics.record": "Input record"
 }

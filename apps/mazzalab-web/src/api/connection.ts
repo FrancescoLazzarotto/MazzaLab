@@ -19,6 +19,7 @@ import type {
   Waveform,
 } from "./types";
 import { authHeaders, withPasscode, type AccessReply } from "../access";
+import type { Diagnostics } from "../diagnostics";
 import type { MediaFile, MediaMove, MediaReference } from "../mediaLibrary";
 import { ShowFileError, type FolderListing, type ShowFile } from "../showFiles";
 
@@ -242,6 +243,13 @@ export class ShowConnection {
       // No JSON body: a plain failure.
     }
     throw new ShowFileError(await errorOf(response), unsaved);
+  }
+
+  /** How the server is doing: uptime, clients, audio load and late callbacks. */
+  async diagnostics(): Promise<Diagnostics> {
+    const response = await this.fetchApi("/api/diagnostics");
+    if (!response.ok) throw new Error(await errorOf(response));
+    return (await response.json()) as Diagnostics;
   }
 
   /** What would not work if GO were pressed now. */

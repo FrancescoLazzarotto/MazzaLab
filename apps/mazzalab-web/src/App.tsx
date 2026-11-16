@@ -45,6 +45,7 @@ import { cuesForHotkey, hotkeyOf } from "./hotkeys";
 import { actionFor } from "./keymap";
 import { useTitleLabels } from "./a11y";
 import { MediaPanel } from "./components/MediaPanel";
+import { DiagnosticsDialog } from "./components/DiagnosticsDialog";
 import { NameDialog } from "./components/NameDialog";
 import { PinDialog } from "./components/PinDialog";
 import { TemplateMenu } from "./components/TemplateMenu";
@@ -79,6 +80,7 @@ export function App({ connection, access, onChangePasscode }: { connection: Show
   const [checking, setChecking] = useState(false);
   const [namingTemplate, setNamingTemplate] = useState(false);
   const [unlocking, setUnlocking] = useState(false);
+  const [diagnosing, setDiagnosing] = useState(false);
   const [others, setOthers] = useState<OthersState>(NO_OTHERS);
   useEffect(() => connection.onEvents((events) => setOthers((current) => applyOthersEvents(current, events))), [connection]);
   const [importing, setImporting] = useState<{ fileName: string; result: CsvImport } | null>(null);
@@ -801,6 +803,7 @@ export function App({ connection, access, onChangePasscode }: { connection: Show
           }}
         />
       )}
+      {diagnosing && <DiagnosticsDialog connection={connection} onClose={() => setDiagnosing(false)} />}
       {unlocking && (
         <PinDialog
           mode="unlock"
@@ -868,6 +871,7 @@ export function App({ connection, access, onChangePasscode }: { connection: Show
         onChangePasscode={onChangePasscode}
         connection={connectionState}
         onAudio={() => setSettingsOpen(true)}
+        onDiagnostics={() => setDiagnosing(true)}
       />
       <Announcer standby={standby} running={(status?.running ?? []).map((entry) => entry.cue)} find={(id) => findCue(allCues, id)} />
       <Toasts connection={connection} toasts={toasts} />
