@@ -643,6 +643,8 @@ pub fn spawn(
     let (midi_tx, midi_rx) = mpsc::unbounded_channel();
     let (timecode_tx, timecode_rx) = mpsc::unbounded_channel();
     let (sysex_tx, sysex_rx) = mpsc::unbounded_channel();
+    let (loudness_tx, loudness_rx) = mpsc::unbounded_channel();
+    let measurer = spawn_measurer(loudness_tx);
     let outputs = make_outputs(Completion {
         finished: finished_tx,
         notices: notices_tx,
@@ -684,10 +686,14 @@ pub fn spawn(
         last_timecode: None,
         last_wall_clock: None,
         unreadable: HashSet::new(),
+        measurer,
+        measuring: HashSet::new(),
+        unmeasurable: HashSet::new(),
     };
     let task = tokio::spawn(actor.run(
         receiver,
         Inputs {
+            loudness: loudness_rx,
             finished: finished_rx,
             notices: notices_rx,
             midi: midi_rx,
@@ -732,11 +738,43 @@ struct Actor {
     /// Media files that could not be probed, so they are not tried again on
     /// every edit.
     unreadable: HashSet<(CueId, PathBuf)>,
+    /// Files waiting for their loudness to be measured, one at a time on a
+    /// thread of their own; `None` when that thread could not start.
+    measurer: Option<std::sync::mpsc::Sender<(CueId, PathBuf, PathBuf)>>,
+    measuring: HashSet<(CueId, PathBuf)>,
+    /// Files without a loudness (silent, too short, unreadable).
+    unmeasurable: HashSet<(CueId, PathBuf)>,
+}
+
+/// Starts the thread that measures the loudness of audio files, one at a
+/// time, away from the show: `(cue, file as the cue names it, absolute
+/// path)` in, `(cue, file, LUFS)` out.
+fn spawn_measurer(
+    results: mpsc::UnboundedSender<(CueId, PathBuf, Option<f64>)>,
+) -> Option<std::sync::mpsc::Sender<(CueId, PathBuf, PathBuf)>> {
+    let (jobs, queue) = std::sync::mpsc::channel::<(CueId, PathBuf, PathBuf)>();
+    std::thread::Builder::new()
+        .name("mazzalab-loudness".into())
+        .spawn(move || {
+            for (cue, file, path) in queue {
+                let lufs = mazzalab_audio::loudness(&path)
+                    .inspect_err(|error| tracing::debug!(%error, "loudness not measured"))
+                    .ok()
+                    .flatten();
+                if results.send((cue, file, lufs)).is_err() {
+                    break;
+                }
+            }
+        })
+        .map_err(|error| tracing::warn!(%error, "loudness is not measured"))
+        .ok()?;
+    Some(jobs)
 }
 
 impl Actor {
     async fn run(mut self, mut requests: mpsc::Receiver<Request>, inputs: Inputs) {
         let Inputs {
+            mut loudness,
             mut finished,
             mut notices,
             mut midi,
@@ -777,6 +815,20 @@ impl Actor {
                 Some(bytes) = sysex.recv() => {
                     self.advance();
                     self.sysex_in(&bytes);
+                }
+                Some((cue, file, lufs)) = loudness.recv() => {
+                    self.advance();
+                    self.measuring.remove(&(cue, file.clone()));
+                    match lufs {
+                        // Only if the cue still plays that file.
+                        Some(lufs) if self.file_of(cue).as_ref() == Some(&file) => {
+                            self.show.set_media_loudness(cue, lufs);
+                        }
+                        Some(_) => {}
+                        None => {
+                            self.unmeasurable.insert((cue, file));
+                        }
+                    }
                 }
                 () = tokio::time::sleep_until(wake) => {}
             }
@@ -1120,6 +1172,7 @@ impl Actor {
         self.last_status = None;
         self.last_timecode = None;
         self.unreadable.clear();
+        self.unmeasurable.clear();
         let base = self.media_base();
         for output in &mut self.outputs {
             output.rebase(&base);
@@ -1190,6 +1243,45 @@ impl Actor {
 
     fn audio_status(&self) -> Option<AudioStatus> {
         self.outputs.iter().find_map(|output| output.audio_status())
+    }
+
+    /// The file an audio cue plays, as the cue names it.
+    fn file_of(&self, cue: CueId) -> Option<PathBuf> {
+        match &self.show.workspace().find_cue(cue)?.kind {
+            CueKind::Audio(audio) => audio.file.clone(),
+            _ => None,
+        }
+    }
+
+    /// Queues the audio files whose loudness is not known yet.
+    fn measure_media(&mut self) {
+        let Some(measurer) = &self.measurer else {
+            return;
+        };
+        let base = self.media_base();
+        let pending: Vec<(CueId, PathBuf)> = self
+            .show
+            .workspace()
+            .cues()
+            .filter_map(|cue| match &cue.kind {
+                CueKind::Audio(AudioCue {
+                    file: Some(file),
+                    media_lufs: None,
+                    ..
+                }) => Some((cue.id, file.clone())),
+                _ => None,
+            })
+            .filter(|entry| {
+                !self.measuring.contains(entry)
+                    && !self.unmeasurable.contains(entry)
+                    && !self.unreadable.contains(entry)
+            })
+            .collect();
+        for (cue, file) in pending {
+            if measurer.send((cue, file.clone(), base.join(&file))).is_ok() {
+                self.measuring.insert((cue, file));
+            }
+        }
     }
 
     /// Reads the length and channel count of audio files that do not have
@@ -1283,6 +1375,7 @@ impl Actor {
 
         if self.last_revision != Some(self.show.revision()) {
             self.probe_media();
+            self.measure_media();
         }
         let revision = self.show.revision();
         let structure_changed = self.last_revision != Some(revision);
@@ -1477,6 +1570,7 @@ const ALL_MSC_DEVICES: u8 = 0x7F;
 
 /// What the backends hand the actor, besides requests.
 struct Inputs {
+    loudness: mpsc::UnboundedReceiver<(CueId, PathBuf, Option<f64>)>,
     finished: mpsc::UnboundedReceiver<CueId>,
     notices: mpsc::UnboundedReceiver<Notice>,
     midi: mpsc::UnboundedReceiver<MidiEvent>,

@@ -320,6 +320,9 @@ fn replay(path: &Path, until: Option<Duration>) -> Result<(), String> {
             mazzalab_show::Input::MediaInfo { cue, .. } => {
                 format!("media read {}", label(show.workspace(), *cue))
             }
+            mazzalab_show::Input::MediaLoudness { cue, lufs } => {
+                format!("loudness {} {lufs:.1} LUFS", label(show.workspace(), *cue))
+            }
         };
         let events = show.take_events();
         println!("{:>9.3}s  ===== {input}", entry.time().as_secs_f64());
