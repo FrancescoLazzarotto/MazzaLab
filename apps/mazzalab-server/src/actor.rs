@@ -1216,7 +1216,10 @@ impl Actor {
                 | EventKind::Loaded { cue, .. }
                 | EventKind::Unloaded(cue)
                 | EventKind::Devamped(cue)
-                | EventKind::Panicking { cue, .. } => cue,
+                | EventKind::Panicking { cue, .. }
+                | EventKind::FadingOut { cue, .. }
+                | EventKind::Ducked { cue, .. }
+                | EventKind::Unducked { cue, .. } => cue,
                 EventKind::PlayheadMoved { list, cue } => {
                     messages.push(message(
                         format!("/update/workspace/{workspace}/cueList/{list}/playbackPosition"),

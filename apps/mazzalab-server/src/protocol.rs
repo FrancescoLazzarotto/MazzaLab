@@ -111,6 +111,9 @@ pub enum EventKindDto {
     Loaded { cue: CueId, time: f64 },
     Unloaded { cue: CueId },
     Devamped { cue: CueId },
+    FadingOut { cue: CueId, fade: f64 },
+    Ducked { cue: CueId, by_db: f64, fade: f64 },
+    Unducked { cue: CueId, fade: f64 },
 }
 
 impl From<&Event> for EventDto {
@@ -133,6 +136,19 @@ impl From<&Event> for EventDto {
                 time: time.as_secs_f64(),
             },
             EventKind::Unloaded(cue) => EventKindDto::Unloaded { cue },
+            EventKind::FadingOut { cue, fade } => EventKindDto::FadingOut {
+                cue,
+                fade: fade.as_secs_f64(),
+            },
+            EventKind::Ducked { cue, by_db, fade } => EventKindDto::Ducked {
+                cue,
+                by_db,
+                fade: fade.as_secs_f64(),
+            },
+            EventKind::Unducked { cue, fade } => EventKindDto::Unducked {
+                cue,
+                fade: fade.as_secs_f64(),
+            },
             EventKind::Devamped(cue) => EventKindDto::Devamped { cue },
         };
         Self {

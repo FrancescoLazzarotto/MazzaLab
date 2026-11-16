@@ -216,6 +216,20 @@ fn simulate(workspace: Workspace, list: CueId, gos: u32, interval: Duration, unt
                 ),
                 EventKind::Unloaded(cue) => format!("unload   {}", label(engine.workspace(), cue)),
                 EventKind::Devamped(cue) => format!("devamp   {}", label(engine.workspace(), cue)),
+                EventKind::FadingOut { cue, fade } => format!(
+                    "fadeout  {} over {:.2}s",
+                    label(engine.workspace(), cue),
+                    fade.as_secs_f64()
+                ),
+                EventKind::Ducked { cue, by_db, .. } => {
+                    format!(
+                        "duck     {} by {by_db:.1} dB",
+                        label(engine.workspace(), cue)
+                    )
+                }
+                EventKind::Unducked { cue, .. } => {
+                    format!("unduck   {}", label(engine.workspace(), cue))
+                }
             };
             println!("{:>9.3}s  {text}", event.at.as_secs_f64());
         }
