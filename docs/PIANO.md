@@ -166,7 +166,9 @@ Parità con QLab e poi oltre.
       curve personalizzate.
 - [x] Fade and stop others (stessa lista, tutte le liste) e duck others con
       ripristino automatico, dall'inspector dei cue Audio e Video.
-- [ ] Normalizzazione del volume in LUFS, con analisi al caricamento.
+- [x] Normalizzazione del volume in LUFS, con analisi in background (obiettivo in
+      Impostazioni, Audio; il volume misurato e il compenso nell'inspector e nel
+      pannello Media).
 
 ### Misura ed effetti
 - [ ] Meter peak, RMS e LUFS per cue, patch e uscita.

@@ -1186,7 +1186,7 @@ div.preflight-row {
 
 .media-row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
   align-items: center;
   gap: 8px;
   min-height: 26px;
@@ -1210,6 +1210,7 @@ div.preflight-row {
 }
 
 .media-size,
+.media-lufs,
 .media-use {
   color: var(--text-3);
   font-size: 11px;

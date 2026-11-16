@@ -19,6 +19,7 @@ import { LANGUAGE_OPTIONS, useI18n } from "../i18n";
 import { AUTO } from "../locales/resolve";
 import type { Preferences } from "../preferences";
 import { TRANSPORT_ACTIONS, type KeyMap } from "../keymap";
+import { LUFS_PRESETS, formatLufs, parseTarget, targetChoice } from "../loudness";
 import { parseDeviceId } from "../mscDevice";
 import { THEMES } from "../theme";
 import { CheckField, LevelField, NumberField, SelectField, TextField, TimeField } from "./fields";
@@ -302,6 +303,28 @@ function AudioTab({
         />
       </div>
       <LevelField label={t("audio.master")} value={audio.master_db ?? 0} onCommit={(master_db) => onChange({ ...audio, master_db })} />
+      <div className="row">
+        <SelectField
+          label={t("settings.normalize")}
+          value={targetChoice(audio.normalize_lufs)}
+          options={[
+            { value: "off", label: t("settings.normalizeOff") },
+            ...LUFS_PRESETS.map((preset) => ({ value: String(preset), label: formatLufs(preset) })),
+            { value: "custom", label: t("settings.normalizeCustom") },
+          ]}
+          onChange={(choice) => onChange({ ...audio, normalize_lufs: choice === "off" ? undefined : choice === "custom" ? (audio.normalize_lufs ?? -20) : Number(choice) })}
+        />
+        {targetChoice(audio.normalize_lufs) === "custom" && (
+          <TextField
+            label={t("settings.normalizeTarget")}
+            value={String(audio.normalize_lufs ?? "")}
+            onCommit={(text) => {
+              const target = parseTarget(text);
+              if (target !== undefined) onChange({ ...audio, normalize_lufs: target });
+            }}
+          />
+        )}
+      </div>
       <SelectField
         label={t("settings.auditionDevice")}
         value={audio.audition_device ?? ""}

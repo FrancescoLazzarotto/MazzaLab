@@ -509,5 +509,12 @@
   "fade.changeBy": "Change by",
   "fade.matrix": "Fade the routing too",
   "fade.group": "Aimed at a group, this fades every sound inside it.",
-  "inspector.skipDisarmed": "Skip it, waits included"
+  "inspector.skipDisarmed": "Skip it, waits included",
+  "settings.normalize": "Normalize loudness",
+  "settings.normalizeOff": "Off",
+  "settings.normalizeCustom": "Custom",
+  "settings.normalizeTarget": "Target (LUFS)",
+  "inspector.loudness": "Loudness",
+  "inspector.trim": "Trim",
+  "inspector.notMeasured": "not measured yet"
 }

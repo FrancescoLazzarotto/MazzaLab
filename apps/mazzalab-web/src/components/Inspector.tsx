@@ -27,6 +27,7 @@ import { TriggerFields } from "./TriggerFields";
 import { StageField, VideoFields } from "./VideoFields";
 import { filePosition, Waveform } from "./Waveform";
 import { asAudioCue, levelRange, startingMatrix, targetChannels } from "../fadeCue";
+import { formatLufs, formatTrim, normalizeGain } from "../loudness";
 import { OthersFields } from "./OthersFields";
 import { TimelineView } from "./TimelineView";
 
@@ -129,7 +130,7 @@ export function Inspector({
             onLoad={(time) => onLoad(cue.id, time)}
           />
         )}
-        {current === "levels" && cue.type === "audio" && <AudioLevels cue={cue} outputs={audio?.channels ?? 2} set={set} />}
+        {current === "levels" && cue.type === "audio" && <AudioLevels cue={cue} outputs={audio?.channels ?? 2} normalize={settings.audio?.normalize_lufs} set={set} />}
         {current === "settings" && <TypeSettings connection={connection} cue={cue} allCues={allCues} settings={settings} set={set} editable={editable} onChild={onChange} outputs={audio?.channels ?? 2} />}
         {current === "geometry" && (cue.type === "video" || cue.type === "text") && <GeometryTab connection={connection} cue={cue} settings={settings} set={set} />}
         {current === "triggers" && <TriggerFields connection={connection} cue={cue} set={set} />}
@@ -354,12 +355,21 @@ function AudioTime({
   );
 }
 
-function AudioLevels({ cue, outputs, set }: { cue: AudioCue; outputs: number; set: (patch: Patch) => void }) {
+function AudioLevels({ cue, outputs, normalize, set }: { cue: AudioCue; outputs: number; normalize: number | undefined; set: (patch: Patch) => void }) {
   const { t } = useI18n();
   return (
     <div className="form-columns">
       <div className="form-column">
         <LevelField label={t("inspector.level")} value={cue.level_db ?? 0} onCommit={(level_db) => set({ level_db })} />
+        <p className="hint loudness">
+          {t("inspector.loudness")}: {cue.media_lufs === undefined ? t("inspector.notMeasured") : formatLufs(cue.media_lufs)}
+          {normalize !== undefined && cue.media_lufs !== undefined && (
+            <>
+              {" · "}
+              {t("inspector.trim")} {formatTrim(normalizeGain(normalize, cue.media_lufs))}
+            </>
+          )}
+        </p>
       </div>
       <div className="form-column grow">
         <span className="field-label">{t("inspector.matrix")}</span>

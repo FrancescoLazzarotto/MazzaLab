@@ -220,6 +220,8 @@ export interface AudioFields {
   matrix?: Matrix;
   media_duration?: number;
   media_channels?: number;
+  /** Integrated loudness of the file in LUFS, once measured. */
+  media_lufs?: number;
 }
 
 export type MidiMessage =
@@ -297,6 +299,8 @@ export interface AudioSettings {
   master_db?: number;
   /** Device cues are auditioned on; absent is the system default output. */
   audition_device?: string;
+  /** Files with a measured loudness play at this many LUFS (their trim is added to the cue's level); absent plays them as they are. */
+  normalize_lufs?: number;
 }
 
 export type NetworkProtocol = "osc_udp" | "osc_tcp" | "plain_udp" | "plain_tcp";

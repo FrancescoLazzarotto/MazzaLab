@@ -509,5 +509,12 @@
   "fade.changeBy": "Cambia di",
   "fade.matrix": "Sfuma anche l'instradamento",
   "fade.group": "Puntato a un group, sfuma tutti i suoni che contiene.",
-  "inspector.skipDisarmed": "Saltalo, attese comprese"
+  "inspector.skipDisarmed": "Saltalo, attese comprese",
+  "settings.normalize": "Normalizza il volume",
+  "settings.normalizeOff": "Spenta",
+  "settings.normalizeCustom": "Personalizzata",
+  "settings.normalizeTarget": "Obiettivo (LUFS)",
+  "inspector.loudness": "Volume",
+  "inspector.trim": "Compenso",
+  "inspector.notMeasured": "non ancora misurato"
 }

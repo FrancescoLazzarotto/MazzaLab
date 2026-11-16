@@ -3,6 +3,7 @@ import type { ShowConnection } from "../api/connection";
 import type { Cue } from "../api/types";
 import { useI18n } from "../i18n";
 import { MEDIA_DRAG, filterMedia, formatSize, mediaKind, missingFiles, usageByFile, type MediaFile, type MediaFilter, type MediaReference } from "../mediaLibrary";
+import { formatLufs, lufsOfFile } from "../loudness";
 import { FolderDialog } from "./FolderDialog";
 import { CueIcon, Icon } from "./icons";
 
@@ -171,6 +172,7 @@ export function MediaPanel({
               {kind === "other" ? <Icon name="file" size={14} /> : <CueIcon type={kind} size={14} />}
               <span className="media-name">{file.name}</span>
               <span className="media-size">{formatSize(file.size)}</span>
+              <span className="media-lufs">{lufsOfFile(users) !== undefined ? formatLufs(lufsOfFile(users) ?? 0) : ""}</span>
               <span className="media-use" title={users.map((cue) => cue.number ?? "–").join(", ")}>
                 {users.length > 0 ? `×${users.length}` : t("media.unusedShort")}
               </span>
