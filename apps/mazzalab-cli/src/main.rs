@@ -5,6 +5,7 @@
 //! simulate playback on the real engine and print the resulting timeline.
 
 mod demo;
+mod theatre;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -29,6 +30,10 @@ enum Command {
         /// Overwrite an existing file.
         #[arg(long)]
         force: bool,
+        /// Write an example instead of the demo: `theatre`, with its sound
+        /// files in a `media` folder next to the show.
+        #[arg(long)]
+        example: Option<String>,
     },
     /// Check a show file for problems.
     Validate { path: PathBuf },
@@ -72,15 +77,35 @@ fn main() -> ExitCode {
 
 fn run(command: Command) -> Result<ExitCode, String> {
     match command {
-        Command::New { path, force } => {
+        Command::New {
+            path,
+            force,
+            example,
+        } => {
             if path.exists() && !force {
                 return Err(format!(
                     "{} already exists (use --force to overwrite)",
                     path.display()
                 ));
             }
-            mazzalab_project::save(&path, &demo::show()).map_err(|e| e.to_string())?;
+            let workspace = match example.as_deref() {
+                None => demo::show(),
+                Some("theatre") => theatre::show(),
+                Some(other) => {
+                    return Err(format!("no example called {other:?} (there is: theatre)"));
+                }
+            };
+            mazzalab_project::save(&path, &workspace).map_err(|e| e.to_string())?;
             println!("wrote {}", path.display());
+            if example.is_some() {
+                let media = path
+                    .parent()
+                    .filter(|parent| !parent.as_os_str().is_empty())
+                    .unwrap_or(Path::new("."))
+                    .join("media");
+                theatre::write_media(&media).map_err(|e| e.to_string())?;
+                println!("wrote the sound files in {}", media.display());
+            }
             Ok(ExitCode::SUCCESS)
         }
         Command::Validate { path } => {

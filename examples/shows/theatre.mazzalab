@@ -1,0 +1,353 @@
+{
+  "format": "mazzalab.show",
+  "version": 1,
+  "workspace": {
+    "id": "67ce5c7e-56b2-49a6-9723-29f5c9a40633",
+    "name": "Theatre example",
+    "settings": {
+      "double_go_protection": 0.3,
+      "panic_duration": 2.0,
+      "audio": {
+        "master_db": 0.0
+      },
+      "network_patches": [
+        {
+          "name": "Sound desk",
+          "host": "127.0.0.1",
+          "port": 9000,
+          "protocol": "osc_udp"
+        }
+      ],
+      "dmx_outputs": [
+        {
+          "universe": 1,
+          "protocol": "art_net",
+          "net_universe": 0
+        }
+      ],
+      "fixtures": [
+        {
+          "name": "Front wash",
+          "universe": 1,
+          "address": 1
+        },
+        {
+          "name": "Back wash",
+          "universe": 1,
+          "address": 2
+        },
+        {
+          "name": "Spot",
+          "universe": 1,
+          "address": 3
+        },
+        {
+          "name": "Cyc",
+          "universe": 1,
+          "address": 10,
+          "parameters": [
+            "red",
+            "green",
+            "blue"
+          ]
+        }
+      ],
+      "fixture_groups": [
+        {
+          "name": "Wash",
+          "members": [
+            "Front wash",
+            "Back wash"
+          ]
+        }
+      ],
+      "stages": [
+        {
+          "name": "Main",
+          "width": 1920,
+          "height": 1080
+        }
+      ]
+    },
+    "cue_lists": [
+      {
+        "id": "58e5ca45-3958-4afa-8156-33a780ab8bb3",
+        "name": "Act 1",
+        "cues": [
+          {
+            "id": "0bb1f14e-2a05-4270-8a19-0d709e0036e8",
+            "number": "1",
+            "name": "House to half",
+            "continue_mode": "do_not_continue",
+            "armed": true,
+            "type": "light",
+            "commands": [
+              "wash @ 50",
+              "cyc @ #101040"
+            ],
+            "duration": 5.0
+          },
+          {
+            "id": "dab396f4-1903-42f9-9fbe-f6dc935429aa",
+            "number": "2",
+            "name": "Preshow music",
+            "continue_mode": "do_not_continue",
+            "armed": true,
+            "type": "audio",
+            "file": "media/preshow.wav",
+            "infinite_loop": true,
+            "level_db": -6.0,
+            "fade_in": 2.0,
+            "media_duration": 2.5,
+            "media_channels": 1
+          },
+          {
+            "id": "cf45663c-c990-4888-a3b4-e9de7dc4165e",
+            "number": "3",
+            "name": "Welcome text",
+            "continue_mode": "do_not_continue",
+            "armed": true,
+            "type": "text",
+            "text": "Welcome. Please switch off your phones.",
+            "stage": "Main",
+            "layer": 0,
+            "style": {
+              "size": 64.0
+            }
+          },
+          {
+            "id": "8b6d7f64-cc62-4e1a-a42c-e646555280e1",
+            "number": "4",
+            "name": "House out",
+            "continue_mode": "do_not_continue",
+            "armed": true,
+            "type": "light",
+            "commands": [
+              "wash @ out",
+              "cyc @ out"
+            ],
+            "duration": 4.0
+          },
+          {
+            "id": "610ec227-3a9f-42e5-bf52-67285b1d805d",
+            "number": "5",
+            "name": "Scene 1 music",
+            "continue_mode": "do_not_continue",
+            "armed": true,
+            "others": {
+              "action": "fade_and_stop",
+              "scope": "all",
+              "fade": 3.0,
+              "duck_db": 10.0
+            },
+            "type": "audio",
+            "file": "media/scene1.wav",
+            "level_db": -4.0,
+            "fade_in": 1.0,
+            "media_duration": 1.5,
+            "media_channels": 1
+          },
+          {
+            "id": "c38a822c-5f12-4b5f-bb87-b04bbe6d3f44",
+            "number": "6",
+            "name": "Scene 1 lights",
+            "continue_mode": "do_not_continue",
+            "armed": true,
+            "type": "light",
+            "commands": [
+              "front wash @ 70",
+              "back wash @ 30",
+              "cyc @ #2030a0"
+            ],
+            "duration": 4.0
+          },
+          {
+            "id": "35c02030-489c-4ffc-957d-14c35ea118a8",
+            "number": "7",
+            "name": "Storm",
+            "continue_mode": "do_not_continue",
+            "armed": true,
+            "type": "group",
+            "mode": "timeline",
+            "children": [
+              {
+                "id": "1ccbb9c8-511c-4699-a5fc-ce28a1bbd93f",
+                "number": "7.1",
+                "name": "Thunder",
+                "continue_mode": "do_not_continue",
+                "armed": true,
+                "triggers": {
+                  "hotkey": "T"
+                },
+                "type": "audio",
+                "file": "media/thunder.wav",
+                "level_db": 0.0,
+                "media_duration": 1.5,
+                "media_channels": 1
+              },
+              {
+                "id": "9db6ffe0-b0c2-447f-b269-2689a63c64cf",
+                "number": "7.2",
+                "name": "Lightning",
+                "pre_wait": 0.5,
+                "continue_mode": "do_not_continue",
+                "armed": true,
+                "type": "light",
+                "commands": [
+                  "all @ full"
+                ],
+                "duration": 0.1
+              },
+              {
+                "id": "96afdb08-b7c4-49b2-a847-6c7bc4786f66",
+                "number": "7.3",
+                "name": "After the flash",
+                "pre_wait": 0.8,
+                "continue_mode": "do_not_continue",
+                "armed": true,
+                "type": "light",
+                "commands": [
+                  "wash @ 20",
+                  "cyc @ #080820"
+                ],
+                "duration": 1.5
+              },
+              {
+                "id": "c53d553d-2b6c-4677-9340-d1bbd0b99652",
+                "number": "7.4",
+                "name": "Title",
+                "pre_wait": 1.0,
+                "continue_mode": "do_not_continue",
+                "armed": true,
+                "type": "text",
+                "text": "THE STORM",
+                "stage": "Main",
+                "layer": 0,
+                "style": {
+                  "size": 120.0,
+                  "bold": true
+                }
+              }
+            ]
+          },
+          {
+            "id": "0c2bc18d-24e3-43b4-876a-7a38db74711e",
+            "number": "8",
+            "name": "Waiting music",
+            "color": "blue",
+            "continue_mode": "do_not_continue",
+            "armed": true,
+            "type": "audio",
+            "file": "media/waiting.wav",
+            "slices": [
+              {
+                "time": 1.0,
+                "play_count": 1
+              },
+              {
+                "time": 2.0,
+                "play_count": 0
+              }
+            ],
+            "level_db": 0.0,
+            "media_duration": 3.0,
+            "media_channels": 1
+          },
+          {
+            "id": "8692feb7-b774-4936-9b5b-be0f6d78a63c",
+            "number": "9",
+            "name": "Leave the loop",
+            "continue_mode": "do_not_continue",
+            "armed": true,
+            "target": "0c2bc18d-24e3-43b4-876a-7a38db74711e",
+            "type": "devamp"
+          },
+          {
+            "id": "7c492f65-3fb8-4010-ae3b-9584aa77e25a",
+            "number": "10",
+            "name": "Sound desk scene 2",
+            "continue_mode": "auto_continue",
+            "armed": true,
+            "type": "network",
+            "patch": "Sound desk",
+            "message": "/scene/recall 2"
+          },
+          {
+            "id": "3c41ec57-7f37-4fc3-9cb9-790aa37e633f",
+            "number": "11",
+            "name": "Fade the scene music",
+            "continue_mode": "do_not_continue",
+            "armed": true,
+            "target": "610ec227-3a9f-42e5-bf52-67285b1d805d",
+            "type": "fade",
+            "duration": 2.0,
+            "curve": "s_curve",
+            "level_db": -60.0,
+            "stop_target_when_done": true
+          },
+          {
+            "id": "98fd2c2b-26ca-481e-9c36-0af605f578f4",
+            "number": "12",
+            "name": "Beat",
+            "continue_mode": "auto_follow",
+            "armed": true,
+            "type": "wait",
+            "duration": 2.0
+          },
+          {
+            "id": "56fbec74-9b17-4e7d-a8aa-b162ea8e8f71",
+            "number": "13",
+            "name": "House up",
+            "continue_mode": "do_not_continue",
+            "armed": true,
+            "type": "light",
+            "commands": [
+              "wash @ full",
+              "cyc @ out"
+            ],
+            "duration": 3.0
+          },
+          {
+            "id": "47bfc4ac-183d-4791-8f10-92c15c040f77",
+            "number": "14",
+            "name": "End of act 1",
+            "continue_mode": "do_not_continue",
+            "armed": true,
+            "type": "memo"
+          }
+        ]
+      },
+      {
+        "id": "ba77eb3b-cddb-4828-b844-c29504c3d0fb",
+        "name": "Effects",
+        "cart": true,
+        "cues": [
+          {
+            "id": "8d12ed65-a8b0-407e-89ba-50f745852715",
+            "number": "E1",
+            "name": "Bell",
+            "continue_mode": "do_not_continue",
+            "armed": true,
+            "type": "audio",
+            "file": "media/bell.wav",
+            "level_db": 0.0,
+            "media_duration": 0.8,
+            "media_channels": 1
+          },
+          {
+            "id": "78b564fa-9215-4f78-92cc-e5a8cfaa89c3",
+            "number": "E2",
+            "name": "Door",
+            "continue_mode": "do_not_continue",
+            "armed": true,
+            "type": "audio",
+            "file": "media/door.wav",
+            "level_db": 0.0,
+            "media_duration": 0.3,
+            "media_channels": 1
+          }
+        ]
+      }
+    ]
+  }
+}
