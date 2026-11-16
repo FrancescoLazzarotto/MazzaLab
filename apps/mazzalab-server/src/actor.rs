@@ -486,7 +486,10 @@ pub fn spawn(
         midi: midi_tx,
         timecode: timecode_tx,
     });
-    let identity = Arc::new(RwLock::new(Identity::new(show.workspace(), path.as_deref())));
+    let identity = Arc::new(RwLock::new(Identity::new(
+        show.workspace(),
+        path.as_deref(),
+    )));
     let handle = ShowHandle {
         requests,
         updates: updates.clone(),
@@ -906,11 +909,19 @@ impl Actor {
     }
 
     fn identity_mut(&self) -> std::sync::RwLockWriteGuard<'_, Identity> {
-        self.identity.write().unwrap_or_else(PoisonError::into_inner)
+        self.identity
+            .write()
+            .unwrap_or_else(PoisonError::into_inner)
     }
 
     fn workspace_id(&self) -> Arc<str> {
-        Arc::clone(&self.identity.read().unwrap_or_else(PoisonError::into_inner).workspace_id)
+        Arc::clone(
+            &self
+                .identity
+                .read()
+                .unwrap_or_else(PoisonError::into_inner)
+                .workspace_id,
+        )
     }
 
     /// Where relative media paths start from.

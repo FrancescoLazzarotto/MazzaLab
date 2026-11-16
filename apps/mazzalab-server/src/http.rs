@@ -178,7 +178,9 @@ fn list_folder(dir: &Path) -> std::io::Result<Value> {
         if name.starts_with('.') {
             continue;
         }
-        let Ok(kind) = entry.file_type() else { continue };
+        let Ok(kind) = entry.file_type() else {
+            continue;
+        };
         if kind.is_dir() {
             folders.push(name);
         } else if Path::new(&name)

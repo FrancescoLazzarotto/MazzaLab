@@ -80,7 +80,10 @@ async fn udp_go_and_query() {
     let body = reply_json(&reply);
     assert_eq!(body["status"], "ok");
     assert_eq!(body["data"], json!(true));
-    assert_eq!(body["workspace_id"], json!(server.handle.workspace_id().to_string()));
+    assert_eq!(
+        body["workspace_id"],
+        json!(server.handle.workspace_id().to_string())
+    );
 
     client.send(&osc("/no/such/thing", vec![])).await.unwrap();
     assert_eq!(reply_json(&udp_reply(&client).await)["status"], "error");

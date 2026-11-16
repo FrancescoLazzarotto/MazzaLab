@@ -67,7 +67,10 @@ async fn post(app: &Router, uri: &str, body: Value) -> (StatusCode, Value) {
         .unwrap();
     let status = response.status();
     let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    (status, serde_json::from_slice(&bytes).unwrap_or(Value::Null))
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+    )
 }
 
 async fn get(app: &Router, uri: &str) -> Value {
@@ -92,7 +95,11 @@ async fn another_show_opens_on_the_same_server() {
     let server = start(&first, mazzalab_project::load(&first).unwrap()).await;
     let app = mazzalab_server::router(server.handle.clone(), None);
     let mut updates = server.handle.subscribe();
-    server.handle.execute(Command::Go { list: None }).await.unwrap();
+    server
+        .handle
+        .execute(Command::Go { list: None })
+        .await
+        .unwrap();
     assert!(!server.handle.status().await.unwrap().running.is_empty());
     let before = server.handle.workspace_id();
 
@@ -123,9 +130,9 @@ async fn another_show_opens_on_the_same_server() {
     while let Ok(update) = updates.try_recv() {
         match update {
             mazzalab_server::Update::Events(events) => {
-                saw_stop |= events.iter().any(|event| {
-                    serde_json::to_value(event).unwrap()["kind"] == json!("stopped")
-                });
+                saw_stop |= events
+                    .iter()
+                    .any(|event| serde_json::to_value(event).unwrap()["kind"] == json!("stopped"));
             }
             mazzalab_server::Update::Snapshot(snapshot) => {
                 saw_second |= snapshot.workspace.name == "Second";
@@ -181,7 +188,10 @@ async fn unsaved_changes_are_not_thrown_away_unless_asked() {
     let (status, body) = post(&app, "/api/show/open", json!({ "path": second })).await;
     assert_eq!(status, StatusCode::CONFLICT);
     assert_eq!(body["unsaved"], json!(true));
-    assert_eq!(server.handle.snapshot().await.unwrap().workspace.name, "Edited");
+    assert_eq!(
+        server.handle.snapshot().await.unwrap().workspace.name,
+        "Edited"
+    );
 
     let (status, _) = post(
         &app,
@@ -206,7 +216,10 @@ async fn unsaved_changes_are_not_thrown_away_unless_asked() {
     let (status, _) = post(&app, "/api/show/new", json!({ "path": dir.join("Third") })).await;
     assert_eq!(status, StatusCode::OK);
     assert!(dir.join("Third.mazzalab").is_file());
-    assert_eq!(server.handle.snapshot().await.unwrap().workspace.name, "Third");
+    assert_eq!(
+        server.handle.snapshot().await.unwrap().workspace.name,
+        "Third"
+    );
     let (status, _) = post(&app, "/api/show/new", json!({ "path": second })).await;
     assert_eq!(status, StatusCode::CONFLICT);
 
@@ -227,7 +240,11 @@ async fn save_as_moves_the_show_without_stopping_it() {
     let sound_id = sound.id;
     let server = start(&original, show("Show", vec![wait(), sound])).await;
     let app = mazzalab_server::router(server.handle.clone(), None);
-    server.handle.execute(Command::Go { list: None }).await.unwrap();
+    server
+        .handle
+        .execute(Command::Go { list: None })
+        .await
+        .unwrap();
 
     let copy = dir.join("tour").join("venue").join("Tour");
     std::fs::create_dir_all(copy.parent().unwrap()).unwrap();
@@ -254,10 +271,17 @@ async fn save_as_moves_the_show_without_stopping_it() {
         expected
     );
     assert_eq!(
-        server.handle.cue_file(sound_id).await.map(|file| std::path::absolute(file).unwrap()),
+        server
+            .handle
+            .cue_file(sound_id)
+            .await
+            .map(|file| std::path::absolute(file).unwrap()),
         Some(expected)
     );
-    assert!(!original.exists(), "the old file was never saved, and stays so");
+    assert!(
+        !original.exists(),
+        "the old file was never saved, and stays so"
+    );
 
     server.shutdown();
     std::fs::remove_dir_all(dir).unwrap();
