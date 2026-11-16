@@ -21,6 +21,7 @@ mod decode;
 mod device;
 mod input;
 mod load;
+mod loudness;
 mod ltc;
 mod mixer;
 mod waveform;
@@ -43,6 +44,7 @@ pub use decode::{MediaInfo, probe};
 pub use device::{DeviceInfo, DeviceRequest, OutputDevice, output_devices};
 pub use input::{InputDevice, LtcInput, LtcInputInfo, input_devices};
 pub use load::AudioLoad;
+pub use loudness::loudness;
 pub use mixer::Meters;
 pub use waveform::{Waveform, waveform};
 
