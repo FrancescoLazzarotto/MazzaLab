@@ -73,6 +73,11 @@ pub enum Input {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         channels: Option<u8>,
     },
+    /// The media layer measured a file's loudness.
+    MediaLoudness {
+        cue: CueId,
+        lufs: f64,
+    },
 }
 
 /// Where a show writes its record.
@@ -225,6 +230,9 @@ impl Show {
                 channels,
             } => {
                 self.set_media_info(cue, duration.map(Duration::from_nanos), channels);
+            }
+            Input::MediaLoudness { cue, lufs } => {
+                self.set_media_loudness(cue, lufs);
             }
         }
     }

@@ -506,6 +506,26 @@ impl Show {
         changed
     }
 
+    /// Records the measured loudness of an audio cue's file, in LUFS. Like
+    /// [`set_media_info`](Self::set_media_info), not an edit. Returns
+    /// whether anything changed.
+    pub fn set_media_loudness(&mut self, cue: CueId, lufs: f64) -> bool {
+        self.log(|| record::Input::MediaLoudness { cue, lufs });
+        let changed = self.engine.edit_workspace(|workspace| {
+            let Some(CueKind::Audio(audio)) = workspace.find_cue_mut(cue).map(|cue| &mut cue.kind)
+            else {
+                return false;
+            };
+            let changed = audio.media_lufs != Some(lufs);
+            audio.media_lufs = Some(lufs);
+            changed
+        });
+        if changed {
+            self.revision += 1;
+        }
+        changed
+    }
+
     /// Rewrites the workspace, and every version undo and redo would bring
     /// back, the same way: for media paths that must start from another
     /// folder once the show is saved somewhere else. This is not an edit:
