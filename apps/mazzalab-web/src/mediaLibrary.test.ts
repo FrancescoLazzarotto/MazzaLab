@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Cue } from "./api/types";
-import { filterMedia, formatSize, mediaKind, normalizePath, usageByFile, type MediaFile } from "./mediaLibrary";
+import { filterMedia, formatSize, mediaKind, missingFiles, normalizePath, usageByFile, type MediaFile } from "./mediaLibrary";
 
 const files: MediaFile[] = [
   { file: "media/Rain.wav", name: "Rain.wav", size: 1_400_000 },
@@ -35,6 +35,10 @@ describe("media library", () => {
     expect(filterMedia(files, usage, { text: "", kind: "video" }).map((file) => file.name)).toEqual(["Intro.mp4"]);
     expect(filterMedia(files, usage, { text: "", kind: "unused" }).map((file) => file.name)).toEqual(["Intro.mp4", "notes.pdf"]);
     expect(filterMedia(files, usage, { text: "  ", kind: "all" })).toHaveLength(3);
+  });
+
+  it("lists each missing file once", () => {
+    expect(missingFiles([{ cue: "a", file: "media/x.wav" }, { cue: "b", file: "media/x.wav" }, { cue: "c", file: "media/y.wav" }])).toEqual(["media/x.wav", "media/y.wav"]);
   });
 
   it("writes sizes short", () => {

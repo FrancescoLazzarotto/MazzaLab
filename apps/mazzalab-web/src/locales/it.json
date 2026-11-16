@@ -469,5 +469,14 @@
   "others.fading": "in sfumo",
   "settings.msc": "MIDI Show Control in ingresso",
   "settings.mscDevice": "Device ID (0-127)",
-  "settings.mscAll": "Solo a tutti i device"
+  "settings.mscAll": "Solo a tutti i device",
+  "media.consolidate": "Consolida",
+  "media.consolidateHint": "Copia i file da fuori nella cartella media",
+  "media.consolidated": "file copiati nella cartella media",
+  "media.relink": "Ricollega mancanti",
+  "media.relinkHint": "Cerca i file mancanti in una cartella",
+  "media.relinked": "file ritrovati",
+  "media.notFound": "non trovati",
+  "media.missing": "file mancanti",
+  "media.searchHere": "Cerca qui"
 }

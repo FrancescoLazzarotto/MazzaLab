@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ShowConnection } from "../api/connection";
 import type { Cue } from "../api/types";
 import { useI18n } from "../i18n";
-import { MEDIA_DRAG, filterMedia, formatSize, mediaKind, usageByFile, type MediaFile, type MediaFilter } from "../mediaLibrary";
+import { MEDIA_DRAG, filterMedia, formatSize, mediaKind, missingFiles, usageByFile, type MediaFile, type MediaFilter, type MediaReference } from "../mediaLibrary";
+import { FolderDialog } from "./FolderDialog";
 import { CueIcon, Icon } from "./icons";
 
 interface Upload {
@@ -33,6 +34,9 @@ export function MediaPanel({
   const [filter, setFilter] = useState<MediaFilter>({ text: "", kind: "all" });
   const [uploads, setUploads] = useState<Upload[]>([]);
   const picker = useRef<HTMLInputElement>(null);
+  const [missing, setMissing] = useState<MediaReference[]>([]);
+  const [relinking, setRelinking] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
     connection
@@ -42,6 +46,10 @@ export function MediaPanel({
         setError(null);
       })
       .catch((reason: Error) => setError(reason.message));
+    connection
+      .mediaMissing()
+      .then(setMissing)
+      .catch(() => setMissing([]));
   }, [connection]);
   // On opening, after another show, and when the show changes under us (a
   // cue gains a file another client uploaded).
@@ -62,6 +70,31 @@ export function MediaPanel({
     }
     load();
   };
+
+  /** Runs one of the media tasks and says what it did. */
+  const work = (task: () => Promise<string>) => {
+    setBusy(true);
+    task()
+      .then((message) => connection.toast("info", message))
+      .catch((reason: Error) => connection.toast("error", reason.message))
+      .finally(() => {
+        setBusy(false);
+        load();
+      });
+  };
+  const consolidate = () =>
+    work(async () => {
+      const copied = await connection.consolidateMedia();
+      return `${copied.length} ${t("media.consolidated")}`;
+    });
+  const relink = (dir: string) => {
+    setRelinking(false);
+    work(async () => {
+      const { relinked, not_found } = await connection.relinkMedia(dir);
+      return `${relinked.length} ${t("media.relinked")}${not_found.length > 0 ? `, ${missingFiles(not_found).length} ${t("media.notFound")}` : ""}`;
+    });
+  };
+  const lost = missingFiles(missing);
 
   return (
     <section className="panel media-panel">
@@ -92,6 +125,22 @@ export function MediaPanel({
         }}
       />
       {error && <p className="placeholder">{error}</p>}
+      {lost.length > 0 && (
+        <p className="media-missing" title={lost.join("\n")}>
+          <Icon name="warning" size={13} />
+          {lost.length} {t("media.missing")}
+        </p>
+      )}
+      {editable && !error && (
+        <div className="media-tools">
+          <button onClick={consolidate} disabled={busy} title={t("media.consolidateHint")}>
+            {t("media.consolidate")}
+          </button>
+          <button onClick={() => setRelinking(true)} disabled={busy || lost.length === 0} title={t("media.relinkHint")}>
+            {t("media.relink")}
+          </button>
+        </div>
+      )}
       {files && files.length > 0 && (
         <div className="media-filter">
           <input value={filter.text} placeholder={t("media.search")} aria-label={t("media.search")} onChange={(event) => setFilter({ ...filter, text: event.target.value })} />
@@ -138,6 +187,7 @@ export function MediaPanel({
           </div>
         </div>
       ))}
+      {relinking && <FolderDialog connection={connection} title={t("media.relink")} verb={t("media.searchHere")} onPick={relink} onClose={() => setRelinking(false)} />}
     </section>
   );
 }

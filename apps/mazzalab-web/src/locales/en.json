@@ -469,5 +469,14 @@
   "others.fading": "fading out",
   "settings.msc": "MIDI Show Control in",
   "settings.mscDevice": "Device ID (0-127)",
-  "settings.mscAll": "All devices only"
+  "settings.mscAll": "All devices only",
+  "media.consolidate": "Consolidate",
+  "media.consolidateHint": "Copy files from elsewhere into the media folder",
+  "media.consolidated": "files copied into the media folder",
+  "media.relink": "Relink missing",
+  "media.relinkHint": "Look for the missing files in a folder",
+  "media.relinked": "files found again",
+  "media.notFound": "not found",
+  "media.missing": "files missing",
+  "media.searchHere": "Search here"
 }

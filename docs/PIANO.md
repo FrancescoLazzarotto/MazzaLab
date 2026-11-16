@@ -114,9 +114,10 @@ Lavori che servono a tutte le fasi successive. Conviene farli prima.
 - [ ] **Registro degli input dell'operatore e replay**: ogni GO, stop e
       modifica viene registrato con il suo istante; il replay riproduce una
       recita identica. Serve per il debug e per il backup (Fase 7).
-- [ ] **Gestione dei media**: cartella dei media dello show, "Consolida
-      show" (copia tutti i media nella cartella), ricerca e ricollegamento
-      dei file mancanti, avviso se un media cambia su disco.
+- [ ] **Gestione dei media**: cartella dei media dello show, "Consolida"
+      (copia nella cartella i media che stanno altrove) e ricollegamento dei
+      file mancanti per nome, in una cartella scelta, sono fatti. Manca l'avviso
+      se un media cambia su disco.
 - [x] **Autosave, backup a rotazione e recupero dopo un crash**.
 - [ ] **Registro dei backend di uscita**: audio, luci, video e dispositivi
       si configurano e si riavviano senza fermare il server.
@@ -397,9 +398,9 @@ Parità con QLab e poi oltre.
 Voci ancora aperte qui sopra di cui esiste già un pezzo:
 
 - **Gestione dei media**: i file importati dalla UI finiscono in `media/`
-  accanto allo show (stesso file = nessuna copia doppia). Mancano
-  "Consolida show", il ricollegamento dei file mancanti e l'avviso se un
-  media cambia su disco.
+  accanto allo show (stesso file = nessuna copia doppia). "Consolida" e il ricollegamento dei file mancanti per nome stanno nel
+  pannello Media (un solo annulla ciascuno). Manca l'avviso se un media
+  cambia su disco.
 - **Registro dei backend di uscita**: l'audio si riconfigura senza fermare
   il server; manca un registro comune per luci, video e dispositivi.
 - **Precaricamento**: i cue al playhead (e quelli nei gruppi al playhead)

@@ -19,7 +19,7 @@ import type {
   Waveform,
 } from "./types";
 import { authHeaders, withPasscode, type AccessReply } from "../access";
-import type { MediaFile } from "../mediaLibrary";
+import type { MediaFile, MediaMove, MediaReference } from "../mediaLibrary";
 import { ShowFileError, type FolderListing, type ShowFile } from "../showFiles";
 
 export type ConnectionState = "connecting" | "open" | "closed";
@@ -249,6 +249,27 @@ export class ShowConnection {
     const response = await this.fetchApi("/api/preflight");
     if (!response.ok) throw new Error(await errorOf(response));
     return ((await response.json()) as { issues: PreflightIssue[] }).issues;
+  }
+
+  /** The cues whose media files are not there. */
+  async mediaMissing(): Promise<MediaReference[]> {
+    const response = await this.fetchApi("/api/media/missing");
+    if (!response.ok) throw new Error(await errorOf(response));
+    return ((await response.json()) as { missing: MediaReference[] }).missing;
+  }
+
+  /** Copies the media that lives outside the show's media folder into it; the cues follow. */
+  async consolidateMedia(): Promise<MediaMove[]> {
+    const response = await this.fetchApi("/api/media/consolidate", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    if (!response.ok) throw new Error(await errorOf(response));
+    return ((await response.json()) as { copied: MediaMove[] }).copied;
+  }
+
+  /** Looks for the missing files by name under a folder of the server's machine. */
+  async relinkMedia(searchDir: string): Promise<{ relinked: MediaMove[]; not_found: MediaReference[] }> {
+    const response = await this.fetchApi("/api/media/relink", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ search_dir: searchDir }) });
+    if (!response.ok) throw new Error(await errorOf(response));
+    return (await response.json()) as { relinked: MediaMove[]; not_found: MediaReference[] };
   }
 
   /** The files in the show's media folder. */

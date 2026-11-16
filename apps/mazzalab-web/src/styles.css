@@ -1030,6 +1030,26 @@ div.preflight-row {
   gap: 2px;
 }
 
+.media-missing {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 6px;
+  color: var(--warn);
+  font-size: 12px;
+}
+
+.media-tools {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.media-tools button {
+  flex: 1;
+  height: 24px;
+}
+
 .media-filter {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

@@ -4,6 +4,19 @@ import { flatten, isAudioFile } from "./cues";
 /** What a media item carries while it is dragged: a JSON list of paths relative to the show. */
 export const MEDIA_DRAG = "application/x-mazzalab-media";
 
+/** A cue and the media file it names. */
+export interface MediaReference {
+  cue: string;
+  file: string;
+}
+
+/** A cue's file that was changed: where it was, and where it is now. */
+export interface MediaMove {
+  cue: string;
+  from: string;
+  file: string;
+}
+
 /** A file of the show's media folder, as `GET /api/media` lists it. */
 export interface MediaFile {
   /** The path relative to the show, as a cue's `file` names it. */
@@ -50,6 +63,11 @@ export function filterMedia(files: readonly MediaFile[], usage: Map<string, Cue[
     if (filter.kind === "unused") return (usage.get(normalizePath(file.file)) ?? []).length === 0;
     return filter.kind === "all" || mediaKind(file.name) === filter.kind;
   });
+}
+
+/** The files of a list of references that are missing, each once, in order. */
+export function missingFiles(missing: readonly MediaReference[]): string[] {
+  return [...new Set(missing.map((entry) => entry.file))];
 }
 
 /** `1.4 MB`, `812 kB`, `37 B`. */
