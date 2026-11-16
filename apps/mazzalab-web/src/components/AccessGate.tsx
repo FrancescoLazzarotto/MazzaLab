@@ -17,7 +17,7 @@ export interface Granted {
  */
 export function AccessGate({ connection, host, children }: { connection: ShowConnection; host: string; children: (granted: Granted) => ReactNode }) {
   const { t } = useI18n();
-  const { connection: link } = useShow(connection);
+  const { connection: link, toasts } = useShow(connection);
   const [reply, setReply] = useState<AccessReply | null>(null);
   const [error, setError] = useState(false);
   const [code, setCode] = useState("");
@@ -38,6 +38,17 @@ export function AccessGate({ connection, host, children }: { connection: ShowCon
     const timer = setTimeout(() => void refresh(), link === "closed" ? 800 : 0);
     return () => clearTimeout(timer);
   }, [link, refresh]);
+
+  // A notice may say that a backup has taken over; ask again, so the banner goes. A backup is asked every two seconds too.
+  useEffect(() => {
+    if (toasts.length > 0) void refresh();
+  }, [toasts.length, refresh]);
+  const following = reply?.following === true;
+  useEffect(() => {
+    if (!following) return;
+    const timer = setInterval(() => void refresh(), 2000);
+    return () => clearInterval(timer);
+  }, [following, refresh]);
 
   const submit = async () => {
     connection.setPasscode(code);

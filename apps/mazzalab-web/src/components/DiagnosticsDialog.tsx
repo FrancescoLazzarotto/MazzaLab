@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { ShowConnection } from "../api/connection";
+import { fileName } from "../cues";
 import { HISTORY, formatUptime, lateWithin, percent, pushSample, sampleOf, sparkline, type Diagnostics, type Sample } from "../diagnostics";
 import { useI18n } from "../i18n";
 import { Icon } from "./icons";
@@ -114,7 +115,9 @@ export function DiagnosticsDialog({ connection, onClose }: { connection: ShowCon
               {(reading.record || reading.record_error) && (
                 <>
                   <dt>{t("diagnostics.record")}</dt>
-                  <dd className={reading.record_error ? "late rising" : undefined}>{reading.record_error ?? reading.record}</dd>
+                  <dd className={reading.record_error ? "late rising" : "record-file"} title={reading.record_error ?? reading.record}>
+                    {reading.record_error ?? fileName(reading.record ?? "")}
+                  </dd>
                 </>
               )}
             </dl>

@@ -292,6 +292,40 @@ default output. An auditioned cue is heard with its trims, level and fades
 on the first outputs of that device, once through, whatever its routing
 and loops. A panic stops it too.
 
+## Hot backup
+
+A second server can follow the main one and take over if it goes silent.
+`mazzalab-server --follow http://main:53080` (with `?passcode=` on the URL if
+the main server asks for one) runs a show file as the backup.
+
+The main server streams its input record on `GET /api/follow`, a WebSocket
+with one JSON line in each text frame (it needs `view` access, like `/ws`):
+
+1. the record's header, then every entry recorded so far (the format of
+   `logs/` files, see `mazzalab replay`), then each new entry as it is
+   written;
+2. a tick, `{"tick": <engine time in ns>, "hash": <u64>}`, every 250 ms, with a
+   hash of the engine's state.
+
+The engine is deterministic: a backup that applies the same inputs at the same
+instants is in the same state, cue for cue. The backup compares its own hash
+with each tick's, and takes over after 1 s without a tick: it starts
+answering its own triggers and the operators' commands, and sends a warning
+notice (`… has taken over`) over its WebSocket.
+
+While it follows, `GET /api/access` answers `"following": true` and every
+client has view access only; clients re-ask on every notice and on
+reconnecting, so that a screen watching the backup gains control once it
+takes over.
+
+Limits:
+
+- cues already running when the backup joins are not heard there until the
+  next ones start;
+- the backup records nothing until it takes over;
+- the media is not copied: both machines need the same files at the same
+  paths (the show's `media` folder, and any absolute paths).
+
 ## Safety copies
 
 Next to a show file, the `backups` folder holds:

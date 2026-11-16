@@ -345,10 +345,12 @@ Parità con QLab e poi oltre.
 - [ ] Più operatori sullo stesso show: utenti, permessi, chi sta
       modificando cosa, blocco per cue.
 - [ ] Modalità show che rende i collaboratori solo spettatori.
-- [ ] **Backup caldo**: la macchina di backup riceve lo stesso registro di
+- [x] **Backup caldo**: la macchina di backup riceve lo stesso registro di
       input (Fase 0), calcola lo stesso stato grazie al motore
-      deterministico e subentra in meno di un secondo. Confronto continuo
-      dello stato tramite hash.
+      deterministico e subentra dopo un secondo di silenzio. Confronto
+      continuo dello stato tramite hash (ogni 250 ms). Mancano il menu nell'app
+      desktop e la sincronizzazione dei media; i suoni già in corso quando il
+      backup entra non si sentono fino ai cue successivi.
 - [ ] Sincronizzazione dei media tra macchine principale, backup e render
       node.
 - [ ] `mazzalab diff` e merge degli show per lavorare con git.

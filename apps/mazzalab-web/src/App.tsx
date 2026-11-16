@@ -601,6 +601,12 @@ export function App({ connection, access, onChangePasscode }: { connection: Show
         onPreflight={() => setChecking(true)}
         onSettings={() => setSettingsOpen(true)}
       />
+      {access.following && (
+        <div className="backup-banner" role="status">
+          <Icon name="lock" size={12} />
+          {t("backup.following")}
+        </div>
+      )}
       {snapshot && connectionState !== "open" && (
         <div className="reconnecting" role="status">
           {t("app.disconnected")}

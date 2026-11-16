@@ -12,6 +12,8 @@ export const FULL_ACCESS: Access = { view: true, control: true, edit: true };
 /** The answer of `/api/access`: whether the show asks for a passcode, and what the one given grants. */
 export interface AccessReply extends Access {
   required: boolean;
+  /** This server is a hot backup, following the main one: everyone only watches. */
+  following?: boolean;
 }
 
 /** What the interface does with an access. */

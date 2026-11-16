@@ -528,5 +528,6 @@
   "network.hint.http_get": "One request per line: a path (and query) added to the patch's URL.",
   "network.hint.http_post": "One request per line: a path, then the body (JSON is sent as JSON).",
   "network.hint.websocket": "One text message per line, on a connection kept open.",
-  "settings.dmxSync": "Sync"
+  "settings.dmxSync": "Sync",
+  "backup.following": "Backup: following the main server, and takes over if it goes quiet"
 }

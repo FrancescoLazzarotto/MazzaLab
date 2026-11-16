@@ -937,6 +937,26 @@ fieldset.bare {
   color: var(--text-2);
 }
 
+/* A backup that follows the main server */
+.backup-banner {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 4px 12px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--hairline);
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.diagnostics-list dd.record-file {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Diagnostics */
 .diagnostics-list {
   display: grid;

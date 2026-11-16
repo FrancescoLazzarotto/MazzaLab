@@ -412,6 +412,34 @@ può modificare).
   modifiche non salvate ti viene chiesto se salvarle, scartarle o annullare.
 - **Annulla** e **ripeti** valgono per ogni modifica.
 
+### Backup caldo
+
+Una seconda macchina può condurre lo show insieme alla prima e subentrare se la
+prima tace. Servono lo stesso show e gli stessi media (copia sul backup la
+cartella dello show, `media` compresa: i media non vengono copiati da soli).
+
+1. Sulla macchina principale non cambia niente: va come sempre.
+2. Sul backup avvia il server headless su una copia dello show con `--follow` e
+   l'indirizzo della macchina principale:
+
+   ```
+   mazzalab-server il-mio-show.mazzalab --ui-dir apps/mazzalab-web/dist --follow http://macchina-principale:53080
+   ```
+
+   (aggiungi `?passcode=1234` all'indirizzo se la macchina principale chiede un
+   codice).
+3. Apri l'indirizzo del backup in un browser. Una riga sotto la barra in alto dice
+   che è un backup che segue il server principale, e lo schermo è in sola
+   lettura. Rispecchia quello che fa la macchina principale, input per input.
+4. Se la macchina principale non risponde per un secondo, il backup subentra:
+   manda un avviso (ha preso il controllo), la riga sparisce e lo si può
+   comandare. Da quel momento girano i suoi trigger e le sue uscite.
+
+Conosci i limiti: i suoni già in riproduzione quando il backup è entrato non si
+sentono lì fino ai cue successivi; il backup non registra il registro degli
+input finché non subentra; e per ora non c'è un menu nell'app desktop, solo il
+server headless. Provalo prima della replica.
+
 ## 15. Scorciatoie da tastiera
 
 | Tasti | Fa |

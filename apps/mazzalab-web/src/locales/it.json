@@ -528,5 +528,6 @@
   "network.hint.http_get": "Una richiesta per riga: un percorso (e query) aggiunto all'URL della patch.",
   "network.hint.http_post": "Una richiesta per riga: un percorso, poi il corpo (il JSON parte come JSON).",
   "network.hint.websocket": "Un messaggio di testo per riga, su una connessione tenuta aperta.",
-  "settings.dmxSync": "Sync"
+  "settings.dmxSync": "Sync",
+  "backup.following": "Backup: segue il server principale; prende il controllo se tace"
 }

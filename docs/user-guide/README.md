@@ -393,6 +393,34 @@ Media can be added from a tablet in the Media panel (if its passcode may edit).
   unsaved changes you are asked whether to save them, drop them or cancel.
 - **Undo** and **redo** work on every edit.
 
+### Hot backup
+
+A second machine can run the show alongside the first and take over if the
+first goes quiet. Both need the same show and the same media (copy the show
+folder, `media` included, to the backup; media is not copied for you).
+
+1. On the main machine nothing changes: it runs as usual.
+2. On the backup, start the headless server on a copy of the show with
+   `--follow` and the main machine's address:
+
+   ```
+   mazzalab-server my-show.mazzalab --ui-dir apps/mazzalab-web/dist --follow http://main-machine:53080
+   ```
+
+   (add `?passcode=1234` to the address if the main machine asks for a
+   passcode).
+3. Open the backup's address in a browser. A line under the top bar says it is
+   a backup that follows the main server, and the screen is read-only. It
+   mirrors what the main machine does, input by input.
+4. If the main machine stops answering for a second, the backup takes over:
+   it sends a warning (it has taken over), the line goes away, and it can be
+   operated. From then on its own triggers and outputs run.
+
+Know the limits: sounds already playing when the backup joined are not heard
+there until the next cues; the backup records no input log until it takes over;
+and there is no menu for it in the desktop app yet, only the headless server.
+Try it before the show.
+
 ## 15. Keyboard shortcuts
 
 | Keys | Does |
