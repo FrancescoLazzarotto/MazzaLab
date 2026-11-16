@@ -18,5 +18,10 @@ symphonia = { version = "0.6", features = ["all"] }
 thiserror.workspace = true
 tracing = "0.1"
 
+[features]
+# Steinberg ASIO drivers on Windows, next to WASAPI. Building it needs
+# libclang (LLVM); cpal fetches the ASIO SDK unless CPAL_ASIO_DIR names one.
+asio = ["cpal/asio"]
+
 [lints]
 workspace = true
