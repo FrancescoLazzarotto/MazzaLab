@@ -488,7 +488,67 @@ pub struct Persistence {
     pub autosave: Option<Duration>,
     /// How many replaced versions of the show file are kept.
     pub backups: usize,
+    /// Every input is written to `logs/` next to the show file, to replay
+    /// the performance later.
+    pub record: bool,
 }
+
+/// The input records kept per show; older ones are deleted.
+const RECORDS_KEPT: usize = 20;
+
+/// Starts writing the inputs of `show` to a new record next to `path`.
+fn start_record(show: &mut Show, path: Option<&Path>) {
+    let Some(path) = path else {
+        return;
+    };
+    let Some(dir) = folder(path).map(|folder| folder.join(LOGS_FOLDER)) else {
+        return;
+    };
+    let stem = path.file_stem().map_or_else(
+        || "show".to_owned(),
+        |stem| stem.to_string_lossy().into_owned(),
+    );
+    let now = chrono::Local::now();
+    let file = dir.join(format!("{stem} {}.jsonl", now.format("%Y-%m-%d %H.%M.%S")));
+    let opened = std::fs::create_dir_all(&dir).and_then(|()| std::fs::File::create(&file));
+    match opened
+        .and_then(|out| show.record_to(Box::new(std::io::BufWriter::new(out)), &now.to_rfc3339()))
+    {
+        Ok(()) => {
+            tracing::debug!(record = %file.display(), "recording inputs");
+            prune_records(&dir, &stem);
+        }
+        Err(error) => tracing::warn!(%error, record = %file.display(), "inputs not recorded"),
+    }
+}
+
+/// Deletes the oldest records of `stem` beyond [`RECORDS_KEPT`].
+fn prune_records(dir: &Path, stem: &str) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    let prefix = format!("{stem} ");
+    let mut records: Vec<PathBuf> = entries
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.extension()
+                .is_some_and(|extension| extension == "jsonl")
+                && path
+                    .file_name()
+                    .is_some_and(|name| name.to_string_lossy().starts_with(&prefix))
+        })
+        .collect();
+    // The names carry the time, so they sort by it.
+    records.sort();
+    let excess = records.len().saturating_sub(RECORDS_KEPT);
+    for old in &records[..excess] {
+        let _ = std::fs::remove_file(old);
+    }
+}
+
+/// Folder, next to the show file, that input records are written to.
+pub const LOGS_FOLDER: &str = "logs";
 
 /// Starts the actor task. `make_outputs` receives the completion channel the
 /// outputs use to report finished actions.
@@ -501,7 +561,12 @@ pub fn spawn(
         path,
         autosave,
         backups,
+        record,
     } = persistence;
+    let mut show = show;
+    if record {
+        start_record(&mut show, path.as_deref());
+    }
     let (requests, receiver) = mpsc::channel(256);
     let (updates, _) = broadcast::channel(1024);
     let (finished_tx, finished_rx) = mpsc::unbounded_channel();
@@ -530,6 +595,7 @@ pub fn spawn(
         path,
         autosave,
         backups,
+        record,
         // Recovered changes are already in the autosave they came from.
         autosaved: show_revision,
         autosave_due: None,
@@ -555,6 +621,8 @@ struct Actor {
     path: Option<PathBuf>,
     autosave: Option<Duration>,
     backups: usize,
+    /// Whether inputs are recorded.
+    record: bool,
     /// The revision last written to the autosave file.
     autosaved: u64,
     /// When the changes made since then are written.
@@ -893,6 +961,9 @@ impl Actor {
         } else {
             Show::new(workspace)
         };
+        if self.record {
+            start_record(&mut self.show, path.as_deref());
+        }
         // The new show's clock starts now; nothing of the old one carries on.
         self.start = Instant::now();
         self.path = path;

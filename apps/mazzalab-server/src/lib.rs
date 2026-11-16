@@ -76,6 +76,9 @@ pub struct ServerConfig {
     /// Announce the server on the local network (mDNS) so tablets and
     /// control surfaces find it. Off in tests.
     pub announce: bool,
+    /// Every input is recorded in `logs/` next to the show file, to replay
+    /// a performance with `mazzalab replay`.
+    pub record_inputs: bool,
 }
 
 impl Default for ServerConfig {
@@ -93,6 +96,7 @@ impl Default for ServerConfig {
             screens: None,
             trust_local: true,
             announce: true,
+            record_inputs: true,
         }
     }
 }
@@ -193,6 +197,7 @@ pub async fn start(
         path: config.show_path,
         autosave: config.autosave,
         backups: config.backups,
+        record: config.record_inputs,
     };
     let (handle, actor) = actor::spawn(show, persistence, make_outputs);
     handle.set_trust_local(config.trust_local);
