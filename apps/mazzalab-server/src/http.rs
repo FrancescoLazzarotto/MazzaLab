@@ -63,6 +63,7 @@ pub fn router_with_screens(
         .route("/api/access", get(access))
         .route("/api/snapshot", get(snapshot))
         .route("/api/status", get(status))
+        .route("/api/diagnostics", get(diagnostics))
         .route("/api/command", post(command))
         .route("/api/save", post(save))
         .route("/api/show", get(show_file))
@@ -235,6 +236,15 @@ async fn snapshot(
             Json(serde_json::to_value(visible(&snapshot, access)).unwrap_or(Value::Null))
                 .into_response()
         }
+        None => StatusCode::SERVICE_UNAVAILABLE.into_response(),
+    }
+}
+
+/// How the server is doing: uptime, clients, audio load and dropouts, the
+/// input record.
+async fn diagnostics(State(state): State<AppState>) -> Response {
+    match state.handle.diagnostics().await {
+        Some(diagnostics) => Json(diagnostics).into_response(),
         None => StatusCode::SERVICE_UNAVAILABLE.into_response(),
     }
 }
@@ -1047,6 +1057,7 @@ fn message_need(message: &ClientMessage) -> Need {
 async fn client(socket: WebSocket, handle: ShowHandle, Passcode(code, local): Passcode) {
     // Checked again on every message: the show's passcodes may change.
     let access = || handle.access(code.as_deref(), local);
+    let _connected = handle.client_connected();
     let (mut sink, mut stream) = socket.split();
     let mut updates = handle.subscribe();
 

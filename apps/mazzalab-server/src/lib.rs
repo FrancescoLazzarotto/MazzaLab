@@ -35,7 +35,8 @@ use tokio::task::JoinHandle;
 
 pub use access::{Access, Need};
 pub use actor::{
-    AudioStatus, Completion, DmxLevel, Notice, NoticeLevel, Output, ShowHandle, TimecodeIn, Update,
+    AudioStatus, ClientGuard, Completion, Diagnostics, DmxLevel, Notice, NoticeLevel, Output,
+    ShowHandle, TimecodeIn, Update,
 };
 pub use http::{MEDIA_FOLDER, router, router_with_screens};
 pub use outputs::{

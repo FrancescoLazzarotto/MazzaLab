@@ -53,6 +53,11 @@ pub trait Output: Send {
         None
     }
 
+    /// How hard the audio thread worked since the last call.
+    fn audio_load(&mut self) -> Option<mazzalab_audio::AudioLoad> {
+        None
+    }
+
     /// Plays a cue by itself on the audition output, or stops what is being
     /// auditioned when `cue` is `None`. Nothing in the show changes.
     fn audition(&mut self, _show: &Show, _cue: Option<CueId>) {}
@@ -269,6 +274,9 @@ enum Request {
         path: PathBuf,
         reply: oneshot::Sender<Result<(), String>>,
     },
+    Diagnostics {
+        reply: oneshot::Sender<Diagnostics>,
+    },
 }
 
 /// What tells the open show apart, which changes when another is opened.
@@ -302,6 +310,44 @@ pub struct ShowHandle {
     requests: mpsc::Sender<Request>,
     updates: broadcast::Sender<Update>,
     identity: Arc<RwLock<Identity>>,
+    clients: Arc<std::sync::atomic::AtomicUsize>,
+}
+
+/// Counts a connected client for as long as it is held.
+#[derive(Debug)]
+pub struct ClientGuard(Arc<std::sync::atomic::AtomicUsize>);
+
+impl Drop for ClientGuard {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+/// How the server is doing, for the diagnostics panel.
+#[derive(Debug, Clone, Serialize)]
+pub struct Diagnostics {
+    /// Seconds since the server started.
+    pub uptime: f64,
+    /// WebSocket clients connected now.
+    pub clients: usize,
+    /// The audio thread's load since the previous reading, 0 to 1.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub audio_load: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub audio_peak_load: Option<f32>,
+    /// Audio callbacks that came late since the device opened: likely
+    /// dropouts.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub audio_late: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub audio_callbacks: Option<u64>,
+    /// Cues running now.
+    pub running: usize,
+    /// Where this show's inputs are recorded, and why not if it failed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub record: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub record_error: Option<String>,
 }
 
 impl ShowHandle {
@@ -335,6 +381,20 @@ impl ShowHandle {
     /// Whether the show asks clients for a passcode.
     pub fn has_passcodes(&self) -> bool {
         !self.identity().passcodes.is_empty()
+    }
+
+    /// Counts a client as connected until the guard is dropped.
+    pub fn client_connected(&self) -> ClientGuard {
+        self.clients
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        ClientGuard(Arc::clone(&self.clients))
+    }
+
+    /// How the server is doing.
+    pub async fn diagnostics(&self) -> Option<Diagnostics> {
+        let mut diagnostics = self.ask(|reply| Request::Diagnostics { reply }).await?;
+        diagnostics.clients = self.clients.load(std::sync::atomic::Ordering::Relaxed);
+        Some(diagnostics)
     }
 
     /// The open show's file, if it has one.
@@ -504,13 +564,9 @@ pub struct Persistence {
 const RECORDS_KEPT: usize = 20;
 
 /// Starts writing the inputs of `show` to a new record next to `path`.
-fn start_record(show: &mut Show, path: Option<&Path>) {
-    let Some(path) = path else {
-        return;
-    };
-    let Some(dir) = folder(path).map(|folder| folder.join(LOGS_FOLDER)) else {
-        return;
-    };
+fn start_record(show: &mut Show, path: Option<&Path>) -> Option<PathBuf> {
+    let path = path?;
+    let dir = folder(path).map(|folder| folder.join(LOGS_FOLDER))?;
     let stem = path.file_stem().map_or_else(
         || "show".to_owned(),
         |stem| stem.to_string_lossy().into_owned(),
@@ -524,8 +580,12 @@ fn start_record(show: &mut Show, path: Option<&Path>) {
         Ok(()) => {
             tracing::debug!(record = %file.display(), "recording inputs");
             prune_records(&dir, &stem);
+            Some(file)
         }
-        Err(error) => tracing::warn!(%error, record = %file.display(), "inputs not recorded"),
+        Err(error) => {
+            tracing::warn!(%error, record = %file.display(), "inputs not recorded");
+            None
+        }
     }
 }
 
@@ -571,9 +631,11 @@ pub fn spawn(
         record,
     } = persistence;
     let mut show = show;
-    if record {
-        start_record(&mut show, path.as_deref());
-    }
+    let record_file = if record {
+        start_record(&mut show, path.as_deref())
+    } else {
+        None
+    };
     let (requests, receiver) = mpsc::channel(256);
     let (updates, _) = broadcast::channel(1024);
     let (finished_tx, finished_rx) = mpsc::unbounded_channel();
@@ -596,6 +658,7 @@ pub fn spawn(
         requests,
         updates: updates.clone(),
         identity: Arc::clone(&identity),
+        clients: Arc::default(),
     };
     let show_revision = show.revision();
     let actor = Actor {
@@ -605,6 +668,8 @@ pub fn spawn(
         autosave,
         backups,
         record,
+        record_file,
+        born: Instant::now(),
         // Recovered changes are already in the autosave they came from.
         autosaved: show_revision,
         autosave_due: None,
@@ -641,6 +706,10 @@ struct Actor {
     backups: usize,
     /// Whether inputs are recorded.
     record: bool,
+    /// Where they are recorded.
+    record_file: Option<PathBuf>,
+    /// When the server started.
+    born: Instant,
     /// The revision last written to the autosave file.
     autosaved: u64,
     /// When the changes made since then are written.
@@ -834,6 +903,26 @@ impl Actor {
             Request::SaveAs { path, reply } => {
                 let _ = reply.send(self.save_as(path));
             }
+            Request::Diagnostics { reply } => {
+                let load = self
+                    .outputs
+                    .iter_mut()
+                    .find_map(|output| output.audio_load());
+                let _ = reply.send(Diagnostics {
+                    uptime: self.born.elapsed().as_secs_f64(),
+                    clients: 0,
+                    audio_load: load.map(|load| load.load),
+                    audio_peak_load: load.map(|load| load.peak),
+                    audio_late: load.map(|load| load.late),
+                    audio_callbacks: load.map(|load| load.callbacks),
+                    running: self.show.status().running.len(),
+                    record: self
+                        .record_file
+                        .as_ref()
+                        .map(|file| file.display().to_string()),
+                    record_error: self.show.record_error().map(str::to_owned),
+                });
+            }
             Request::CueFile { cue, reply } => {
                 let file = self
                     .show
@@ -1017,9 +1106,11 @@ impl Actor {
         } else {
             Show::new(workspace)
         };
-        if self.record {
-            start_record(&mut self.show, path.as_deref());
-        }
+        self.record_file = if self.record {
+            start_record(&mut self.show, path.as_deref())
+        } else {
+            None
+        };
         // The new show's clock starts now; nothing of the old one carries on.
         self.start = Instant::now();
         self.path = path;

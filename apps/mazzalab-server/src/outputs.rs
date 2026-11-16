@@ -263,6 +263,10 @@ impl Output for AudioBackend {
         self.output.as_ref().map(AudioOutput::take_peaks_db)
     }
 
+    fn audio_load(&mut self) -> Option<mazzalab_audio::AudioLoad> {
+        self.output.as_ref().map(AudioOutput::take_load)
+    }
+
     fn audio_status(&self) -> Option<AudioStatus> {
         let audition = self
             .audition
