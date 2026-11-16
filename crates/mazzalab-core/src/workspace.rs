@@ -281,6 +281,11 @@ pub struct WorkspaceSettings {
     /// An audio input to read LTC from; `None` listens to none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ltc_input: Option<LtcInput>,
+    /// The device ID (0–127) this show answers to for incoming MIDI Show
+    /// Control. Without one, only messages to all devices (127) are
+    /// answered.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub msc_device_id: Option<u8>,
     /// What clients on other machines may do, by passcode. Without any,
     /// every client may do everything; the machine running the show always
     /// may.
@@ -336,6 +341,7 @@ impl Default for WorkspaceSettings {
             stages: Vec::new(),
             midi_controls: MidiControls::default(),
             ltc_input: None,
+            msc_device_id: None,
             passcodes: Vec::new(),
         }
     }

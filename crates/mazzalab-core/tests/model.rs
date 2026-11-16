@@ -250,3 +250,22 @@ fn wall_clock_triggers_read_their_time_and_days() {
         serde_json::json!({ "time": "10:00", "days": ["saturday", "sunday"] })
     );
 }
+
+#[test]
+fn the_msc_device_id_is_kept_only_when_set() {
+    use mazzalab_core::WorkspaceSettings;
+    let mut settings = WorkspaceSettings::default();
+    assert!(
+        serde_json::to_value(&settings)
+            .unwrap()
+            .get("msc_device_id")
+            .is_none()
+    );
+    settings.msc_device_id = Some(5);
+    let json = serde_json::to_string(&settings).unwrap();
+    let back: WorkspaceSettings = serde_json::from_str(&json).unwrap();
+    assert_eq!(back.msc_device_id, Some(5));
+    // Shows saved before the setting existed still load.
+    let old: WorkspaceSettings = serde_json::from_str("{}").unwrap();
+    assert_eq!(old.msc_device_id, None);
+}
