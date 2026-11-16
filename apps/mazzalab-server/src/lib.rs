@@ -17,6 +17,7 @@ mod http;
 mod osc_net;
 mod outputs;
 pub mod protocol;
+mod screens;
 
 use std::io;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -31,10 +32,11 @@ use tokio::task::JoinHandle;
 pub use actor::{
     AudioStatus, Completion, DmxLevel, Notice, NoticeLevel, Output, ShowHandle, TimecodeIn, Update,
 };
-pub use http::{MEDIA_FOLDER, router};
+pub use http::{MEDIA_FOLDER, router, router_with_screens};
 pub use outputs::{
     AudioBackend, LightingBackend, LogOutput, MidiBackend, NetworkBackend, StageBackend,
 };
+pub use screens::{Screen, Screens, ScreensHandle};
 
 pub const DEFAULT_HTTP_PORT: u16 = 53080;
 
@@ -60,6 +62,9 @@ pub struct ServerConfig {
     /// The workspace comes from an autosave ([`recoverable`]): the show
     /// starts out with unsaved changes.
     pub recovered: bool,
+    /// The machine's displays, to put stages on full screen; `None` on a
+    /// server without any.
+    pub screens: Option<ScreensHandle>,
 }
 
 impl Default for ServerConfig {
@@ -74,6 +79,7 @@ impl Default for ServerConfig {
             autosave: Some(Duration::from_secs(15)),
             backups: 10,
             recovered: false,
+            screens: None,
         }
     }
 }
@@ -150,7 +156,7 @@ pub async fn start(
         backups: config.backups,
     };
     let (handle, actor) = actor::spawn(show, persistence, make_outputs);
-    let app = router(handle.clone(), config.ui_dir);
+    let app = router_with_screens(handle.clone(), config.ui_dir, config.screens);
     let tasks = vec![
         actor,
         tokio::spawn(osc_net::serve_udp(

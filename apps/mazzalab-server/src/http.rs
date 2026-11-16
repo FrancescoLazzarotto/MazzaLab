@@ -23,6 +23,7 @@ use tower_http::services::ServeDir;
 
 use crate::actor::{NoticeLevel, ShowHandle, Update};
 use crate::protocol::{ClientMessage, ServerMessage};
+use crate::screens::ScreensHandle;
 
 /// Folder, next to the show file, that uploaded media is stored in.
 pub const MEDIA_FOLDER: &str = "media";
@@ -36,12 +37,23 @@ type WaveformCache = Vec<(WaveformKey, Arc<Value>)>;
 struct AppState {
     handle: ShowHandle,
     waveforms: Arc<Mutex<WaveformCache>>,
+    screens: Option<ScreensHandle>,
 }
 
 pub fn router(handle: ShowHandle, ui_dir: Option<PathBuf>) -> Router {
+    router_with_screens(handle, ui_dir, None)
+}
+
+/// The API, also offering the machine's displays to put stages on.
+pub fn router_with_screens(
+    handle: ShowHandle,
+    ui_dir: Option<PathBuf>,
+    screens: Option<ScreensHandle>,
+) -> Router {
     let state = AppState {
         handle,
         waveforms: Arc::default(),
+        screens,
     };
     let api = Router::new()
         .route("/api/snapshot", get(snapshot))
@@ -54,6 +66,7 @@ pub fn router(handle: ShowHandle, ui_dir: Option<PathBuf>) -> Router {
         .route("/api/timecode/in", post(timecode_in))
         .route("/api/waveform", get(waveform))
         .route("/api/cue-media", get(cue_media))
+        .route("/api/screens", get(list_screens).post(show_on_screens))
         .route(
             "/api/media",
             get(list_media)
@@ -151,6 +164,39 @@ async fn midi() -> Json<Value> {
     .await
     .unwrap_or_default();
     Json(json!({ "outputs": ports.0, "inputs": ports.1 }))
+}
+
+/// The machine's displays and whether stages are up on them; a server
+/// without any says it has none to offer.
+async fn list_screens(State(state): State<AppState>) -> Json<Value> {
+    match state.screens {
+        Some(ScreensHandle(screens)) => {
+            let listed = tokio::task::spawn_blocking(move || (screens.list(), screens.shown()))
+                .await
+                .unwrap_or_default();
+            Json(json!({ "available": true, "screens": listed.0, "shown": listed.1 }))
+        }
+        None => Json(json!({ "available": false, "screens": [], "shown": false })),
+    }
+}
+
+#[derive(Deserialize)]
+struct ShowOnScreens {
+    shown: bool,
+}
+
+/// Puts the stages up on the screens they name, or takes them down.
+async fn show_on_screens(
+    State(state): State<AppState>,
+    Json(request): Json<ShowOnScreens>,
+) -> Response {
+    match state.screens {
+        Some(ScreensHandle(screens)) => {
+            screens.set_shown(request.shown);
+            Json(json!({ "shown": screens.shown() })).into_response()
+        }
+        None => StatusCode::NOT_FOUND.into_response(),
+    }
 }
 
 /// Feeds the show a MIDI message as if it had arrived on an input, to try

@@ -220,6 +220,10 @@ pub struct Stage {
     pub width: u32,
     #[serde(default = "default_stage_height")]
     pub height: u32,
+    /// The display the desktop app puts it on, full screen, by the name
+    /// the system gives it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub screen: Option<String>,
 }
 
 impl Stage {
@@ -229,6 +233,7 @@ impl Stage {
             name: name.into(),
             width: default_stage_width(),
             height: default_stage_height(),
+            screen: None,
         }
     }
 }

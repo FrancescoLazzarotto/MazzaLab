@@ -125,3 +125,97 @@ async fn stages_are_told_what_is_up_fetch_its_file_and_report_its_end() {
     assert!(!matches!(updates.try_recv(), Ok(Update::Stage(_))));
     server.stop().await;
 }
+
+/// Displays that only remember whether they were asked to show the stages.
+struct FakeScreens(std::sync::atomic::AtomicBool);
+
+impl mazzalab_server::Screens for FakeScreens {
+    fn list(&self) -> Vec<mazzalab_server::Screen> {
+        vec![mazzalab_server::Screen {
+            name: "DISPLAY2".into(),
+            width: 1280,
+            height: 720,
+            x: 1920,
+            y: 0,
+            main: false,
+        }]
+    }
+
+    fn shown(&self) -> bool {
+        self.0.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    fn set_shown(&self, shown: bool) {
+        self.0.store(shown, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+#[tokio::test]
+async fn the_machines_screens_are_offered_only_when_it_has_some() {
+    let config = ServerConfig {
+        bind: LOCALHOST,
+        osc_port: 0,
+        udp_reply_port: None,
+        http_port: 0,
+        ..ServerConfig::default()
+    };
+    let server = mazzalab_server::start(config, Workspace::new("Screens"), |_| Vec::new())
+        .await
+        .unwrap();
+    let request = |method: &str, body: Option<Value>| {
+        let builder = Request::builder().method(method).uri("/api/screens");
+        match body {
+            Some(body) => builder
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+            None => builder.body(Body::empty()).unwrap(),
+        }
+    };
+    let json_of = async |response: axum::response::Response| -> Value {
+        let body = axum::body::to_bytes(response.into_body(), 4096)
+            .await
+            .unwrap();
+        serde_json::from_slice(&body).unwrap()
+    };
+
+    // A headless server has none, and cannot put stages on any.
+    let headless = mazzalab_server::router(server.handle.clone(), None);
+    let listed = json_of(
+        headless
+            .clone()
+            .oneshot(request("GET", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(listed["available"], false);
+    let response = headless
+        .oneshot(request("POST", Some(json!({ "shown": true }))))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+    let screens = mazzalab_server::ScreensHandle(std::sync::Arc::new(FakeScreens(
+        std::sync::atomic::AtomicBool::new(false),
+    )));
+    let app = mazzalab_server::router_with_screens(server.handle.clone(), None, Some(screens));
+    let listed = json_of(app.clone().oneshot(request("GET", None)).await.unwrap()).await;
+    assert_eq!(
+        (&listed["available"], &listed["shown"]),
+        (&json!(true), &json!(false))
+    );
+    assert_eq!(listed["screens"][0]["name"], "DISPLAY2");
+    assert_eq!(listed["screens"][0]["width"], 1280);
+    let shown = json_of(
+        app.clone()
+            .oneshot(request("POST", Some(json!({ "shown": true }))))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(shown, json!({ "shown": true }));
+    let listed = json_of(app.oneshot(request("GET", None)).await.unwrap()).await;
+    assert_eq!(listed["shown"], true);
+    server.stop().await;
+}
