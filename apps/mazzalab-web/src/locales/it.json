@@ -478,5 +478,10 @@
   "media.relinked": "file ritrovati",
   "media.notFound": "non trovati",
   "media.missing": "file mancanti",
-  "media.searchHere": "Cerca qui"
+  "media.searchHere": "Cerca qui",
+  "template.menu": "Cue da un template",
+  "template.none": "Nessun template. Seleziona una cue e salvala come template.",
+  "template.save": "Salva la cue selezionata come template",
+  "template.name": "Nome del template",
+  "template.delete": "Elimina il template"
 }

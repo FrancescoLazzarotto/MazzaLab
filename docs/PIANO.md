@@ -191,7 +191,7 @@ Parità con QLab e poi oltre.
 - [x] Copia, incolla, duplica; selezione multipla e modifica di gruppo
       nell'inspector.
 - [x] Rinumerazione e auto-numerazione con passo configurabile.
-- [ ] Template dei cue.
+- [x] Template dei cue: si salva la cue selezionata e si crea da un menu nella barra.
 - [x] Ricerca e filtri (per tipo, colore, flag, testo in numero, nome e note).
 - [x] Gestione delle cue list: aggiungere, rinominare, eliminare, anche
       liste cart, e due liste affiancate (per dispositivo).

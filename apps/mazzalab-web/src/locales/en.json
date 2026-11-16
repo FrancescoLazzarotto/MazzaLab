@@ -478,5 +478,10 @@
   "media.relinked": "files found again",
   "media.notFound": "not found",
   "media.missing": "files missing",
-  "media.searchHere": "Search here"
+  "media.searchHere": "Search here",
+  "template.menu": "Cue from a template",
+  "template.none": "No templates yet. Select a cue and save it as one.",
+  "template.save": "Save the selected cue as a template",
+  "template.name": "Template name",
+  "template.delete": "Delete the template"
 }

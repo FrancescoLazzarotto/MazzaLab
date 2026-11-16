@@ -356,6 +356,12 @@ export interface Passcode {
   edit: boolean;
 }
 
+/** A cue kept to make others from. */
+export interface CueTemplate {
+  name: string;
+  cue: Cue;
+}
+
 export type Severity = "error" | "warning" | "info";
 
 export type PreflightKey =
@@ -403,6 +409,7 @@ export interface WorkspaceSettings {
   ltc_input?: LtcInput;
   /** The device ID (0-127) answered to for incoming MIDI Show Control; absent answers only to all (127). */
   msc_device_id?: number;
+  cue_templates?: CueTemplate[];
 }
 
 /** Where linear timecode comes in: an input device (absent: the default input) and its channel, from 1. */

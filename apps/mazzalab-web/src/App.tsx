@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useShow, type ShowConnection } from "./api/connection";
-import type { Command, Cue, CueList as CueListData, CueType, Id, WorkspaceSettings } from "./api/types";
+import type { Command, Cue, CueList as CueListData, CueTemplate, CueType, Id, WorkspaceSettings } from "./api/types";
 import { ActiveCues } from "./components/ActiveCues";
 import { AudioPanel } from "./components/AudioPanel";
 import { CueCart } from "./components/CueCart";
@@ -33,6 +33,7 @@ import {
   locate,
   moveCommands,
   needsTarget,
+  typeLabel,
   newCue,
   nextNumber,
   renumber,
@@ -44,6 +45,9 @@ import { cuesForHotkey, hotkeyOf } from "./hotkeys";
 import { actionFor } from "./keymap";
 import { useTitleLabels } from "./a11y";
 import { MediaPanel } from "./components/MediaPanel";
+import { NameDialog } from "./components/NameDialog";
+import { TemplateMenu } from "./components/TemplateMenu";
+import { cueFromTemplate, makeTemplate, suggestedName, withTemplate, withoutTemplate } from "./templates";
 import { PreflightDialog } from "./components/PreflightDialog";
 import { mediaKind } from "./mediaLibrary";
 import { NO_OTHERS, applyOthersEvents, type OthersState } from "./others";
@@ -72,6 +76,7 @@ export function App({ connection, access, onChangePasscode }: { connection: Show
   const [printing, setPrinting] = useState(false);
   const [fileDialog, setFileDialog] = useState<FileMode | null>(null);
   const [checking, setChecking] = useState(false);
+  const [namingTemplate, setNamingTemplate] = useState(false);
   const [others, setOthers] = useState<OthersState>(NO_OTHERS);
   useEffect(() => connection.onEvents((events) => setOthers((current) => applyOthersEvents(current, events))), [connection]);
   const [importing, setImporting] = useState<{ fileName: string; result: CsvImport } | null>(null);
@@ -210,6 +215,20 @@ export function App({ connection, access, onChangePasscode }: { connection: Show
         .catch(() => {});
     },
     [allCues, batch, focus, insertionPoint, list],
+  );
+
+  const createFromTemplate = useCallback(
+    (template: CueTemplate) => {
+      if (!list) return;
+      const cue = cueFromTemplate(template, nextNumber(allCues));
+      batch(insertCommands(list.cues, list.id, [cue], insertionPoint()))
+        .then(() => {
+          setPicked([cue.id]);
+          setAnchor(cue.id);
+        })
+        .catch(() => {});
+    },
+    [allCues, batch, insertionPoint, list],
   );
 
   const deleteSelected = useCallback(() => {
@@ -396,7 +415,7 @@ export function App({ connection, access, onChangePasscode }: { connection: Show
       .catch(() => {});
   }, [batch, importing, insertionPoint, list]);
 
-  const modal = settingsOpen || renumbering || importing !== null || fileDialog !== null || checking;
+  const modal = settingsOpen || renumbering || importing !== null || fileDialog !== null || checking || namingTemplate;
   useEffect(() => {
     const isTyping = (target: EventTarget | null) =>
       target instanceof HTMLElement && target.closest("input, textarea, select") !== null;
@@ -598,7 +617,15 @@ export function App({ connection, access, onChangePasscode }: { connection: Show
             {editable && (
               <div className="toolbar">
                 <Toolbox onAdd={addCue} />
+                <TemplateMenu
+                  templates={workspace.settings.cue_templates ?? []}
+                  onCreate={createFromTemplate}
+                  onDelete={(name) => updateSettings({ ...workspace.settings, cue_templates: withoutTemplate(workspace.settings.cue_templates ?? [], name) })}
+                />
                 <div className="list-actions">
+                  <button className="icon-button" onClick={() => setNamingTemplate(true)} disabled={selected.length !== 1} title={t("template.save")}>
+                    <Icon name="template-save" />
+                  </button>
                   <button className="icon-button" onClick={duplicate} disabled={selected.length === 0} title={`${t("action.duplicate")} (Ctrl+D)`}>
                     <Icon name="copy" />
                   </button>
@@ -765,6 +792,19 @@ export function App({ connection, access, onChangePasscode }: { connection: Show
                 step,
               ),
             );
+          }}
+        />
+      )}
+      {namingTemplate && selectedCues.length === 1 && workspace && (
+        <NameDialog
+          title={t("template.save")}
+          label={t("template.name")}
+          verb={t("action.save")}
+          initial={suggestedName(selectedCues[0], typeLabel(selectedCues[0].type))}
+          onClose={() => setNamingTemplate(false)}
+          onApply={(name) => {
+            setNamingTemplate(false);
+            updateSettings({ ...workspace.settings, cue_templates: withTemplate(workspace.settings.cue_templates ?? [], makeTemplate(name, selectedCues[0])) });
           }}
         />
       )}
