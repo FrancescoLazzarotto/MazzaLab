@@ -26,6 +26,7 @@ import { GeometryFields, GeometryTab, StagePreview, TextStyleFields } from "./Ge
 import { TriggerFields } from "./TriggerFields";
 import { StageField, VideoFields } from "./VideoFields";
 import { filePosition, Waveform } from "./Waveform";
+import { TimelineView } from "./TimelineView";
 
 const COLORS: CueColor[] = ["red", "orange", "yellow", "green", "blue", "purple", "grey"];
 const CONTINUE_MODES: ContinueMode[] = ["do_not_continue", "auto_continue", "auto_follow"];
@@ -127,7 +128,7 @@ export function Inspector({
           />
         )}
         {current === "levels" && cue.type === "audio" && <AudioLevels cue={cue} outputs={audio?.channels ?? 2} set={set} />}
-        {current === "settings" && <TypeSettings connection={connection} cue={cue} allCues={allCues} settings={settings} set={set} />}
+        {current === "settings" && <TypeSettings connection={connection} cue={cue} allCues={allCues} settings={settings} set={set} editable={editable} onChild={onChange} />}
         {current === "geometry" && (cue.type === "video" || cue.type === "text") && <GeometryTab connection={connection} cue={cue} settings={settings} set={set} />}
         {current === "triggers" && <TriggerFields connection={connection} cue={cue} set={set} />}
       </fieldset>
@@ -358,12 +359,17 @@ function TypeSettings({
   allCues,
   settings,
   set,
+  editable,
+  onChild,
 }: {
   connection: ShowConnection;
   cue: Cue;
   allCues: Cue[];
   settings: WorkspaceSettings;
   set: (patch: Patch) => void;
+  editable: boolean;
+  /** A child of this cue changed, for the timeline. */
+  onChild: (cue: Cue) => void;
 }) {
   const { t } = useI18n();
   const numbered = flatten(allCues)
@@ -575,6 +581,11 @@ function TypeSettings({
               {(cue.children ?? []).length} {t("inspector.children")}
             </p>
           </div>
+          {(cue.mode ?? "timeline") === "timeline" && (
+            <div className="form-column timeline-column">
+              <TimelineView children={cue.children ?? []} editable={editable} onChange={onChild} />
+            </div>
+          )}
         </div>
       );
     default:
