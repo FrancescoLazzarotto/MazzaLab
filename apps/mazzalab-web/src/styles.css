@@ -1660,6 +1660,126 @@ button.audition.active {
   flex: 1;
 }
 
+.stage-row .field:has(input[type="number"]) {
+  flex: 0 0 84px;
+}
+
+/* A cue as its stage shows it, small, in the inspector. */
+.preview-column {
+  flex: 0 0 300px;
+}
+
+.stage-preview {
+  position: relative;
+  width: 300px;
+  overflow: hidden;
+  background: #000;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  touch-action: none;
+  user-select: none;
+}
+
+.stage-preview.movable {
+  cursor: move;
+}
+
+.stage-preview .stage-video,
+.stage-preview .stage-text {
+  pointer-events: none;
+}
+
+/* The stage's own edge, which the picture may spill past. */
+.stage-preview .stage-canvas {
+  outline: 1px dashed rgba(255, 255, 255, 0.18);
+  outline-offset: -1px;
+}
+
+.stage-preview-size {
+  position: absolute;
+  right: 6px;
+  bottom: 4px;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.snap-line {
+  position: absolute;
+  background: var(--focus);
+  opacity: 0.8;
+  pointer-events: none;
+}
+
+.snap-line.vertical {
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+}
+
+.snap-line.horizontal {
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 1px;
+}
+
+/* Geometry numbers on one grid, so that columns line up from row to row. */
+.geometry-fields {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px 10px;
+  align-items: end;
+}
+
+.geometry-fields > .row {
+  display: contents;
+}
+
+.geometry-fields > .row > :first-child {
+  grid-column-start: 1;
+}
+
+.geometry-fields > div:last-child {
+  grid-column: 1 / -1;
+}
+
+.geometry-link {
+  grid-column: span 2;
+  padding-bottom: 5px;
+}
+
+.form-column.style-column {
+  flex: 0 0 340px;
+}
+
+.text-style-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.text-style-fields .row .field {
+  flex: 1;
+  min-width: 0;
+}
+
+.text-style-fields .segmented button {
+  padding: 0 9px;
+}
+
+.color-input {
+  height: 26px;
+  padding: 2px;
+  cursor: pointer;
+}
+
+.fade-opacity {
+  align-items: flex-end;
+}
+
 /* In a column the file field takes its own height, not the row's width. */
 .video-fields .file-field {
   flex: none;
@@ -1702,6 +1822,7 @@ button.audition.active {
   position: absolute;
   box-sizing: border-box;
   white-space: pre-wrap;
+  overflow-wrap: break-word;
 }
 
 .stage-label {
@@ -1822,7 +1943,6 @@ button.audition.active {
 
 .patch-names {
   margin-top: -4px;
-  overflow-wrap: break-word;
 }
 
 .patch-name {

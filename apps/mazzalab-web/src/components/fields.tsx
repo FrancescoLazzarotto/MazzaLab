@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { formatTime, parseTime } from "../format";
 
 /** Shared behaviour: edit locally, commit on Enter or blur, revert on Escape. */
@@ -23,12 +23,15 @@ export function TextField({
   onCommit,
   multiline = false,
   placeholder,
+  list,
 }: {
   label: string;
   value: string;
   onCommit: (value: string) => void;
   multiline?: boolean;
   placeholder?: string;
+  /** The id of a datalist to suggest from. */
+  list?: string;
 }) {
   const [draft, setDraft, revert] = useDraft(value);
   const commit = () => {
@@ -53,12 +56,34 @@ export function TextField({
       ) : (
         <input
           {...common}
+          list={list}
           onKeyDown={(event) => {
             if (event.key === "Enter") commit();
             if (event.key === "Escape") revert();
           }}
         />
       )}
+    </Field>
+  );
+}
+
+/** A colour, `#rrggbb`, committed when the picker closes rather than at every step. */
+export function ColorField({ label, value, onCommit }: { label: string; value: string; onCommit: (value: string) => void }) {
+  const input = useRef<HTMLInputElement>(null);
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  const commit = useRef(onCommit);
+  commit.current = onCommit;
+  useEffect(() => {
+    const element = input.current;
+    if (!element) return;
+    const changed = () => element.value !== value && commit.current(element.value);
+    element.addEventListener("change", changed);
+    return () => element.removeEventListener("change", changed);
+  }, [value]);
+  return (
+    <Field label={label}>
+      <input ref={input} type="color" className="color-input" value={draft} onChange={(event) => setDraft(event.target.value)} />
     </Field>
   );
 }

@@ -388,7 +388,7 @@ function StagesTab({ stages, onChange }: { stages: Stage[]; onChange: (stages: S
   const { t } = useI18n();
   // Without stages the show has one called Main: list it, so that it can be renamed.
   const shown = stages.length > 0 ? stages : [{ name: "Main" }];
-  const update = (index: number, name: string) => onChange(shown.map((stage, position) => (position === index ? { name } : stage)));
+  const update = (index: number, change: Partial<Stage>) => onChange(shown.map((stage, position) => (position === index ? { ...stage, ...change } : stage)));
   const add = () => {
     let n = shown.length + 1;
     while (shown.some((stage) => stage.name === `${t("settings.stageName")} ${n}`)) n++;
@@ -398,7 +398,9 @@ function StagesTab({ stages, onChange }: { stages: Stage[]; onChange: (stages: S
     <div className="form-column">
       {shown.map((stage, index) => (
         <div className="row patch-row stage-row" key={index}>
-          <TextField label={t("settings.patchName")} value={stage.name} onCommit={(name) => name.trim() && update(index, name.trim())} />
+          <TextField label={t("settings.patchName")} value={stage.name} onCommit={(name) => name.trim() && update(index, { name: name.trim() })} />
+          <NumberField label={t("settings.stageWidth")} value={stage.width ?? 1920} min={16} onCommit={(width) => update(index, { width: Math.round(width) })} />
+          <NumberField label={t("settings.stageHeight")} value={stage.height ?? 1080} min={16} onCommit={(height) => update(index, { height: Math.round(height) })} />
           <button onClick={() => window.open(stageUrl(stage.name), `stage-${stage.name}`, "popup,width=960,height=540")}>
             <Icon name="external" size={13} />
             {t("stage.open")}

@@ -24,6 +24,7 @@ import { SliceList } from "./SliceList";
 import { MatrixEditor } from "./MatrixEditor";
 import { MidiFields } from "./MidiFields";
 import { MidiTriggerField } from "./MidiTriggerField";
+import { GeometryFields, GeometryTab, StagePreview, TextStyleFields } from "./GeometryFields";
 import { StageField, VideoFields } from "./VideoFields";
 import { filePosition, Waveform } from "./Waveform";
 
@@ -32,11 +33,12 @@ const CONTINUE_MODES: ContinueMode[] = ["do_not_continue", "auto_continue", "aut
 const GROUP_MODES: GroupMode[] = ["timeline", "start_first_and_enter", "start_first", "start_random", "playlist"];
 const CURVES: FadeCurve[] = ["linear", "s_curve"];
 
-type Tab = "basics" | "time" | "levels" | "settings";
+type Tab = "basics" | "time" | "levels" | "settings" | "geometry";
 type Patch = Record<string, unknown>;
 
 function tabsFor(cue: Cue): Tab[] {
   if (cue.type === "audio") return ["basics", "time", "levels"];
+  if (cue.type === "video" || cue.type === "text") return ["basics", "settings", "geometry"];
   const plain = ["start", "stop", "pause", "reset", "devamp", "goto", "arm", "disarm", "memo", "mic", "camera", "midi_file", "script"];
   return plain.includes(cue.type) ? ["basics"] : ["basics", "settings"];
 }
@@ -127,6 +129,7 @@ export function Inspector({
         )}
         {current === "levels" && cue.type === "audio" && <AudioLevels cue={cue} outputs={audio?.channels ?? 2} set={set} />}
         {current === "settings" && <TypeSettings connection={connection} cue={cue} allCues={allCues} settings={settings} set={set} />}
+        {current === "geometry" && (cue.type === "video" || cue.type === "text") && <GeometryTab connection={connection} cue={cue} settings={settings} set={set} />}
       </fieldset>
     </section>
   );
@@ -222,8 +225,10 @@ function Basics({
   );
 }
 
-function FadeFields({ cue, set }: { cue: Extract<Cue, { type: "fade" }>; set: (patch: Patch) => void }) {
+function FadeFields({ cue, set, target }: { cue: Extract<Cue, { type: "fade" }>; set: (patch: Patch) => void; target: Cue | undefined }) {
   const { t } = useI18n();
+  // A fade of a picture fades its opacity and moves it; one of anything else fades its level.
+  const visual = target?.type === "video" || target?.type === "text";
   return (
     <>
       <div className="row">
@@ -235,7 +240,29 @@ function FadeFields({ cue, set }: { cue: Extract<Cue, { type: "fade" }>; set: (p
           onChange={(curve) => set({ curve })}
         />
       </div>
-      <LevelField label={t("inspector.fadeTo")} value={cue.level_db ?? 0} onCommit={(level_db) => set({ level_db })} />
+      {visual ? (
+        <div className="row fade-opacity">
+          <CheckField
+            label={t("fade.opacity")}
+            checked={cue.opacity !== undefined}
+            onChange={(on) => set({ opacity: on ? (target.opacity === undefined || target.opacity > 0 ? 0 : 1) : undefined })}
+          />
+          {cue.opacity !== undefined && (
+            <NumberField
+              label={t("inspector.opacity")}
+              value={Math.round(cue.opacity * 100)}
+              min={0}
+              onCommit={(percent) => set({ opacity: Math.min(100, percent) / 100 })}
+            />
+          )}
+        </div>
+      ) : (
+        <LevelField label={t("inspector.fadeTo")} value={cue.level_db ?? 0} onCommit={(level_db) => set({ level_db })} />
+      )}
+      {visual && (
+        // Start a geometry fade from where the target sits, so that it moves from there.
+        <CheckField label={t("fade.geometry")} checked={cue.geometry !== undefined} onChange={(on) => set({ geometry: on ? { ...target.geometry } : undefined })} />
+      )}
       <CheckField
         label={t("inspector.stopTarget")}
         checked={cue.stop_target_when_done ?? false}
@@ -379,14 +406,33 @@ function TypeSettings({
           </div>
         </div>
       );
-    case "fade":
+    case "fade": {
+      const target = flatten(allCues).find((row) => row.cue.id === cue.target)?.cue;
+      const moving = cue.geometry !== undefined && (target?.type === "video" || target?.type === "text") ? target : undefined;
       return (
         <div className="form-columns">
           <div className="form-column">
-            <FadeFields cue={cue} set={set} />
+            <FadeFields cue={cue} set={set} target={target} />
           </div>
+          {moving && (
+            <>
+              <div className="form-column preview-column">
+                <StagePreview
+                  connection={connection}
+                  cue={moving}
+                  settings={settings}
+                  geometry={{ ...cue.geometry, fit: moving.geometry?.fit }}
+                  onMove={(x, y) => set({ geometry: { ...cue.geometry, x, y } })}
+                />
+              </div>
+              <div className="form-column grow">
+                <GeometryFields geometry={cue.geometry} withFit={false} onChange={(geometry) => set({ geometry })} />
+              </div>
+            </>
+          )}
         </div>
       );
+    }
     case "light":
       return (
         <div className="form-columns">
@@ -526,7 +572,18 @@ function TypeSettings({
           </div>
           <div className="form-column">
             <StageField settings={settings} value={cue.stage} onChange={(stage) => set({ stage })} />
-            <NumberField label={t("inspector.layer")} value={cue.layer ?? 0} onCommit={(layer) => set({ layer: Math.round(layer) })} />
+            <div className="row">
+              <NumberField label={t("inspector.layer")} value={cue.layer ?? 0} onCommit={(layer) => set({ layer: Math.round(layer) })} />
+              <NumberField
+                label={t("inspector.opacity")}
+                value={Math.round((cue.opacity ?? 1) * 100)}
+                min={0}
+                onCommit={(percent) => set({ opacity: Math.min(100, percent) / 100 })}
+              />
+            </div>
+          </div>
+          <div className="form-column style-column">
+            <TextStyleFields style={cue.style} onChange={(style) => set({ style })} />
           </div>
         </div>
       );
