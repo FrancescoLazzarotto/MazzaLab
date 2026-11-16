@@ -483,5 +483,15 @@
   "template.none": "No templates yet. Select a cue and save it as one.",
   "template.save": "Save the selected cue as a template",
   "template.name": "Template name",
-  "template.delete": "Delete the template"
+  "template.delete": "Delete the template",
+  "lock.set": "Lock show mode with a PIN",
+  "lock.remove": "Remove the show mode lock",
+  "lock.unlock": "Back to edit mode",
+  "lock.pin": "PIN",
+  "lock.again": "PIN again",
+  "lock.wrong": "Wrong PIN",
+  "lock.short": "At least 4 characters",
+  "lock.ok": "OK",
+  "lock.on": "Going back to edit mode asks for a PIN",
+  "lock.off": "Show mode is not locked"
 }

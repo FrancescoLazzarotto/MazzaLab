@@ -928,6 +928,15 @@ fieldset.bare {
   text-align: center;
 }
 
+.lock-row {
+  align-items: center;
+  justify-content: space-between;
+}
+
+.lock-state {
+  color: var(--text-2);
+}
+
 /* Cue templates */
 .template-menu {
   position: relative;

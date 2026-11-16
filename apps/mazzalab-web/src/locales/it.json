@@ -483,5 +483,15 @@
   "template.none": "Nessun template. Seleziona una cue e salvala come template.",
   "template.save": "Salva la cue selezionata come template",
   "template.name": "Nome del template",
-  "template.delete": "Elimina il template"
+  "template.delete": "Elimina il template",
+  "lock.set": "Blocca la modalità Show con un PIN",
+  "lock.remove": "Togli il blocco della modalità Show",
+  "lock.unlock": "Torna alla modalità Modifica",
+  "lock.pin": "PIN",
+  "lock.again": "PIN di nuovo",
+  "lock.wrong": "PIN sbagliato",
+  "lock.short": "Almeno 4 caratteri",
+  "lock.ok": "OK",
+  "lock.on": "Tornare in Modifica chiede un PIN",
+  "lock.off": "La modalità Show non è bloccata"
 }

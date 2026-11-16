@@ -46,6 +46,7 @@ import { actionFor } from "./keymap";
 import { useTitleLabels } from "./a11y";
 import { MediaPanel } from "./components/MediaPanel";
 import { NameDialog } from "./components/NameDialog";
+import { PinDialog } from "./components/PinDialog";
 import { TemplateMenu } from "./components/TemplateMenu";
 import { cueFromTemplate, makeTemplate, suggestedName, withTemplate, withoutTemplate } from "./templates";
 import { PreflightDialog } from "./components/PreflightDialog";
@@ -77,6 +78,7 @@ export function App({ connection, access, onChangePasscode }: { connection: Show
   const [fileDialog, setFileDialog] = useState<FileMode | null>(null);
   const [checking, setChecking] = useState(false);
   const [namingTemplate, setNamingTemplate] = useState(false);
+  const [unlocking, setUnlocking] = useState(false);
   const [others, setOthers] = useState<OthersState>(NO_OTHERS);
   useEffect(() => connection.onEvents((events) => setOthers((current) => applyOthersEvents(current, events))), [connection]);
   const [importing, setImporting] = useState<{ fileName: string; result: CsvImport } | null>(null);
@@ -415,7 +417,7 @@ export function App({ connection, access, onChangePasscode }: { connection: Show
       .catch(() => {});
   }, [batch, importing, insertionPoint, list]);
 
-  const modal = settingsOpen || renumbering || importing !== null || fileDialog !== null || checking || namingTemplate;
+  const modal = settingsOpen || renumbering || importing !== null || fileDialog !== null || checking || namingTemplate || unlocking;
   useEffect(() => {
     const isTyping = (target: EventTarget | null) =>
       target instanceof HTMLElement && target.closest("input, textarea, select") !== null;
@@ -585,7 +587,11 @@ export function App({ connection, access, onChangePasscode }: { connection: Show
         snapshot={snapshot}
         mode={mode}
         canEdit={access.edit}
-        onMode={(mode) => setPreferences({ ...preferences, mode })}
+        onMode={(next) => {
+          // Back to editing needs the PIN, when this device has one.
+          if (next === "edit" && mode === "show" && preferences.lock) setUnlocking(true);
+          else setPreferences({ ...preferences, mode: next });
+        }}
         onUndo={() => run({ command: "undo" })}
         onRedo={() => run({ command: "redo" })}
         onSave={save}
@@ -792,6 +798,17 @@ export function App({ connection, access, onChangePasscode }: { connection: Show
                 step,
               ),
             );
+          }}
+        />
+      )}
+      {unlocking && (
+        <PinDialog
+          mode="unlock"
+          lock={preferences.lock}
+          onClose={() => setUnlocking(false)}
+          onVerified={() => {
+            setUnlocking(false);
+            setPreferences({ ...preferences, mode: "edit" });
           }}
         />
       )}

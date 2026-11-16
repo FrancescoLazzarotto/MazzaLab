@@ -29,6 +29,7 @@ import { Icon } from "./icons";
 import { ACTION_LABELS, KeyMapFields } from "./KeyMapFields";
 import { MidiTriggerField } from "./MidiTriggerField";
 import { PasscodesTab } from "./PasscodesTab";
+import { PinDialog } from "./PinDialog";
 
 const BUFFER_SIZES = [64, 128, 256, 512, 1024, 2048];
 const PROTOCOLS: NetworkProtocol[] = ["osc_udp", "osc_tcp", "plain_udp", "plain_tcp"];
@@ -83,6 +84,7 @@ export function SettingsDialog({
 }) {
   const { t, choice, setChoice } = useI18n();
   const [tab, setTab] = useState<Tab>("general");
+  const [pinDialog, setPinDialog] = useState<"set" | "remove" | null>(null);
   const settings = workspace.settings;
   const set = (patch: Partial<WorkspaceSettings>) => onSettings({ ...settings, ...patch });
 
@@ -149,6 +151,13 @@ export function SettingsDialog({
                 onChange={(playheadFollowsSelection) => onPreferences({ ...preferences, playheadFollowsSelection })}
               />
               <p className="hint">{t("settings.followHint")}</p>
+              <div className="row lock-row">
+                <span className="lock-state">{preferences.lock ? t("lock.on") : t("lock.off")}</span>
+                <button type="button" onClick={() => setPinDialog(preferences.lock ? "remove" : "set")}>
+                  <Icon name="lock" size={12} />
+                  {preferences.lock ? t("lock.remove") : t("lock.set")}
+                </button>
+              </div>
               <KeyMapFields keymap={preferences.keymap} cues={workspace.cue_lists.flatMap((list) => list.cues)} onChange={(keymap) => onPreferences({ ...preferences, keymap })} />
             </div>
           )}
@@ -199,6 +208,21 @@ export function SettingsDialog({
           )}
         </div>
       </div>
+      {pinDialog && (
+        <PinDialog
+          mode={pinDialog}
+          lock={preferences.lock}
+          onClose={() => setPinDialog(null)}
+          onSet={(lock) => {
+            setPinDialog(null);
+            onPreferences({ ...preferences, lock });
+          }}
+          onVerified={() => {
+            setPinDialog(null);
+            onPreferences({ ...preferences, lock: null });
+          }}
+        />
+      )}
     </div>
   );
 }

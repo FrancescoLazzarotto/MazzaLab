@@ -1,4 +1,5 @@
 import { DEFAULT_KEYMAP, normalizeKeyMap, type KeyMap } from "./keymap";
+import { normalizeLock, type PinLock } from "./lock";
 import { NO_SPLIT, normalizeSplit, type Split } from "./panes";
 import { normalizeTheme, type Theme } from "./theme";
 
@@ -13,9 +14,11 @@ export interface Preferences {
   keymap: KeyMap;
   /** Two cue lists side by side. */
   split: Split;
+  /** A PIN, kept hashed, needed to go from show mode back to edit mode on this device. */
+  lock: PinLock | null;
 }
 
-export const DEFAULT_PREFERENCES: Preferences = { playheadFollowsSelection: true, mode: "edit", theme: "dark", keymap: DEFAULT_KEYMAP, split: NO_SPLIT };
+export const DEFAULT_PREFERENCES: Preferences = { playheadFollowsSelection: true, mode: "edit", theme: "dark", keymap: DEFAULT_KEYMAP, split: NO_SPLIT, lock: null };
 
 const STORAGE_KEY = "mazzalab.preferences";
 
@@ -29,6 +32,7 @@ export function loadPreferences(): Preferences {
       theme: normalizeTheme(saved.theme),
       keymap: normalizeKeyMap(saved.keymap),
       split: normalizeSplit(saved.split),
+      lock: normalizeLock(saved.lock),
     };
   } catch {
     // Storage can be unavailable (private mode) or hold something else.
