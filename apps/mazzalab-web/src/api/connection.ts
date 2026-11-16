@@ -18,6 +18,7 @@ import type {
   Waveform,
 } from "./types";
 import { authHeaders, withPasscode, type AccessReply } from "../access";
+import type { MediaFile } from "../mediaLibrary";
 import { ShowFileError, type FolderListing, type ShowFile } from "../showFiles";
 
 export type ConnectionState = "connecting" | "open" | "closed";
@@ -240,6 +241,13 @@ export class ShowConnection {
       // No JSON body: a plain failure.
     }
     throw new ShowFileError(await errorOf(response), unsaved);
+  }
+
+  /** The files in the show's media folder. */
+  async media(): Promise<MediaFile[]> {
+    const response = await this.fetchApi("/api/media");
+    if (!response.ok) throw new Error(await errorOf(response));
+    return ((await response.json()) as { files: MediaFile[] }).files;
   }
 
   async midiPorts(): Promise<MidiPorts> {

@@ -43,6 +43,8 @@ import { NO_FILTER, visibleIds, type CueFilter } from "./cueFilter";
 import { cuesForHotkey, hotkeyOf } from "./hotkeys";
 import { actionFor } from "./keymap";
 import { useTitleLabels } from "./a11y";
+import { MediaPanel } from "./components/MediaPanel";
+import { mediaKind } from "./mediaLibrary";
 import { effectiveMode, type AccessReply } from "./access";
 import { Announcer } from "./components/Announcer";
 import { resolveSplit, showInPane, toggleSplit } from "./panes";
@@ -313,6 +315,31 @@ export function App({ connection, access, onChangePasscode }: { connection: Show
     [allCues, batch, connection, list, t],
   );
 
+  /** Cues for files of the media folder: Audio or Video by what they are. */
+  const dropMedia = useCallback(
+    (paths: string[], drop: Drop) => {
+      if (!list) return;
+      let number = Number(nextNumber(allCues));
+      const cues: Cue[] = [];
+      for (const path of paths) {
+        const kind = mediaKind(path);
+        if (kind === "other") {
+          connection.toast("warning", t("drop.notAudio"));
+          continue;
+        }
+        cues.push({ ...newCue(kind, String(number++)), file: path, name: fileStem(path) } as Cue);
+      }
+      if (cues.length === 0) return;
+      batch(insertCommands(list.cues, list.id, cues, drop))
+        .then(() => {
+          setPicked(cues.map((cue) => cue.id));
+          setAnchor(cues[0].id);
+        })
+        .catch(() => {});
+    },
+    [allCues, batch, connection, list, t],
+  );
+
   const addList = useCallback(
     (cart: boolean) => {
       const lists = workspace?.cue_lists ?? [];
@@ -513,6 +540,7 @@ export function App({ connection, access, onChangePasscode }: { connection: Show
           onSetPlayhead={(cue) => canControl && run({ command: "set_playhead", cue })}
           onMove={moveCues}
           onDropFiles={(files, drop) => void dropFiles(files, drop)}
+          onDropMedia={dropMedia}
           onEdit={(cue) => run({ command: "update_cue", cue })}
         />
       </>
@@ -699,6 +727,7 @@ export function App({ connection, access, onChangePasscode }: { connection: Show
               onResume={(cue) => run({ command: "resume", cue })}
               onStop={(cue) => run({ command: "stop", cue })}
             />
+            <MediaPanel connection={connection} cues={allCues} editable={editable} showId={workspace.id} revision={snapshot.revision} />
           </aside>
         </main>
       )}

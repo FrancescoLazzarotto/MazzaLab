@@ -3,6 +3,7 @@ import type { Cue, Id, RunningCue } from "../api/types";
 import { actionLength, displayName, findCue, flatten, problemOf, typeLabel, type Drop } from "../cues";
 import { targetLabel } from "../cueExport";
 import { formatTime } from "../format";
+import { MEDIA_DRAG } from "../mediaLibrary";
 import { useI18n } from "../i18n";
 import { loopsUntilDevamped } from "../slices";
 import { CueIcon, Icon } from "./icons";
@@ -57,6 +58,7 @@ export function CueList({
   onSetPlayhead,
   onMove,
   onDropFiles,
+  onDropMedia,
   onEdit,
 }: {
   cues: Cue[];
@@ -75,6 +77,8 @@ export function CueList({
   /** Cues were dragged: `dragged` is the row the drag started on. */
   onMove: (dragged: Id, drop: Drop) => void;
   onDropFiles: (files: File[], drop: Drop) => void;
+  /** Files of the show's media folder were dropped, by path relative to the show. */
+  onDropMedia?: (files: string[], drop: Drop) => void;
   onEdit: (cue: Cue) => void;
 }) {
   const { t } = useI18n();
@@ -93,12 +97,12 @@ export function CueList({
   }, [focus]);
 
   const accepts = (event: DragEvent) =>
-    editable && (event.dataTransfer.types.includes(DRAG_TYPE) || event.dataTransfer.types.includes("Files"));
+    editable && (event.dataTransfer.types.includes(DRAG_TYPE) || event.dataTransfer.types.includes("Files") || event.dataTransfer.types.includes(MEDIA_DRAG));
   const over = (event: DragEvent<HTMLElement>, next: Drop) => {
     if (!accepts(event)) return;
     event.preventDefault();
     event.stopPropagation();
-    event.dataTransfer.dropEffect = event.dataTransfer.types.includes("Files") ? "copy" : "move";
+    event.dataTransfer.dropEffect = event.dataTransfer.types.includes("Files") || event.dataTransfer.types.includes(MEDIA_DRAG) ? "copy" : "move";
     if (!sameDrop(drop, next)) setDrop(next);
   };
   const finish = (event: DragEvent<HTMLElement>, target: Drop) => {
@@ -106,7 +110,14 @@ export function CueList({
     event.preventDefault();
     event.stopPropagation();
     setDrop(null);
-    if (event.dataTransfer.files.length > 0) onDropFiles([...event.dataTransfer.files], target);
+    const media = event.dataTransfer.getData(MEDIA_DRAG);
+    if (media) {
+      try {
+        onDropMedia?.(JSON.parse(media) as string[], target);
+      } catch {
+        // Not ours.
+      }
+    } else if (event.dataTransfer.files.length > 0) onDropFiles([...event.dataTransfer.files], target);
     else if (dragged.current) onMove(dragged.current, target);
     dragged.current = null;
   };
