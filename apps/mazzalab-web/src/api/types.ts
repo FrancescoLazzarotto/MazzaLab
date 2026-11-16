@@ -64,6 +64,25 @@ export interface Stage {
   name: string;
   width?: number;
   height?: number;
+  /** The display the desktop app puts it on, full screen. */
+  screen?: string;
+}
+
+/** A display of the machine the server runs on. */
+export interface Screen {
+  name: string;
+  width: number;
+  height: number;
+  x: number;
+  y: number;
+  /** The one the operator's window is on. */
+  main: boolean;
+}
+
+/** The machine's displays, and whether stages are up on them. */
+export interface Screens {
+  screens: Screen[];
+  shown: boolean;
 }
 
 /** How a picture fills its stage before it is moved, scaled and turned. */

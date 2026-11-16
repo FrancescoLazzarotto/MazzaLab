@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { StageItem } from "./api/types";
-import { compactGeometry, fadeProgress, geometryAt, mediaTime, opacityAt, pictureBox, pictureStyle, positionAt, stageNames, stageSize, stageUrl } from "./stage";
+import { compactGeometry, fadeProgress, geometryAt, mediaTime, opacityAt, pictureBox, pictureStyle, positionAt, screenLabels, stageNames, stageSize, stageUrl } from "./stage";
 
 const video: Extract<StageItem, { kind: "video" }> = {
   cue: "v",
@@ -78,6 +78,12 @@ describe("stages", () => {
     expect(stageSize([{ name: "Side", width: 1024, height: 768 }], "Side")).toEqual({ width: 1024, height: 768 });
     expect(stageSize([{ name: "Side", width: 1024, height: 768 }], undefined)).toEqual({ width: 1024, height: 768 });
     expect(stageSize([], "Main")).toEqual({ width: 1920, height: 1080 });
+    // Displays go by their place from the left.
+    const labels = screenLabels([
+      { name: "B", width: 1280, height: 720, x: 1920, y: 0, main: false },
+      { name: "A", width: 1920, height: 1080, x: 0, y: 0, main: true },
+    ]);
+    expect([labels.get("A"), labels.get("B")]).toEqual(["1 · 1920×1080", "2 · 1280×720"]);
     expect(stageUrl("Side", false, { pathname: "/", search: "" })).toBe("/?stage=Side");
     expect(stageUrl("Main", true, { pathname: "/", search: "?server=10.0.0.2:53980" })).toBe("/?server=10.0.0.2%3A53980&stage=Main&monitor");
   });

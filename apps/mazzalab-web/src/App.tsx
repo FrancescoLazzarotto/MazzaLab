@@ -541,7 +541,7 @@ export function App({ connection }: { connection: ShowConnection }) {
             />
             {dmx !== null && ((workspace.settings.dmx_outputs ?? []).length > 0 || dmx.length > 0) && <DmxPanel levels={dmx} labels={slotLabels(workspace.settings.fixtures ?? [])} />}
             {flatten(workspace.cue_lists.flatMap((list) => list.cues)).some((row) => row.cue.type === "video" || row.cue.type === "text") && (
-              <StageMonitor settings={workspace.settings} />
+              <StageMonitor connection={connection} settings={workspace.settings} />
             )}
             <ActiveCues
               running={status?.running ?? []}

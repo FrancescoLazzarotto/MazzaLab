@@ -9,6 +9,7 @@ import type {
   MidiEvent,
   MidiPorts,
   Notice,
+  Screens,
   ServerMessage,
   Snapshot,
   StageState,
@@ -134,6 +135,25 @@ export class ShowConnection {
     const response = await fetch(`${this.httpBase}/api/audio`);
     if (!response.ok) throw new Error(await errorOf(response));
     return (await response.json()) as AudioInfo;
+  }
+
+  /** The machine's displays, or `null` from a server that has none to put stages on. */
+  async screens(): Promise<Screens | null> {
+    const response = await fetch(`${this.httpBase}/api/screens`);
+    if (!response.ok) throw new Error(await errorOf(response));
+    const screens = (await response.json()) as Screens & { available: boolean };
+    return screens.available ? { screens: screens.screens, shown: screens.shown } : null;
+  }
+
+  /** Puts the stages up on the screens they name, or takes them down. */
+  async showOnScreens(shown: boolean): Promise<boolean> {
+    const response = await fetch(`${this.httpBase}/api/screens`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ shown }),
+    });
+    if (!response.ok) throw new Error(await errorOf(response));
+    return ((await response.json()) as { shown: boolean }).shown;
   }
 
   async midiPorts(): Promise<MidiPorts> {

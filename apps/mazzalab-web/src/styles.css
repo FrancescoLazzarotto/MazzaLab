@@ -1664,6 +1664,14 @@ button.audition.active {
   flex: 0 0 84px;
 }
 
+.stage-row .field:has(select) {
+  flex: 0 0 200px;
+}
+
+button.icon-button.quiet.toggled {
+  color: var(--go);
+}
+
 /* A cue as its stage shows it, small, in the inspector. */
 .preview-column {
   flex: 0 0 300px;

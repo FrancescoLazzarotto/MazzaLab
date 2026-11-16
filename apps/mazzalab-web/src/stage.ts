@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import type { FadeCurve, Fit, Geometry, Stage, StageItem, TextStyle, WorkspaceSettings } from "./api/types";
+import type { FadeCurve, Fit, Geometry, Screen, Stage, StageItem, TextStyle, WorkspaceSettings } from "./api/types";
 
 export interface Size {
   width: number;
@@ -165,6 +165,19 @@ export function stageSize(stages: Stage[] | undefined, name: string | undefined)
   const stage = (stages ?? []).find((candidate) => candidate.name.trim() === name) ?? (name === undefined ? stages?.[0] : undefined);
   const valid = (value: number | undefined, fallback: number) => (value !== undefined && Number.isFinite(value) && value > 0 ? value : fallback);
   return { width: valid(stage?.width, DEFAULT_STAGE_SIZE.width), height: valid(stage?.height, DEFAULT_STAGE_SIZE.height) };
+}
+
+/** Displays from left to right, as the operator sees them on the desk. */
+export function screensInOrder(screens: Screen[]): Screen[] {
+  return [...screens].sort((a, b) => a.x - b.x || a.y - b.y);
+}
+
+/**
+ * How a display is called to the operator: by its place from the left
+ * (the system's own names, like `\\.\DISPLAY2`, say little) and its size.
+ */
+export function screenLabels(screens: Screen[]): Map<string, string> {
+  return new Map(screensInOrder(screens).map((screen, index) => [screen.name, `${index + 1} · ${screen.width}×${screen.height}`]));
 }
 
 /** The address that turns a window into a stage, keeping the server this one talks to. */

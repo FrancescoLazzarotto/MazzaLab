@@ -16,7 +16,8 @@ import type {
 import { useI18n } from "../i18n";
 import type { Preferences } from "../preferences";
 import { CheckField, LevelField, NumberField, SelectField, TextField, TimeField } from "./fields";
-import { stageUrl } from "../stage";
+import { screenLabels, screensInOrder, stageUrl } from "../stage";
+import { useScreens } from "../useScreens";
 import { FixturesTab } from "./FixturesTab";
 import { Icon } from "./icons";
 import { MidiTriggerField } from "./MidiTriggerField";
@@ -124,7 +125,7 @@ export function SettingsDialog({
             />
           )}
           {tab === "lights" && <LightsTab outputs={settings.dmx_outputs ?? []} onChange={(dmx_outputs) => set({ dmx_outputs })} />}
-          {tab === "video" && <StagesTab stages={settings.stages ?? []} onChange={(stages) => set({ stages })} />}
+          {tab === "video" && <StagesTab connection={connection} stages={settings.stages ?? []} onChange={(stages) => set({ stages })} />}
           {tab === "fixtures" && (
             <FixturesTab
               fixtures={settings.fixtures ?? []}
@@ -384,8 +385,24 @@ function MidiTab({
 }
 
 /** The screens the show puts video and text on. */
-function StagesTab({ stages, onChange }: { stages: Stage[]; onChange: (stages: Stage[]) => void }) {
+function StagesTab({ connection, stages, onChange }: { connection: ShowConnection; stages: Stage[]; onChange: (stages: Stage[]) => void }) {
   const { t } = useI18n();
+  const { screens } = useScreens(connection);
+  const labels = screenLabels(screens?.screens ?? []);
+  const screenOptions = (current: string | undefined) => [
+    { value: "", label: t("settings.noScreen") },
+    ...screensInOrder(screens?.screens ?? []).map((screen) => ({
+      value: screen.name,
+      label: `${labels.get(screen.name)}${screen.main ? ` (${t("settings.screenMain")})` : ""}`,
+    })),
+    // A display that is not plugged in now stays visible.
+    ...(current && !labels.has(current) ? [{ value: current, label: `${current} (${t("settings.screenMissing")})` }] : []),
+  ];
+  // A stage put on a display takes its resolution.
+  const placeOn = (index: number, name: string) => {
+    const screen = screens?.screens.find((candidate) => candidate.name === name);
+    update(index, screen ? { screen: name, width: screen.width, height: screen.height } : { screen: undefined });
+  };
   // Without stages the show has one called Main: list it, so that it can be renamed.
   const shown = stages.length > 0 ? stages : [{ name: "Main" }];
   const update = (index: number, change: Partial<Stage>) => onChange(shown.map((stage, position) => (position === index ? { ...stage, ...change } : stage)));
@@ -401,6 +418,7 @@ function StagesTab({ stages, onChange }: { stages: Stage[]; onChange: (stages: S
           <TextField label={t("settings.patchName")} value={stage.name} onCommit={(name) => name.trim() && update(index, { name: name.trim() })} />
           <NumberField label={t("settings.stageWidth")} value={stage.width ?? 1920} min={16} onCommit={(width) => update(index, { width: Math.round(width) })} />
           <NumberField label={t("settings.stageHeight")} value={stage.height ?? 1080} min={16} onCommit={(height) => update(index, { height: Math.round(height) })} />
+          {screens && <SelectField label={t("settings.screen")} value={stage.screen ?? ""} options={screenOptions(stage.screen)} onChange={(name) => placeOn(index, name)} />}
           <button onClick={() => window.open(stageUrl(stage.name), `stage-${stage.name}`, "popup,width=960,height=540")}>
             <Icon name="external" size={13} />
             {t("stage.open")}
@@ -422,6 +440,7 @@ function StagesTab({ stages, onChange }: { stages: Stage[]; onChange: (stages: S
         </button>
       </div>
       <p className="hint">{t("settings.stagesHint")}</p>
+      {screens && <p className="hint">{t("settings.screensHint")}</p>}
     </div>
   );
 }
