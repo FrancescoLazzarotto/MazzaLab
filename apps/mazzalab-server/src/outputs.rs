@@ -307,12 +307,15 @@ impl NetworkBackend {
     pub fn new(completion: Completion) -> Self {
         let on_error = completion.clone();
         let sender = mazzalab_network::Sender::new(move |patch, error| {
+            // A URL names its own port; the others are host and port.
+            let place = if patch.protocol.uses_url() {
+                patch.host.clone()
+            } else {
+                format!("{}:{}", patch.host, patch.port)
+            };
             on_error.notify(
                 NoticeLevel::Warning,
-                format!(
-                    "Network patch \"{}\" ({}:{}): {error}",
-                    patch.name, patch.host, patch.port
-                ),
+                format!("Network patch \"{}\" ({place}): {error}", patch.name),
             );
         })
         .map_err(|error| tracing::error!(%error, "network cues are disabled"))
@@ -325,6 +328,13 @@ impl Output for NetworkBackend {
     fn handle(&mut self, show: &Show, events: &[Event]) {
         let workspace = show.workspace();
         for event in events {
+            // A cue that is stopped stops its values fading.
+            if let EventKind::Stopped(cue) = event.kind {
+                if let Some(sender) = &self.sender {
+                    sender.stop(cue);
+                }
+                continue;
+            }
             let EventKind::ActionStarted { cue, armed: true } = event.kind else {
                 continue;
             };
@@ -339,7 +349,7 @@ impl Output for NetworkBackend {
             };
             let problem = match (patch, &self.sender) {
                 (Some(patch), Some(sender)) => sender
-                    .send(patch, &network.message)
+                    .send_fade(cue, patch, &network.message, network.duration)
                     .err()
                     .map(|error| error.to_string()),
                 (None, _) => Some(match &network.patch {
