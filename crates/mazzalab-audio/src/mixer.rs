@@ -293,6 +293,9 @@ pub struct Voice {
     drained: u8,
     level: Level,
     envelope: Envelope,
+    /// How far other cues duck this one; multiplies `level`, so fade cues
+    /// and ducking do not fight.
+    duck: Level,
     routes: Routes,
     /// Output frames rendered so far.
     played: u64,
@@ -374,6 +377,7 @@ impl Voice {
             history: [[0.0; MAX_CHANNELS]; 4],
             drained: 0,
             level: Level::new(config.level_db),
+            duck: Level::new(0.0),
             envelope,
             routes: config.routes,
             played: 0,
@@ -502,7 +506,7 @@ impl Voice {
                 self.envelope.fade_to(0.0, self.fade_out_frames);
             }
             self.played += 1;
-            let gain = self.level.next_gain() * self.envelope.next_gain();
+            let gain = self.level.next_gain() * self.envelope.next_gain() * self.duck.next_gain();
             if self.stopping && self.level.is_settled_silent() {
                 return false;
             }
@@ -538,6 +542,12 @@ pub(crate) enum MixerCommand {
         curve: FadeCurve,
     },
     FadeAll {
+        frames: u32,
+    },
+    /// Sets how far a cue is ducked, 0 dB being not at all.
+    Duck {
+        cue: CueId,
+        db: f32,
         frames: u32,
     },
     Pause(CueId),
@@ -615,6 +625,11 @@ impl Mixer {
             } => {
                 for voice in find(&mut self.voices, cue).filter(|voice| !voice.stopping) {
                     voice.level.fade_to(to_db, frames, curve);
+                }
+            }
+            MixerCommand::Duck { cue, db, frames } => {
+                for voice in find(&mut self.voices, cue) {
+                    voice.duck.fade_to(db, frames, FadeCurve::SCurve);
                 }
             }
             MixerCommand::FadeAll { frames } => {
@@ -863,6 +878,33 @@ mod tests {
         let out = render(&mut rig, 200, 1);
         assert!(out[50] < 1.0 && out[50] > 0.1);
         assert!((out[150] - 0.1).abs() < 1e-3);
+    }
+
+    #[test]
+    fn ducking_multiplies_the_level_and_comes_back() {
+        let mut rig = rig(1);
+        rig.commands
+            .push(MixerCommand::Add(voice(1, &[1.0; 2000], 1, RATE, -6.0)))
+            .unwrap();
+        rig.commands
+            .push(MixerCommand::Duck {
+                cue: CueId::from_u128(1),
+                db: -14.0,
+                frames: 100,
+            })
+            .unwrap();
+        let ducked = render(&mut rig, 200, 1);
+        // -6 dB of its own and -14 dB of ducking: -20 dB.
+        assert!((ducked[150] - 0.1).abs() < 1e-3, "{}", ducked[150]);
+        rig.commands
+            .push(MixerCommand::Duck {
+                cue: CueId::from_u128(1),
+                db: 0.0,
+                frames: 0,
+            })
+            .unwrap();
+        let back = render(&mut rig, 10, 1);
+        assert!((back[5] - db_to_gain(-6.0)).abs() < 1e-3, "{}", back[5]);
     }
 
     #[test]

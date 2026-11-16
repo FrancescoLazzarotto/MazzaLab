@@ -302,6 +302,22 @@ impl AudioOutput {
                 EventKind::Stopped(cue) => self.send(MixerCommand::Stop(cue)),
                 EventKind::Paused(cue) => self.send(MixerCommand::Pause(cue)),
                 EventKind::Resumed(cue) => self.send(MixerCommand::Resume(cue)),
+                EventKind::FadingOut { cue, fade } => self.send(MixerCommand::Fade {
+                    cue,
+                    to_db: mixer::SILENT_DB,
+                    frames: self.frames(fade),
+                    curve: FadeCurve::Linear,
+                }),
+                EventKind::Ducked { cue, by_db, fade } => self.send(MixerCommand::Duck {
+                    cue,
+                    db: -(by_db as f32),
+                    frames: self.frames(fade),
+                }),
+                EventKind::Unducked { cue, fade } => self.send(MixerCommand::Duck {
+                    cue,
+                    db: 0.0,
+                    frames: self.frames(fade),
+                }),
                 // A panic fades every sound, whichever cue owns it.
                 EventKind::Panicking { fade, .. } => self.send(MixerCommand::FadeAll {
                     frames: self.frames(fade),
