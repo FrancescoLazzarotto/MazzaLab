@@ -666,6 +666,55 @@ select.status-item {
   height: 22px;
 }
 
+/* Search and filters */
+.filter-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--hairline);
+  color: var(--text-3);
+}
+
+.filter-search {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.filter-search input {
+  height: 22px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+}
+
+.filter-bar select {
+  width: auto;
+  height: 22px;
+  background-color: transparent;
+  border-color: transparent;
+  color: var(--text-2);
+}
+
+.filter-bar select:hover,
+.filter-bar select:focus {
+  border-color: var(--border);
+}
+
+.filter-bar button.flagged {
+  color: var(--warn);
+}
+
+.filter-count {
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+}
+
 /* Cue list */
 .cue-list {
   flex: 1;

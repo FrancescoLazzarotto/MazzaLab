@@ -362,6 +362,13 @@ const en = {
   "phase.pre_wait": "Pre-wait",
   "phase.action": "Running",
   "phase.paused": "Paused",
+  "filter.search": "Search cues",
+  "filter.allTypes": "All types",
+  "filter.anyColor": "Any colour",
+  "filter.noColor": "No colour",
+  "filter.flagged": "Flagged only",
+  "filter.clear": "Clear the filter",
+  "filter.noMatch": "No cue matches.",
 };
 
 type Key = keyof typeof en;
@@ -722,6 +729,13 @@ const it: Record<Key, string> = {
   "phase.pre_wait": "Pre-wait",
   "phase.action": "In corso",
   "phase.paused": "In pausa",
+  "filter.search": "Cerca cue",
+  "filter.allTypes": "Tutti i tipi",
+  "filter.anyColor": "Qualsiasi colore",
+  "filter.noColor": "Senza colore",
+  "filter.flagged": "Solo con flag",
+  "filter.clear": "Azzera il filtro",
+  "filter.noMatch": "Nessun cue corrisponde.",
 };
 
 export const DICTIONARIES: Record<Language, Record<Key, string>> = { en, it };

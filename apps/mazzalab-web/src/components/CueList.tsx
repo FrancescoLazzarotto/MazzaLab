@@ -51,6 +51,7 @@ export function CueList({
   selection,
   running,
   loaded,
+  visible,
   editable,
   onSelect,
   onSetPlayhead,
@@ -66,6 +67,8 @@ export function CueList({
   running: Map<Id, RunningCue>;
   /** Cues loaded to a time, in seconds from the start of their pre-wait. */
   loaded: Map<Id, number>;
+  /** The cues a filter lets through; null shows them all. */
+  visible: ReadonlySet<Id> | null;
   editable: boolean;
   onSelect: (cue: Id, mode: SelectMode) => void;
   onSetPlayhead: (cue: Id) => void;
@@ -75,7 +78,7 @@ export function CueList({
   onEdit: (cue: Cue) => void;
 }) {
   const { t } = useI18n();
-  const rows = flatten(cues);
+  const rows = flatten(cues).filter((row) => visible === null || visible.has(row.cue.id));
   const [drop, setDrop] = useState<Drop | null>(null);
   const [editing, setEditing] = useState<Editing | null>(null);
   const dragged = useRef<Id | null>(null);
@@ -262,7 +265,7 @@ export function CueList({
           })}
         </tbody>
       </table>
-      {rows.length === 0 && <p className="empty">{editable ? t("list.empty") : t("list.emptyShow")}</p>}
+      {rows.length === 0 && <p className="empty">{visible !== null ? t("filter.noMatch") : editable ? t("list.empty") : t("list.emptyShow")}</p>}
     </div>
   );
 }

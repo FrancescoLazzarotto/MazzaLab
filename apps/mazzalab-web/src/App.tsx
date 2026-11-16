@@ -5,6 +5,7 @@ import { ActiveCues } from "./components/ActiveCues";
 import { AudioPanel } from "./components/AudioPanel";
 import { CueCart } from "./components/CueCart";
 import { CueList, type SelectMode } from "./components/CueList";
+import { FilterBar } from "./components/FilterBar";
 import { DmxPanel } from "./components/DmxPanel";
 import { StageMonitor } from "./components/StageMonitor";
 import { slotLabels } from "./fixtures";
@@ -33,6 +34,7 @@ import {
   topLevel,
   type Drop,
 } from "./cues";
+import { NO_FILTER, visibleIds, type CueFilter } from "./cueFilter";
 import { cuesForHotkey, hotkeyOf } from "./hotkeys";
 import { useI18n } from "./i18n";
 import { loadPreferences, savePreferences, type Preferences } from "./preferences";
@@ -64,13 +66,18 @@ export function App({ connection }: { connection: ShowConnection }) {
   const list = workspace?.cue_lists.find((candidate) => candidate.id === listId) ?? workspace?.cue_lists[0];
   const allCues = useMemo(() => workspace?.cue_lists.flatMap((l) => l.cues) ?? [], [workspace]);
   const rows = useMemo(() => (list ? flatten(list.cues) : []), [list]);
+  // The filter only changes what is shown; GO and the playhead follow the real list.
+  const [filter, setFilter] = useState<CueFilter>(NO_FILTER);
+  const filterInput = useRef<HTMLInputElement>(null);
+  const visible = useMemo(() => (list ? visibleIds(list.cues, filter) : null), [list, filter]);
+  const shownRows = useMemo(() => (visible ? rows.filter((row) => visible.has(row.cue.id)) : rows), [rows, visible]);
   const playhead = status?.playheads.find((entry) => entry.list === list?.id)?.cue ?? null;
   const running = useMemo(() => new Map((status?.running ?? []).map((run) => [run.cue, run])), [status]);
   const loaded = useMemo(() => new Map((status?.loaded ?? []).map((entry) => [entry.cue, entry.time])), [status]);
   const standby = playhead ? findCue(allCues, playhead) : undefined;
 
   // Cues can disappear under the selection (deleted here or by someone else).
-  const selected = useMemo(() => picked.filter((id) => rows.some((row) => row.cue.id === id)), [picked, rows]);
+  const selected = useMemo(() => picked.filter((id) => shownRows.some((row) => row.cue.id === id)), [picked, shownRows]);
   const selection = useMemo(() => new Set(selected), [selected]);
   const selectedCues = useMemo(() => rows.filter((row) => selection.has(row.cue.id)).map((row) => row.cue), [rows, selection]);
   const focus = selected.at(-1) ?? null;
@@ -102,10 +109,10 @@ export function App({ connection }: { connection: ShowConnection }) {
         return;
       }
       if (mode === "range" && anchor) {
-        const from = rows.findIndex((row) => row.cue.id === anchor);
-        const to = rows.findIndex((row) => row.cue.id === id);
+        const from = shownRows.findIndex((row) => row.cue.id === anchor);
+        const to = shownRows.findIndex((row) => row.cue.id === id);
         if (from >= 0 && to >= 0) {
-          const span = rows.slice(Math.min(from, to), Math.max(from, to) + 1).map((row) => row.cue.id);
+          const span = shownRows.slice(Math.min(from, to), Math.max(from, to) + 1).map((row) => row.cue.id);
           // Keep the clicked cue last: it has the focus.
           setPicked(from <= to ? span : span.reverse());
           return;
@@ -115,17 +122,17 @@ export function App({ connection }: { connection: ShowConnection }) {
       setAnchor(id);
       if (preferences.playheadFollowsSelection && id !== playhead) run({ command: "set_playhead", cue: id });
     },
-    [anchor, playhead, preferences.playheadFollowsSelection, rows, run],
+    [anchor, playhead, preferences.playheadFollowsSelection, run, shownRows],
   );
 
   const moveSelection = useCallback(
     (step: number, extend: boolean) => {
-      if (rows.length === 0) return;
-      const index = rows.findIndex((row) => row.cue.id === focus);
-      const next = index < 0 ? 0 : Math.min(rows.length - 1, Math.max(0, index + step));
-      select(rows[next].cue.id, extend ? "range" : "single");
+      if (shownRows.length === 0) return;
+      const index = shownRows.findIndex((row) => row.cue.id === focus);
+      const next = index < 0 ? 0 : Math.min(shownRows.length - 1, Math.max(0, index + step));
+      select(shownRows[next].cue.id, extend ? "range" : "single");
     },
-    [focus, rows, select],
+    [focus, select, shownRows],
   );
 
   /** Right after the focused cue, or at the end of the list. */
@@ -295,6 +302,12 @@ export function App({ connection }: { connection: ShowConnection }) {
         save();
         return;
       }
+      if (command && key === "f") {
+        event.preventDefault();
+        filterInput.current?.focus();
+        filterInput.current?.select();
+        return;
+      }
       if (typing) return;
       // A cue's own hotkey comes first; the screen's keys cannot be taken.
       const hotkey = hotkeyOf(event);
@@ -331,7 +344,7 @@ export function App({ connection }: { connection: ShowConnection }) {
       }
       if (command && key === "a") {
         event.preventDefault();
-        setPicked(rows.map((row) => row.cue.id));
+        setPicked(shownRows.map((row) => row.cue.id));
         return;
       }
       if (command && key === "c") {
@@ -373,7 +386,7 @@ export function App({ connection }: { connection: ShowConnection }) {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
     };
-  }, [allCues, copy, deleteSelected, duplicate, editable, focus, go, groupSelected, modal, moveSelection, paste, rows, run, save]);
+  }, [allCues, copy, deleteSelected, duplicate, editable, focus, go, groupSelected, modal, moveSelection, paste, run, save, shownRows]);
 
   // Files dropped outside the cue list would otherwise replace the page.
   useEffect(() => {
@@ -499,6 +512,8 @@ export function App({ connection }: { connection: ShowConnection }) {
                 onDropFiles={(files, drop) => void dropFiles(files, drop)}
               />
             ) : (
+              <>
+              <FilterBar filter={filter} onChange={setFilter} shown={shownRows.length} total={rows.length} inputRef={filterInput} />
               <CueList
                 cues={list?.cues ?? []}
                 allCues={allCues}
@@ -506,6 +521,7 @@ export function App({ connection }: { connection: ShowConnection }) {
                 selection={selection}
                 running={running}
                 loaded={loaded}
+                visible={visible}
                 editable={editable}
                 onSelect={select}
                 onSetPlayhead={(cue) => run({ command: "set_playhead", cue })}
@@ -513,6 +529,7 @@ export function App({ connection }: { connection: ShowConnection }) {
                 onDropFiles={(files, drop) => void dropFiles(files, drop)}
                 onEdit={(cue) => run({ command: "update_cue", cue })}
               />
+              </>
             )}
             {editable && (
               <Inspector

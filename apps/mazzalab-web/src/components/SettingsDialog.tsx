@@ -42,6 +42,7 @@ const SHORTCUTS: [string, string][] = [
   ["Delete", "keys.delete"],
   ["Ctrl + Z / Ctrl + Shift + Z", "keys.undo"],
   ["Ctrl + S", "keys.save"],
+  ["Ctrl + F", "filter.search"],
 ];
 
 export function SettingsDialog({
